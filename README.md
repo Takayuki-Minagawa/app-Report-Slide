@@ -2,6 +2,16 @@
 
 技術レポートとプレゼンテーションを、同じMarkdown／Document Modelから編集するWebアプリです。共通基盤に加え、LaTeX風の番号付け・相互参照・目次と明示的なページ／スライド区切りを実装しています。TeXエンジンではなく、MarkdownとKaTeXを使用します。
 
+## 公開版
+
+GitHub Pagesを有効にすると、[公開版](https://takayuki-minagawa.github.io/app-Report-Slide/) を利用できます。`main` への更新は自動的に静的サイトとして公開されます。
+
+## 公開リポジトリとしての注意
+
+- リポジトリのソース、Issues、Pull Requests、コミットメッセージ、GitHub Actionsのログ、およびGitHub Pagesで公開する内容は第三者から閲覧できる前提で扱ってください。
+- 顧客情報、個人情報、社外秘のレポート、アクセストークン、パスワードなどは、リポジトリにも公開サイトにも追加しないでください。
+- GitHub Pages版は静的サイトです。文書や画像をImportしても、このリポジトリやGitHub Pagesへ自動アップロードされることはありません。ただし、端末やエクスポートしたファイルの取り扱いは所属組織の規程に従ってください。
+
 ## MVP 1でできること
 
 - Report／SlideのYAML Front Matter判定
@@ -46,6 +56,10 @@ npm run build
 ```
 
 GitHub Actionsでも同じゲートを実行します。
+
+### GitHub Pagesの運用
+
+`.github/workflows/deploy-pages.yml` はPull Requestで静的エクスポートを検証し、`main` へのpush時だけGitHub Pagesへデプロイします。GitHub Pagesが未設定のリポジトリでは、初回だけ **Settings → Pages → Build and deployment → Source** で **GitHub Actions** を選択してください。公開URLやリポジトリ配下のパスは、ワークフローがGitHub Pagesの設定から自動的に反映します。
 
 ## 設計
 

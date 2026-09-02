@@ -1,6 +1,6 @@
 import { sites } from '@openai/sites-vite-plugin';
 import tailwindcss from '@tailwindcss/postcss';
-import vinext from 'vinext';
+import vinext, { type NextConfig } from 'vinext';
 import { defineConfig } from 'vite';
 import hostingConfig from './.openai/hosting.json' with { type: 'json' };
 
@@ -11,6 +11,22 @@ const { d1, r2 } = hostingConfig;
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === 'seatbelt';
+const isGitHubPagesBuild = process.env.GITHUB_PAGES === 'true';
+const pagesBasePath =
+  process.env.GITHUB_PAGES_BASE_PATH?.replace(/\/+$/, '') ?? '';
+
+// Keep the existing server-oriented build for Sites, while making the Pages
+// workflow a fully static build that also works below a repository path.
+const nextConfig: NextConfig = isGitHubPagesBuild
+  ? {
+      output: 'export',
+      assetPrefix: pagesBasePath,
+      trailingSlash: true,
+      images: {
+        unoptimized: true,
+      },
+    }
+  : {};
 
 const localBindingConfig = {
   main: 'vinext/server/fetch-handler',
@@ -50,7 +66,7 @@ export default defineConfig(async () => {
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,
     plugins: [
-      vinext(),
+      vinext({ nextConfig }),
       sites(),
       cloudflare({
         viteEnvironment: { name: 'rsc', childEnvironments: ['ssr'] },
