@@ -1,8 +1,6 @@
 import type { Metadata } from 'next';
-import {
-  AppPreferencesProvider,
-  preferenceBootstrapScript,
-} from '@/components/app-preferences';
+import { AppPreferencesProvider } from '@/components/app-preferences';
+import { preferenceBootstrapScript } from '@/src/preferences/bootstrap';
 import 'katex/dist/katex.min.css';
 import './globals.css';
 
