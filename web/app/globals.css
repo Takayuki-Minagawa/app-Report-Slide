@@ -177,6 +177,34 @@
   @apply bg-white font-semibold text-foreground shadow-sm ring-1 ring-border;
 }
 
+.dark .workspace-header {
+  box-shadow: 0 1px 0 rgb(255 255 255 / 6%);
+}
+
+.dark .workspace-center {
+  background: #111b27;
+}
+
+.dark .navigator-item-active {
+  background: #202e3e;
+}
+
+.dark .document-type-badge {
+  border-color: #24527a;
+  background: #152d46;
+  color: #9ed7ff;
+}
+
+.dark .preview-page-summary {
+  color: #aab9c7;
+}
+
+.dark .semantic-warnings {
+  border-color: #966f2e;
+  background: #33250e;
+  color: #f0c777;
+}
+
 .view-tabs {
   @apply flex h-11 shrink-0 items-center justify-between border-b bg-card px-3;
 }

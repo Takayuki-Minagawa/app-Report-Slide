@@ -1,11 +1,80 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
+import { AppPreferencesProvider } from '@/components/app-preferences';
 import { EditorWorkspace } from './editor-workspace';
 
+function renderWorkspace() {
+  return render(
+    <AppPreferencesProvider>
+      <EditorWorkspace />
+    </AppPreferencesProvider>,
+  );
+}
+
 describe('EditorWorkspace', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    document.documentElement.classList.remove('dark');
+    document.documentElement.lang = 'ja';
+  });
+
+  it('switches workspace controls, theme, and the in-app guide to English', async () => {
+    renderWorkspace();
+    expect(await screen.findByText('REPORT')).toBeInTheDocument();
+
+    const themeButton = screen.getByRole('button', {
+      name: 'ダークモード',
+    });
+    await waitFor(() => expect(themeButton).toBeEnabled());
+    expect(themeButton).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(themeButton);
+    await waitFor(() => {
+      expect(document.documentElement).toHaveClass('dark');
+      expect(
+        screen.getByRole('button', { name: 'ダークモード' }),
+      ).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '英語表示' }));
+    await waitFor(() => {
+      expect(document.documentElement.lang).toBe('en');
+      expect(screen.getByRole('button', { name: 'Dark mode' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      expect(
+        screen.getByRole('button', { name: 'English interface' }),
+      ).toHaveAttribute('aria-pressed', 'true');
+      expect(
+        screen.getByRole('button', { name: 'Switch to Markdown' }),
+      ).toBeInTheDocument();
+      expect(screen.getByText('Ready')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to Markdown' }));
+    const source = await screen.findByRole('textbox', {
+      name: 'Markdown draft',
+    });
+    fireEvent.change(source, {
+      target: { value: '---\ntype: book\n---\n\n# Broken document' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Markdown' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Could not apply Markdown');
+    expect(alert).toHaveTextContent(
+      'The document type must be report or slide.',
+    );
+    expect(alert).not.toHaveTextContent('typeには');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guide' }));
+    expect(await screen.findByRole('dialog')).toHaveTextContent(
+      'KUMI quick guide',
+    );
+  });
+
   it('ReportをSlideへ全文置換した後に旧本文をUndoで混在させない', async () => {
-    const { container } = render(<EditorWorkspace />);
+    const { container } = renderWorkspace();
 
     expect(await screen.findByText('REPORT')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Markdownへ切り替え' }));
@@ -28,7 +97,7 @@ describe('EditorWorkspace', () => {
   });
 
   it('壊れたFront Matterを適用しても現在文書を維持する', async () => {
-    render(<EditorWorkspace />);
+    renderWorkspace();
     expect(await screen.findByText('REPORT')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Markdownへ切り替え' }));
@@ -45,7 +114,7 @@ describe('EditorWorkspace', () => {
   });
 
   it('未適用Markdown下書きをタブ移動で保持し明示破棄できる', async () => {
-    render(<EditorWorkspace />);
+    renderWorkspace();
     expect(await screen.findByText('REPORT')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Markdownへ切り替え' }));
@@ -73,7 +142,7 @@ describe('EditorWorkspace', () => {
   });
 
   it('未適用Markdown下書きがある間はビジュアル編集との競合を防ぐ', async () => {
-    render(<EditorWorkspace />);
+    renderWorkspace();
     expect(await screen.findByText('REPORT')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Markdownへ切り替え' }));

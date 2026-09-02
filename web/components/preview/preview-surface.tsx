@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo } from 'react';
+import { useAppPreferences } from '@/components/app-preferences';
+import { localizeDiagnosticMessage } from '@/src/i18n/diagnostics';
 import type { DocumentData } from '@/src/document/model';
 import { analyzeDocument, splitDocumentPages } from '@/src/document/semantics';
 import { DocumentRenderer } from './document-renderer';
@@ -15,6 +17,7 @@ export function PreviewSurface({
   document: DocumentData;
   resolveImageUrl?: (source: string) => string;
 }) {
+  const { copy, locale } = useAppPreferences();
   const slide = document.type === 'slide';
   const requested =
     typeof document.metadata.theme === 'string' ? document.metadata.theme : '';
@@ -32,15 +35,20 @@ export function PreviewSurface({
     <div className="preview-pages">
       <div className="preview-page-summary">
         {slide
-          ? `${pages.length} スライド`
-          : `${pages.length} ページ（明示的改ページ）`}
+          ? copy.preview.slides(pages.length)
+          : copy.preview.pages(pages.length)}
       </div>
       {analysis.diagnostics.length > 0 && (
-        <output className="semantic-warnings" aria-label="参照の警告">
-          <strong>参照を確認してください</strong>
+        <output
+          className="semantic-warnings"
+          aria-label={copy.preview.referenceWarnings}
+        >
+          <strong>{copy.preview.checkReferences}</strong>
           <ul>
             {analysis.diagnostics.map((message) => (
-              <li key={message}>{message}</li>
+              <li key={message}>
+                {localizeDiagnosticMessage(message, locale)}
+              </li>
             ))}
           </ul>
         </output>
@@ -50,7 +58,9 @@ export function PreviewSurface({
           key={index}
           className={slide ? 'slide-preview' : 'report-preview'}
           data-theme={theme}
-          aria-label={slide ? 'スライドプレビュー' : 'A4レポートプレビュー'}
+          aria-label={
+            slide ? copy.preview.slidePreview : copy.preview.reportPreview
+          }
           data-page={index + 1}
         >
           <DocumentRenderer

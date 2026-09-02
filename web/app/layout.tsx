@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { AppPreferencesProvider } from '@/components/app-preferences';
+import { preferenceBootstrapScript } from '@/src/preferences/bootstrap';
 import 'katex/dist/katex.min.css';
 import './globals.css';
 
@@ -38,7 +40,13 @@ export const metadata: Metadata = {
     canonical: canonicalUrl,
   },
   icons: {
-    icon: siteAssetUrl('favicon.svg'),
+    icon: [
+      {
+        url: siteAssetUrl('favicon.svg'),
+        type: 'image/svg+xml',
+      },
+    ],
+    shortcut: siteAssetUrl('favicon.svg'),
   },
   openGraph: {
     type: 'website',
@@ -70,8 +78,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ja">
-      <body>{children}</body>
+    <html lang="ja" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{ __html: preferenceBootstrapScript }}
+        />
+      </head>
+      <body>
+        <AppPreferencesProvider>{children}</AppPreferencesProvider>
+      </body>
     </html>
   );
 }

@@ -8,6 +8,7 @@ import {
   NativeSelectOption,
 } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
+import { useAppPreferences } from '@/components/app-preferences';
 import type { DocumentNode } from '@/src/document/model';
 import { labelPattern } from '@/src/document/semantics';
 
@@ -21,6 +22,8 @@ export function SemanticProperties({
   disabled: boolean;
   onApply: (nodeId: string, attrs: Record<string, unknown>) => void;
 }) {
+  const { copy } = useAppPreferences();
+  const { semantic } = copy;
   const id = useId();
   const [label, setLabel] = useState(node.attrs.label ?? '');
   const [caption, setCaption] = useState(node.attrs.caption ?? '');
@@ -42,9 +45,9 @@ export function SemanticProperties({
   return (
     <fieldset disabled={disabled} className="semantic-properties space-y-3">
       <label className="property-field" htmlFor={`${id}-label`}>
-        参照ラベル
+        {semantic.referenceLabel}
         <Input
-          aria-label="参照ラベル"
+          aria-label={semantic.referenceLabel}
           id={`${id}-label`}
           value={label}
           onChange={(event) => setLabel(event.target.value)}
@@ -54,14 +57,14 @@ export function SemanticProperties({
       </label>
       {!validLabel && (
         <p className="text-xs text-destructive">
-          英字から始まる128文字以内の英数字・:._-を指定してください。
+          {semantic.invalidReferenceLabel}
         </p>
       )}
       {node.type !== 'heading' && (
         <label className="property-field" htmlFor={`${id}-caption`}>
-          キャプション
+          {semantic.caption}
           <Textarea
-            aria-label="キャプション"
+            aria-label={semantic.caption}
             id={`${id}-caption`}
             value={caption}
             onChange={(event) => setCaption(event.target.value)}
@@ -69,24 +72,30 @@ export function SemanticProperties({
         </label>
       )}
       <label className="property-field" htmlFor={`${id}-numbered`}>
-        番号付け
+        {semantic.numbering}
         <NativeSelect
-          aria-label="番号付け"
+          aria-label={semantic.numbering}
           id={`${id}-numbered`}
           value={numbered}
           onChange={(event) => setNumbered(event.target.value)}
         >
-          <NativeSelectOption value="auto">自動</NativeSelectOption>
-          <NativeSelectOption value="true">有効</NativeSelectOption>
-          <NativeSelectOption value="false">無効</NativeSelectOption>
+          <NativeSelectOption value="auto">
+            {semantic.automatic}
+          </NativeSelectOption>
+          <NativeSelectOption value="true">
+            {semantic.enabled}
+          </NativeSelectOption>
+          <NativeSelectOption value="false">
+            {semantic.disabled}
+          </NativeSelectOption>
         </NativeSelect>
       </label>
       {node.type === 'figure' && (
         <>
           <label className="property-field" htmlFor={`${id}-width`}>
-            幅（%）
+            {semantic.width}
             <Input
-              aria-label="図の幅（%）"
+              aria-label={semantic.figureWidth}
               id={`${id}-width`}
               type="number"
               min="10"
@@ -97,9 +106,9 @@ export function SemanticProperties({
             />
           </label>
           <label className="property-field" htmlFor={`${id}-align`}>
-            配置
+            {semantic.alignment}
             <NativeSelect
-              aria-label="図の配置"
+              aria-label={semantic.alignment}
               id={`${id}-align`}
               value={align}
               onChange={(event) =>
@@ -107,9 +116,9 @@ export function SemanticProperties({
               }
             >
               {[
-                ['left', '左'],
-                ['center', '中央'],
-                ['right', '右'],
+                ['left', semantic.left],
+                ['center', semantic.center],
+                ['right', semantic.right],
               ].map(([value, title]) => (
                 <NativeSelectOption key={value} value={value}>
                   {title}
@@ -118,9 +127,9 @@ export function SemanticProperties({
             </NativeSelect>
           </label>
           <label className="property-field" htmlFor={`${id}-alt`}>
-            代替テキスト
+            {semantic.alternativeText}
             <Input
-              aria-label="図の代替テキスト"
+              aria-label={semantic.alternativeText}
               id={`${id}-alt`}
               value={alt}
               onChange={(event) => setAlt(event.target.value)}
@@ -145,10 +154,10 @@ export function SemanticProperties({
           })
         }
       >
-        属性を適用
+        {semantic.applyAttributes}
       </Button>
       <p className="text-[10px] text-muted-foreground">
-        自動ではキャプションまたはラベルのある図・表・式を採番します。見出しの自動は文書の「節番号」に従い、有効・無効は個別に優先します。
+        {semantic.numberingHelp}
       </p>
     </fieldset>
   );

@@ -9,6 +9,7 @@ export const semanticTypes = new Set([
 ]);
 
 export interface SemanticTarget {
+  type: 'heading' | 'figure' | 'table' | 'blockMath';
   nodeId: string;
   label?: string;
   number?: string;
@@ -74,6 +75,7 @@ export function analyzeDocument(document: DocumentData): DocumentAnalysis {
         }
       }
       const target: SemanticTarget = {
+        type: node.type as SemanticTarget['type'],
         nodeId,
         label: label || undefined,
         number,
