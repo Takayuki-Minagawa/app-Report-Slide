@@ -24,17 +24,22 @@ import {
   Heading2,
   ImageIcon,
   Italic,
+  Languages,
   List,
   ListOrdered,
+  Moon,
   Quote,
   Redo2,
   Save,
   Sigma,
+  Sun,
   Table2,
   Undo2,
 } from 'lucide-react';
 
 import { PreviewSurface } from '@/components/preview/preview-surface';
+import { useAppPreferences } from '@/components/app-preferences';
+import { UserManualDialog } from '@/components/user-manual-dialog';
 import { SemanticProperties } from './semantic-properties';
 import { Input } from '@/components/ui/input';
 import {
@@ -76,6 +81,7 @@ import {
 import { MarkdownImportError } from '@/src/markdown/diagnostics';
 import { parseMarkdown } from '@/src/markdown/parser';
 import { serializeDocument } from '@/src/markdown/serializer';
+import { messages, type UiMessages } from '@/src/i18n/messages';
 
 type WorkspaceView = 'visual' | 'markdown' | 'preview';
 
@@ -144,15 +150,39 @@ function cloneDocument(document: DocumentData): DocumentData {
 function serializationFailureDescription(
   error: unknown,
   snapshot: DocumentData,
+  copy: UiMessages,
 ): string {
   const message =
-    error instanceof Error ? error.message : '文書を変換できません';
+    error instanceof Error ? error.message : copy.status.unableToSerialize;
   try {
     validateDocumentData(snapshot);
-    return `${message}。Document JSONなら保存できます。`;
+    return `${message} ${copy.status.markdownUnsupported}`;
   } catch {
-    return `${message}。文書構造を確認してください。`;
+    return `${message} ${copy.status.invalidDocumentData}`;
   }
+}
+
+function localizedStaticStatusText(
+  value: string | undefined,
+  copy: UiMessages,
+): string | undefined {
+  if (!value) return value;
+  for (const key of Object.keys(messages.ja.status) as Array<
+    keyof UiMessages['status']
+  >) {
+    const japanese = messages.ja.status[key];
+    const english = messages.en.status[key];
+    const translated = copy.status[key];
+    if (
+      typeof japanese === 'string' &&
+      typeof english === 'string' &&
+      typeof translated === 'string' &&
+      (value === japanese || value === english)
+    ) {
+      return translated;
+    }
+  }
+  return value;
 }
 
 function currentDocument(
@@ -168,18 +198,18 @@ function currentDocument(
   };
 }
 
-function formatName(node: DocumentNode): string {
+function formatName(node: DocumentNode, copy: UiMessages): string {
   switch (node.type) {
     case 'heading':
-      return inlineText(node.content) || '無題の見出し';
+      return inlineText(node.content) || copy.workspace.untitledHeading;
     case 'figure':
-      return node.attrs.alt || '画像';
+      return node.attrs.alt || copy.workspace.image;
     case 'blockMath':
-      return 'ブロック数式';
+      return copy.workspace.blockMath;
     case 'table':
-      return '表';
+      return copy.workspace.table;
     case 'codeBlock':
-      return 'コード';
+      return copy.workspace.code;
     default:
       return node.type;
   }
@@ -347,6 +377,8 @@ function revokeAssetUrls(urls: Record<string, string>): void {
 }
 
 export function EditorWorkspace() {
+  const { copy, locale, theme, toggleLocale, toggleTheme } =
+    useAppPreferences();
   const [document, setDocument] = useState<DocumentData>(() =>
     cloneDocument(initialDocument),
   );
@@ -358,8 +390,8 @@ export function EditorWorkspace() {
   }));
   const [status, setStatus] = useState<WorkspaceStatus>({
     kind: 'idle',
-    title: '準備完了',
-    description: 'Document ModelとEditorを同期しています',
+    title: copy.status.ready,
+    description: copy.status.readyDescription,
   });
   const [documentDirty, setDocumentDirty] = useState(false);
   const [markdownDirty, setMarkdownDirty] = useState(false);
@@ -370,8 +402,21 @@ export function EditorWorkspace() {
   );
   const [mathDraft, setMathDraft] = useState('');
   const markdownInput = useRef<HTMLInputElement>(null);
+  const copyRef = useRef(copy);
   const dirty = documentDirty || markdownDirty;
   const documentWriteLocked = view === 'markdown' || markdownDirty;
+  const displayedStatus = useMemo(
+    () => ({
+      ...status,
+      title: localizedStaticStatusText(status.title, copy) ?? status.title,
+      description: localizedStaticStatusText(status.description, copy),
+    }),
+    [copy, status],
+  );
+
+  useEffect(() => {
+    copyRef.current = copy;
+  }, [copy]);
 
   const replaceAssetUrls = useCallback((next: Record<string, string>) => {
     setAssetUrls(next);
@@ -412,7 +457,7 @@ export function EditorWorkspace() {
       editorProps: {
         attributes: {
           class: 'kumi-editor-content',
-          'aria-label': '文書本文',
+          'aria-label': copy.workspace.documentBody,
         },
       },
       onUpdate: ({ editor: updatedEditor }) => {
@@ -448,8 +493,8 @@ export function EditorWorkspace() {
         });
         setStatus({
           kind: 'idle',
-          title: '編集中',
-          description: '変更はブラウザ内に保持されています',
+          title: copyRef.current.status.editing,
+          description: copyRef.current.status.editingDescription,
         });
       },
       onSelectionUpdate: ({ editor: updatedEditor }) => {
@@ -507,6 +552,10 @@ export function EditorWorkspace() {
     [editorSource.revision, extensions],
   );
 
+  useEffect(() => {
+    editor?.view.dom.setAttribute('aria-label', copy.workspace.documentBody);
+  }, [copy.workspace.documentBody, editor]);
+
   const outline = useMemo(
     () => navigatorNodes(document.children),
     [document.children],
@@ -532,8 +581,7 @@ export function EditorWorkspace() {
       try {
         serialized = serializeDocument(nextDocument);
       } catch {
-        markdownWarning =
-          'この文書はDocument JSONで保存してください。Markdownでは表現できない構造を保持しています。';
+        markdownWarning = copy.status.markdownUnsupported;
       }
       if (options.assetUrls !== undefined) {
         replaceAssetUrls(options.assetUrls);
@@ -556,7 +604,7 @@ export function EditorWorkspace() {
           undefined,
       });
     },
-    [editor, replaceAssetUrls],
+    [copy, editor, replaceAssetUrls],
   );
 
   const importMarkdown = useCallback(
@@ -569,9 +617,7 @@ export function EditorWorkspace() {
       try {
         const markdownFiles = files.filter(isMarkdownFile);
         if (markdownFiles.length !== 1) {
-          throw new Error(
-            'MarkdownまたはDocument JSONを1つだけ選択してください',
-          );
+          throw new Error(copy.status.selectOneSource);
         }
         const file = markdownFiles[0];
         const imageFiles = files.filter(
@@ -582,22 +628,22 @@ export function EditorWorkspace() {
         );
         if (unsupported.length > 0) {
           throw new Error(
-            `画像以外の添付ファイルは読み込めません: ${unsupported
-              .map((candidate) => candidate.name)
-              .join(', ')}`,
+            copy.status.unsupportedAttachments(
+              unsupported.map((candidate) => candidate.name).join(', '),
+            ),
           );
         }
         if (file.size > 5 * 1024 * 1024) {
-          throw new Error('Markdownファイルは5MB以下にしてください');
+          throw new Error(copy.status.markdownTooLarge);
         }
         if (imageFiles.some((asset) => asset.size > maximumAssetBytes)) {
-          throw new Error('画像ファイルは1件20MB以下にしてください');
+          throw new Error(copy.status.imageTooLarge);
         }
         if (
           imageFiles.reduce((total, asset) => total + asset.size, 0) >
           maximumTotalAssetBytes
         ) {
-          throw new Error('画像ファイルの合計は50MB以下にしてください');
+          throw new Error(copy.status.imagesTooLarge);
         }
         const source = await file.text();
         const result = /\.json$/i.test(file.name)
@@ -611,19 +657,15 @@ export function EditorWorkspace() {
         const descriptions = [
           ...result.diagnostics.map((item) => item.message),
           ...(localAssets.unresolved.length > 0
-            ? [
-                `ローカル画像を解決できません: ${localAssets.unresolved.join(
-                  ', ',
-                )}（Markdownと画像を同時に選択してください）`,
-              ]
+            ? [copy.status.unresolvedImages(localAssets.unresolved.join(', '))]
             : []),
         ];
         const hasWarnings = descriptions.length > 0;
         loadDocument(
           result.document,
           hasWarnings
-            ? `${file.name}を警告付きで読み込みました`
-            : `${file.name}を読み込みました`,
+            ? copy.status.loadedWithWarnings(file.name)
+            : copy.status.loaded(file.name),
           {
             assetUrls: localAssets.urls,
             description:
@@ -638,15 +680,15 @@ export function EditorWorkspace() {
             ? error.diagnostics.map((item) => item.message).join(' / ')
             : error instanceof Error
               ? error.message
-              : 'ファイルを読み込めませんでした';
+              : copy.status.unableToLoad;
         setStatus({
           kind: 'error',
-          title: 'Markdownを読み込めませんでした',
+          title: copy.status.unableToLoadTitle,
           description,
         });
       }
     },
-    [loadDocument],
+    [copy, loadDocument],
   );
 
   const applyMarkdown = useCallback(() => {
@@ -654,7 +696,7 @@ export function EditorWorkspace() {
       const result = parseMarkdown(markdownDraft, {
         fallbackType: document.type,
       });
-      loadDocument(result.document, 'Markdownの変更を適用しました', {
+      loadDocument(result.document, copy.status.appliedMarkdown, {
         description:
           result.diagnostics.length > 0
             ? result.diagnostics.map((item) => item.message).join(' / ')
@@ -664,27 +706,29 @@ export function EditorWorkspace() {
     } catch (error) {
       setStatus({
         kind: 'error',
-        title: 'Markdownを適用できませんでした',
+        title: copy.status.unableToApplyMarkdown,
         description:
           error instanceof MarkdownImportError
             ? error.diagnostics.map((item) => item.message).join(' / ')
             : error instanceof Error
               ? error.message
-              : 'Markdownを解析できませんでした',
+              : copy.status.unableToParseMarkdown,
       });
     }
-  }, [document.type, loadDocument, markdownDraft]);
+  }, [copy, document.type, loadDocument, markdownDraft]);
 
   const createDocument = useCallback(
     (type: DocumentType) => {
       loadDocument(
         createDefaultDocument(type),
-        `新しい${type}文書を作成しました`,
+        type === 'report'
+          ? copy.status.createdReport
+          : copy.status.createdSlide,
         { assetUrls: {} },
       );
       setView('visual');
     },
-    [loadDocument],
+    [copy, loadDocument],
   );
 
   const changeView = useCallback(
@@ -692,9 +736,8 @@ export function EditorWorkspace() {
       if (nextView === 'visual' && markdownDirty) {
         setStatus({
           kind: 'error',
-          title: 'Markdownの変更を先に処理してください',
-          description:
-            'ビジュアル編集へ戻る前に、Markdownの変更を適用または破棄してください',
+          title: copy.status.resolveMarkdownChanges,
+          description: copy.status.resolveMarkdownChangesDescription,
         });
         return;
       }
@@ -705,15 +748,15 @@ export function EditorWorkspace() {
         } catch (error) {
           setStatus({
             kind: 'error',
-            title: 'Markdown表示を更新できませんでした',
-            description: serializationFailureDescription(error, snapshot),
+            title: copy.status.unableToRefreshMarkdown,
+            description: serializationFailureDescription(error, snapshot, copy),
           });
           return;
         }
       }
       setView(nextView);
     },
-    [document, editor, markdownDirty],
+    [copy, document, editor, markdownDirty],
   );
 
   const discardMarkdown = useCallback(() => {
@@ -722,15 +765,15 @@ export function EditorWorkspace() {
       setMarkdownDraft(serializeDocument(snapshot));
       setMarkdownDirty(false);
       setView('visual');
-      setStatus({ kind: 'idle', title: 'Markdownの変更を破棄しました' });
+      setStatus({ kind: 'idle', title: copy.status.discardedMarkdown });
     } catch (error) {
       setStatus({
         kind: 'error',
-        title: 'Markdownの変更を破棄できませんでした',
-        description: serializationFailureDescription(error, snapshot),
+        title: copy.status.unableToDiscardMarkdown,
+        description: serializationFailureDescription(error, snapshot, copy),
       });
     }
-  }, [document, editor]);
+  }, [copy, document, editor]);
 
   const focusNode = useCallback(
     (nodeId: string) => {
@@ -799,7 +842,7 @@ export function EditorWorkspace() {
         'text/markdown;charset=utf-8',
       );
       if (markdownDirty) {
-        loadDocument(snapshot, 'Markdownを適用して保存しました', {
+        loadDocument(snapshot, copy.status.savedMarkdownAfterApplying, {
           description:
             result.diagnostics.length > 0
               ? result.diagnostics.map((item) => item.message).join(' / ')
@@ -807,17 +850,17 @@ export function EditorWorkspace() {
         });
       } else {
         setDocumentDirty(false);
-        setStatus({ kind: 'success', title: 'Markdownを保存しました' });
+        setStatus({ kind: 'success', title: copy.status.savedMarkdown });
       }
     } catch (error) {
       const snapshot = currentDocument(editor, document);
       setStatus({
         kind: 'error',
-        title: 'Markdownを保存できませんでした',
-        description: serializationFailureDescription(error, snapshot),
+        title: copy.status.unableToSaveMarkdown,
+        description: serializationFailureDescription(error, snapshot, copy),
       });
     }
-  }, [document, documentForSave, editor, loadDocument, markdownDirty]);
+  }, [copy, document, documentForSave, editor, loadDocument, markdownDirty]);
 
   const saveJson = useCallback(() => {
     try {
@@ -829,29 +872,27 @@ export function EditorWorkspace() {
         'application/json;charset=utf-8',
       );
       if (markdownDirty) {
-        loadDocument(
-          snapshot,
-          'Markdownを適用してDocument JSONを保存しました',
-          {
-            description:
-              result.diagnostics.length > 0
-                ? result.diagnostics.map((item) => item.message).join(' / ')
-                : undefined,
-          },
-        );
+        loadDocument(snapshot, copy.status.savedJsonAfterApplying, {
+          description:
+            result.diagnostics.length > 0
+              ? result.diagnostics.map((item) => item.message).join(' / ')
+              : undefined,
+        });
       } else {
         setDocumentDirty(false);
-        setStatus({ kind: 'success', title: 'Document JSONを保存しました' });
+        setStatus({ kind: 'success', title: copy.status.savedJson });
       }
     } catch (error) {
       setStatus({
         kind: 'error',
-        title: 'Document JSONを保存できませんでした',
+        title: copy.status.unableToSaveJson,
         description:
-          error instanceof Error ? error.message : '文書データを検証できません',
+          error instanceof Error
+            ? error.message
+            : copy.status.invalidDocumentData,
       });
     }
-  }, [documentForSave, loadDocument, markdownDirty]);
+  }, [copy, documentForSave, loadDocument, markdownDirty]);
 
   const updateTheme = useCallback((theme: string) => {
     setDocument((current) => ({
@@ -872,11 +913,11 @@ export function EditorWorkspace() {
           latex: mathDraft.trim(),
         })
       ) {
-        setStatus({ kind: 'error', title: '数式を選択し直してください' });
+        setStatus({ kind: 'error', title: copy.status.selectMathAgain });
         return;
       }
       setMathSelection({ ...mathSelection, latex: mathDraft.trim() });
-      setStatus({ kind: 'success', title: '数式を更新しました' });
+      setStatus({ kind: 'success', title: copy.status.updatedEquation });
       return;
     }
     const selectedMath = editor.state.doc.nodeAt(mathSelection.position);
@@ -885,7 +926,7 @@ export function EditorWorkspace() {
       selectedMath?.type.name !== 'inlineMath' ||
       selectedMath.attrs.latex !== mathSelection.latex
     ) {
-      setStatus({ kind: 'error', title: '数式を選択し直してください' });
+      setStatus({ kind: 'error', title: copy.status.selectMathAgain });
       return;
     }
     const chain = editor.chain().focus();
@@ -897,22 +938,29 @@ export function EditorWorkspace() {
       .run();
     if (updated) {
       setMathSelection({ ...mathSelection, latex: mathDraft.trim() });
-      setStatus({ kind: 'success', title: '数式を更新しました' });
+      setStatus({ kind: 'success', title: copy.status.updatedEquation });
     }
-  }, [documentWriteLocked, editor, mathDraft, mathSelection, selectedNode]);
+  }, [
+    copy,
+    documentWriteLocked,
+    editor,
+    mathDraft,
+    mathSelection,
+    selectedNode,
+  ]);
 
   const applyAttributes = (nodeId: string, attrs: Record<string, unknown>) => {
     if (!editor || documentWriteLocked) return;
     try {
       if (!updateDocumentNode(editor, nodeId, attrs))
-        throw new Error('対象の要素は削除されています。選択し直してください');
-      setStatus({ kind: 'success', title: '属性を更新しました' });
+        throw new Error(copy.status.selectedElementRemoved);
+      setStatus({ kind: 'success', title: copy.status.updatedAttributes });
     } catch (error) {
       setStatus({
         kind: 'error',
-        title: '属性を更新できませんでした',
+        title: copy.status.unableToUpdateAttributes,
         description:
-          error instanceof Error ? error.message : '属性を確認してください',
+          error instanceof Error ? error.message : copy.status.checkAttributes,
       });
     }
   };
@@ -936,6 +984,8 @@ export function EditorWorkspace() {
           ['beamer-simple', 'Beamer Simple'],
           ['technical', 'Technical'],
         ];
+  const [selectElementTitle, selectElementDescription] =
+    copy.workspace.selectElementHint.split('\n');
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-background">
@@ -947,7 +997,7 @@ export function EditorWorkspace() {
         multiple
         disabled={documentWriteLocked}
         onChange={importMarkdown}
-        aria-label="Markdownファイル"
+        aria-label={copy.workspace.markdownFile}
       />
 
       <header className="workspace-header">
@@ -956,7 +1006,7 @@ export function EditorWorkspace() {
             K
           </div>
           <div className="leading-none">
-            <p className="text-sm font-bold tracking-[0.12em] text-[#0b2742]">
+            <p className="text-sm font-bold tracking-[0.12em] text-primary">
               KUMI
             </p>
             <p className="mt-1 text-[9px] font-medium tracking-[0.08em] text-muted-foreground">
@@ -973,20 +1023,57 @@ export function EditorWorkspace() {
           {dirty && (
             <span
               className="size-1.5 rounded-full bg-amber-500"
-              aria-label="未保存"
+              aria-label={copy.workspace.unsaved}
             />
           )}
           <Badge
             variant="outline"
-            className="border-blue-200 bg-blue-50 text-[10px] text-blue-700"
+            className="document-type-badge border-blue-200 bg-blue-50 text-[10px] text-blue-700"
           >
             {document.type.toUpperCase()}
           </Badge>
         </div>
 
-        <div className="flex min-w-56 justify-end gap-1.5">
+        <div className="flex min-w-72 justify-end gap-1.5">
           <Button
-            aria-label="元に戻す"
+            aria-label={
+              theme === 'light' ? copy.app.switchToDark : copy.app.switchToLight
+            }
+            title={
+              theme === 'light' ? copy.app.switchToDark : copy.app.switchToLight
+            }
+            size="icon-sm"
+            variant="ghost"
+            type="button"
+            aria-pressed={theme === 'dark'}
+            onClick={toggleTheme}
+          >
+            {theme === 'light' ? <Moon /> : <Sun />}
+          </Button>
+          <Button
+            aria-label={
+              locale === 'ja'
+                ? copy.app.switchToEnglish
+                : copy.app.switchToJapanese
+            }
+            title={
+              locale === 'ja'
+                ? copy.app.switchToEnglish
+                : copy.app.switchToJapanese
+            }
+            size="sm"
+            variant="ghost"
+            type="button"
+            aria-pressed={locale === 'en'}
+            onClick={toggleLocale}
+          >
+            <Languages data-icon="inline-start" />
+            {locale === 'ja' ? 'EN' : '日本語'}
+          </Button>
+          <UserManualDialog />
+          <Separator orientation="vertical" className="mx-1 h-6 self-center" />
+          <Button
+            aria-label={copy.workspace.undo}
             size="icon-sm"
             variant="ghost"
             disabled={documentWriteLocked || !editor?.can().undo()}
@@ -995,7 +1082,7 @@ export function EditorWorkspace() {
             <Undo2 />
           </Button>
           <Button
-            aria-label="やり直す"
+            aria-label={copy.workspace.redo}
             size="icon-sm"
             variant="ghost"
             disabled={documentWriteLocked || !editor?.can().redo()}
@@ -1016,9 +1103,9 @@ export function EditorWorkspace() {
       <section className="workspace-grid">
         <aside className="workspace-navigator">
           <div className="panel-heading">
-            <span>DOCUMENT</span>
+            <span>{copy.workspace.documentPanel}</span>
             <Button
-              aria-label="Markdownを開く"
+              aria-label={copy.workspace.openMarkdown}
               size="icon-xs"
               variant="ghost"
               disabled={documentWriteLocked}
@@ -1029,10 +1116,13 @@ export function EditorWorkspace() {
           </div>
           <Separator />
           <ScrollArea className="min-h-0 flex-1">
-            <nav aria-label="文書構成" className="space-y-1 p-2">
+            <nav
+              aria-label={copy.workspace.documentStructure}
+              className="space-y-1 p-2"
+            >
               {outline.length === 0 ? (
                 <p className="p-3 text-xs text-muted-foreground">
-                  構成要素はまだありません
+                  {copy.workspace.noOutline}
                 </p>
               ) : (
                 outline.map((node) => {
@@ -1048,7 +1138,7 @@ export function EditorWorkspace() {
                     >
                       <Icon className="size-3.5" />
                       <span className="min-w-0 flex-1 truncate">
-                        {formatName(node)}
+                        {formatName(node, copy)}
                       </span>
                       <span className="font-mono text-[9px] opacity-55">
                         {node.type}
@@ -1061,7 +1151,7 @@ export function EditorWorkspace() {
           </ScrollArea>
           <div className="space-y-2 border-t p-3">
             <p className="text-[10px] text-muted-foreground">
-              Markdown / Document JSON ＋ 画像
+              {copy.workspace.importHint}
             </p>
             <Button
               className="w-full justify-start"
@@ -1069,7 +1159,8 @@ export function EditorWorkspace() {
               disabled={documentWriteLocked}
               onClick={() => markdownInput.current?.click()}
             >
-              <FolderOpen data-icon="inline-start" /> Markdownを開く
+              <FolderOpen data-icon="inline-start" />
+              {copy.workspace.openMarkdown}
             </Button>
             <div className="grid grid-cols-2 gap-2">
               <Button
@@ -1078,7 +1169,7 @@ export function EditorWorkspace() {
                 disabled={documentWriteLocked}
                 onClick={() => createDocument('report')}
               >
-                <FilePlus2 /> Report
+                <FilePlus2 /> {copy.workspace.newReport}
               </Button>
               <Button
                 size="sm"
@@ -1086,7 +1177,7 @@ export function EditorWorkspace() {
                 disabled={documentWriteLocked}
                 onClick={() => createDocument('slide')}
               >
-                <FilePlus2 /> Slide
+                <FilePlus2 /> {copy.workspace.newSlide}
               </Button>
             </div>
           </div>
@@ -1097,15 +1188,15 @@ export function EditorWorkspace() {
             <div className="flex h-full items-end gap-1">
               {(
                 [
-                  ['visual', 'ビジュアル編集'],
-                  ['markdown', 'Markdown'],
-                  ['preview', '完成プレビュー'],
+                  ['visual', copy.workspace.visual],
+                  ['markdown', copy.workspace.markdown],
+                  ['preview', copy.workspace.preview],
                 ] as const
               ).map(([value, label]) => (
                 <button
                   key={value}
                   type="button"
-                  aria-label={`${label}へ切り替え`}
+                  aria-label={copy.workspace.switchToView(label)}
                   className={
                     view === value ? 'view-tab view-tab-active' : 'view-tab'
                   }
@@ -1122,16 +1213,20 @@ export function EditorWorkspace() {
 
           {view === 'visual' && (
             <>
-              <div className="format-toolbar" role="toolbar" aria-label="書式">
+              <div
+                className="format-toolbar"
+                role="toolbar"
+                aria-label={copy.workspace.format}
+              >
                 <FormatButton
-                  label="太字"
+                  label={copy.workspace.bold}
                   active={editor?.isActive('bold')}
                   onClick={() => editor?.chain().focus().toggleBold().run()}
                 >
                   <Bold />
                 </FormatButton>
                 <FormatButton
-                  label="斜体"
+                  label={copy.workspace.italic}
                   active={editor?.isActive('italic')}
                   onClick={() => editor?.chain().focus().toggleItalic().run()}
                 >
@@ -1142,7 +1237,7 @@ export function EditorWorkspace() {
                   className="mx-1 h-5 self-center"
                 />
                 <FormatButton
-                  label="見出し1"
+                  label={copy.workspace.heading1}
                   active={editor?.isActive('heading', { level: 1 })}
                   onClick={() =>
                     editor?.chain().focus().toggleHeading({ level: 1 }).run()
@@ -1151,7 +1246,7 @@ export function EditorWorkspace() {
                   <Heading1 />
                 </FormatButton>
                 <FormatButton
-                  label="見出し2"
+                  label={copy.workspace.heading2}
                   active={editor?.isActive('heading', { level: 2 })}
                   onClick={() =>
                     editor?.chain().focus().toggleHeading({ level: 2 }).run()
@@ -1160,7 +1255,7 @@ export function EditorWorkspace() {
                   <Heading2 />
                 </FormatButton>
                 <FormatButton
-                  label="箇条書き"
+                  label={copy.workspace.bulletList}
                   active={editor?.isActive('bulletList')}
                   onClick={() =>
                     editor?.chain().focus().toggleBulletList().run()
@@ -1169,7 +1264,7 @@ export function EditorWorkspace() {
                   <List />
                 </FormatButton>
                 <FormatButton
-                  label="番号付きリスト"
+                  label={copy.workspace.orderedList}
                   active={editor?.isActive('orderedList')}
                   onClick={() =>
                     editor?.chain().focus().toggleOrderedList().run()
@@ -1178,7 +1273,7 @@ export function EditorWorkspace() {
                   <ListOrdered />
                 </FormatButton>
                 <FormatButton
-                  label="引用"
+                  label={copy.workspace.quote}
                   active={editor?.isActive('blockquote')}
                   onClick={() =>
                     editor?.chain().focus().toggleBlockquote().run()
@@ -1191,7 +1286,7 @@ export function EditorWorkspace() {
                   className="mx-1 h-5 self-center"
                 />
                 <FormatButton
-                  label="インライン数式"
+                  label={copy.workspace.inlineMath}
                   onClick={() =>
                     editor
                       ?.chain()
@@ -1203,7 +1298,7 @@ export function EditorWorkspace() {
                   <Sigma />
                 </FormatButton>
                 <FormatButton
-                  label="ブロック数式"
+                  label={copy.workspace.blockMath}
                   onClick={() =>
                     editor
                       ?.chain()
@@ -1217,7 +1312,7 @@ export function EditorWorkspace() {
                   <FunctionSquare />
                 </FormatButton>
                 <FormatButton
-                  label="表を挿入"
+                  label={copy.workspace.insertTable}
                   onClick={() =>
                     editor
                       ?.chain()
@@ -1239,7 +1334,9 @@ export function EditorWorkspace() {
                     )
                   }
                 >
-                  {document.type === 'slide' ? 'スライドを区切る' : '改ページ'}
+                  {document.type === 'slide'
+                    ? copy.workspace.insertSlideBreak
+                    : copy.workspace.insertPageBreak}
                 </Button>
               </div>
               <ScrollArea className="min-h-0 flex-1">
@@ -1255,7 +1352,7 @@ export function EditorWorkspace() {
           {view === 'markdown' && (
             <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
               <Textarea
-                aria-label="Markdown原稿"
+                aria-label={copy.workspace.markdownDraft}
                 className="min-h-0 flex-1 resize-none rounded-md bg-[#101923] p-5 font-mono text-[13px] leading-6 text-slate-100"
                 value={markdownDraft}
                 spellCheck={false}
@@ -1264,18 +1361,18 @@ export function EditorWorkspace() {
                   setMarkdownDirty(true);
                   setStatus({
                     kind: 'idle',
-                    title: 'Markdownを編集中',
-                    description:
-                      '適用または保存するまで下書きとして保持されます',
+                    title: copy.status.editingMarkdown,
+                    description: copy.status.editingMarkdownDescription,
                   });
                 }}
               />
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={discardMarkdown}>
-                  破棄
+                  {copy.workspace.discard}
                 </Button>
                 <Button onClick={applyMarkdown}>
-                  <Braces data-icon="inline-start" /> Markdownを適用
+                  <Braces data-icon="inline-start" />
+                  {copy.workspace.applyMarkdown}
                 </Button>
               </div>
             </div>
@@ -1292,12 +1389,14 @@ export function EditorWorkspace() {
             </ScrollArea>
           )}
 
-          {status.kind === 'error' && (
+          {displayedStatus.kind === 'error' && (
             <div className="absolute bottom-4 left-1/2 z-20 w-[min(620px,calc(100%-32px))] -translate-x-1/2">
               <Alert variant="destructive" className="bg-card shadow-lg">
-                <AlertTitle>{status.title}</AlertTitle>
-                {status.description && (
-                  <AlertDescription>{status.description}</AlertDescription>
+                <AlertTitle>{displayedStatus.title}</AlertTitle>
+                {displayedStatus.description && (
+                  <AlertDescription>
+                    {displayedStatus.description}
+                  </AlertDescription>
                 )}
               </Alert>
             </div>
@@ -1306,24 +1405,30 @@ export function EditorWorkspace() {
 
         <aside className="workspace-properties">
           <div className="panel-heading">
-            <span>PROPERTIES</span>
+            <span>{copy.workspace.propertiesPanel}</span>
           </div>
           <Separator />
           <ScrollArea className="min-h-0 flex-1">
             <div className="space-y-5 p-4">
               <section>
-                <h2 className="mb-3 text-xs font-semibold">文書</h2>
+                <h2 className="mb-3 text-xs font-semibold">
+                  {copy.workspace.document}
+                </h2>
                 <dl className="property-grid">
-                  <dt>種類</dt>
-                  <dd>{document.type === 'report' ? 'Report' : 'Slide'}</dd>
-                  <dt>タイトル</dt>
+                  <dt>{copy.workspace.type}</dt>
+                  <dd>
+                    {document.type === 'report'
+                      ? copy.workspace.report
+                      : copy.workspace.slide}
+                  </dd>
+                  <dt>{copy.workspace.title}</dt>
                   <dd className="truncate" title={documentTitle(document)}>
                     {documentTitle(document)}
                   </dd>
-                  <dt>テーマ</dt>
+                  <dt>{copy.workspace.theme}</dt>
                   <dd>
                     <NativeSelect
-                      aria-label="テーマ"
+                      aria-label={copy.workspace.theme}
                       size="sm"
                       className="w-full"
                       disabled={documentWriteLocked}
@@ -1344,10 +1449,10 @@ export function EditorWorkspace() {
                 </dl>
                 <div className="mt-3 space-y-2">
                   {[
-                    ['toc', '目次'],
-                    ['number_sections', '節番号'],
+                    ['toc', copy.workspace.toc],
+                    ['number_sections', copy.workspace.sectionNumbers],
                     ...(document.type === 'slide'
-                      ? [['slide_number', 'スライド番号']]
+                      ? [['slide_number', copy.workspace.slideNumbers]]
                       : []),
                   ].map(([key, title]) => (
                     <label
@@ -1372,9 +1477,9 @@ export function EditorWorkspace() {
                 </div>
                 <div className="mt-4 space-y-2">
                   <label className="property-field" htmlFor="reference-target">
-                    参照先ラベル
+                    {copy.workspace.referenceLabel}
                     <Input
-                      aria-label="参照先ラベル"
+                      aria-label={copy.workspace.referenceLabel}
                       id="reference-target"
                       value={referenceTarget}
                       disabled={documentWriteLocked}
@@ -1401,18 +1506,18 @@ export function EditorWorkspace() {
                         .run()
                     }
                   >
-                    参照を挿入
+                    {copy.workspace.insertReference}
                   </Button>
                   <p className="text-[10px] text-muted-foreground">
-                    利用可能:{' '}
+                    {copy.workspace.available}:{' '}
                     {[...analysis.labels.keys()].join(', ') ||
-                      '要素に参照ラベルを設定してください'}
+                      copy.workspace.noReferenceLabels}
                   </p>
                 </div>
                 {analysis.diagnostics.length > 0 && (
                   <div
                     className="semantic-warnings mt-3"
-                    aria-label="文書の参照診断"
+                    aria-label={copy.workspace.referenceDiagnostics}
                   >
                     {analysis.diagnostics.map((message) => (
                       <p key={message}>{message}</p>
@@ -1424,7 +1529,9 @@ export function EditorWorkspace() {
               <Separator />
 
               <section>
-                <h2 className="mb-3 text-xs font-semibold">選択中の要素</h2>
+                <h2 className="mb-3 text-xs font-semibold">
+                  {copy.workspace.selectedElement}
+                </h2>
                 {selectedNode ? (
                   <div className="space-y-3">
                     <Badge variant="secondary">{selectedNode.type}</Badge>
@@ -1455,7 +1562,7 @@ export function EditorWorkspace() {
                           disabled={documentWriteLocked}
                           onClick={applyMath}
                         >
-                          数式を更新
+                          {copy.workspace.updateEquation}
                         </Button>
                       </div>
                     )}
@@ -1471,9 +1578,9 @@ export function EditorWorkspace() {
                 ) : (
                   <div className="rounded-md border border-dashed bg-muted/35 p-4 text-center">
                     <p className="text-[11px] text-muted-foreground">
-                      要素を選択すると
+                      {selectElementTitle}
                       <br />
-                      設定を編集できます
+                      {selectElementDescription}
                     </p>
                   </div>
                 )}
@@ -1486,17 +1593,20 @@ export function EditorWorkspace() {
           >
             <span
               className={`inline-block size-1.5 rounded-full ${
-                status.kind === 'error'
+                displayedStatus.kind === 'error'
                   ? 'bg-red-500'
                   : dirty
                     ? 'bg-amber-500'
                     : 'bg-emerald-500'
               }`}
             />
-            <span className="ml-2">{status.title}</span>
-            {status.description && (
-              <span className="ml-1 block truncate" title={status.description}>
-                {status.description}
+            <span className="ml-2">{displayedStatus.title}</span>
+            {displayedStatus.description && (
+              <span
+                className="ml-1 block truncate"
+                title={displayedStatus.description}
+              >
+                {displayedStatus.description}
               </span>
             )}
           </output>

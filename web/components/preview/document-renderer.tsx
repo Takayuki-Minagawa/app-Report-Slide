@@ -9,6 +9,7 @@ import {
 } from 'react';
 import katex from 'katex';
 
+import { useAppPreferences } from '@/components/app-preferences';
 import type {
   DocumentData,
   DocumentNode,
@@ -27,6 +28,7 @@ const AnalysisContext = createContext<DocumentAnalysis | null>(null);
 const anchorId = (nodeId: string) => `kumi-${nodeId}`;
 
 function Reference({ target }: { target: string }) {
+  const { copy } = useAppPreferences();
   const resolved = useContext(AnalysisContext)?.labels.get(target);
   return resolved ? (
     <a
@@ -38,7 +40,7 @@ function Reference({ target }: { target: string }) {
   ) : (
     <span
       className="preview-reference-unresolved"
-      title="参照先が未定義、または重複しています"
+      title={copy.preview.unresolvedReference}
     >
       [@{target}]
     </span>
@@ -144,12 +146,13 @@ function InlineImageContent({
   src: string;
   title: string | null;
 }) {
+  const { copy } = useAppPreferences();
   const [failed, setFailed] = useState(false);
   const resolvedSrc = resolvedImageUrl(src, resolveImageUrl);
   if (!resolvedSrc || failed) {
     return (
       <span className="preview-inline-image-fallback">
-        {alt || '画像を表示できません'}
+        {alt || copy.preview.imageUnavailable}
       </span>
     );
   }
@@ -209,6 +212,7 @@ function FigureBlock({
   node: Extract<DocumentNode, { type: 'figure' }>;
   resolveImageUrl: ImageUrlResolver;
 }) {
+  const { copy } = useAppPreferences();
   const [failed, setFailed] = useState(false);
   const src = resolvedImageUrl(node.attrs.src, resolveImageUrl);
   const width = Math.min(100, Math.max(10, Number(node.attrs.width) || 100));
@@ -217,7 +221,7 @@ function FigureBlock({
     return (
       <figure className="preview-figure" data-align={node.attrs.align}>
         <div className="preview-image-fallback">
-          <span>画像を表示できません</span>
+          <span>{copy.preview.imageUnavailable}</span>
           <small>{node.attrs.alt || node.attrs.src}</small>
         </div>
         <figcaption>
@@ -418,6 +422,7 @@ export function DocumentRenderer({
   analysis,
   showToc = true,
 }: DocumentRendererProps) {
+  const { copy } = useAppPreferences();
   const computed = useMemo(
     () => analysis ?? analyzeDocument(document),
     [analysis, document],
@@ -428,8 +433,8 @@ export function DocumentRenderer({
         {showToc &&
           document.metadata.toc === true &&
           computed.outline.length > 0 && (
-            <nav className="document-toc" aria-label="目次">
-              <h2>目次</h2>
+            <nav className="document-toc" aria-label={copy.preview.toc}>
+              <h2>{copy.preview.toc}</h2>
               <ol>
                 {computed.outline.map((entry) => (
                   <li

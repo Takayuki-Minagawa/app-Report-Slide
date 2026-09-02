@@ -21,6 +21,7 @@ GitHub Pagesを有効にすると、[公開版](https://takayuki-minagawa.github
 - Report／Slide向けの基本テーマと完成プレビュー
 - 3ペイン構成のNavigator、Editor、Properties
 - Undo／Redo、Markdown直接編集、破損入力を適用しないエラー処理
+- ヘッダーから切り替えられるライト／ダークモード、日本語／英語の操作画面、アプリ内かんたんガイド
 
 ## 文書機能
 
@@ -30,7 +31,7 @@ GitHub Pagesを有効にすると、[公開版](https://takayuki-minagawa.github
 - 明示的な改ページと複数スライドのプレビュー、ページ／スライド番号
 - Document JSON v1／v2のImport、v2への非破壊移行
 
-使い方・構文・制限は [文書機能ガイド](./web/docs/document-features.md) を参照してください。元の全体仕様は [仕様書](./md_report_slide_editor_web_spec.md) にあります。自動ページ割り、厳密なA4組版、PDF／HTML export、脚注・文献、段組み、Chart、TeXファイル互換はまだ未実装です。
+使い方・構文・制限は [文書機能ガイド](./web/docs/document-features.md) を参照してください。最初の操作は [かんたんガイド（日本語）](./web/docs/quick-start.ja.md) / [Quick guide (English)](./web/docs/quick-start.en.md) にまとめています。元の全体仕様は [仕様書](./md_report_slide_editor_web_spec.md) にあります。自動ページ割り、厳密なA4組版、PDF／HTML export、脚注・文献、段組み、Chart、TeXファイル互換はまだ未実装です。
 
 ## 開発
 

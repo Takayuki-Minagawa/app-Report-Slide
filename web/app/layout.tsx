@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { AppPreferencesProvider } from '@/components/app-preferences';
 import 'katex/dist/katex.min.css';
 import './globals.css';
 
@@ -38,7 +39,13 @@ export const metadata: Metadata = {
     canonical: canonicalUrl,
   },
   icons: {
-    icon: siteAssetUrl('favicon.svg'),
+    icon: [
+      {
+        url: siteAssetUrl('favicon.svg'),
+        type: 'image/svg+xml',
+      },
+    ],
+    shortcut: siteAssetUrl('favicon.svg'),
   },
   openGraph: {
     type: 'website',
@@ -71,7 +78,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ja">
-      <body>{children}</body>
+      <body>
+        <AppPreferencesProvider>{children}</AppPreferencesProvider>
+      </body>
     </html>
   );
 }

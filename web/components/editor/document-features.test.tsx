@@ -1,7 +1,16 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { AppPreferencesProvider } from '@/components/app-preferences';
 import { EditorWorkspace } from './editor-workspace';
 import { parseMarkdown } from '@/src/markdown/parser';
+
+function renderWorkspace() {
+  return render(
+    <AppPreferencesProvider>
+      <EditorWorkspace />
+    </AppPreferencesProvider>,
+  );
+}
 
 async function applySource(source: string) {
   await screen.findByText('REPORT');
@@ -20,7 +29,7 @@ async function applySource(source: string) {
 
 describe('document feature workspace', () => {
   it('edits Figure properties, reflects Undo and locks them during Markdown drafts', async () => {
-    render(<EditorWorkspace />);
+    renderWorkspace();
     await applySource('![図A](a.svg)\n\n![図B](b.svg)');
     fireEvent.click(screen.getByRole('button', { name: /図A figure/ }));
     const width = await screen.findByRole('spinbutton', {
@@ -73,7 +82,7 @@ describe('document feature workspace', () => {
   });
 
   it('does not apply the previous Figure draft to a different selected node', async () => {
-    render(<EditorWorkspace />);
+    renderWorkspace();
     await applySource('![図A](a.svg)\n\n![図B](b.svg)');
     fireEvent.click(screen.getByRole('button', { name: /図A figure/ }));
     fireEvent.change(
@@ -96,7 +105,7 @@ describe('document feature workspace', () => {
   });
 
   it('updates only the selected equation after navigating from equation A to B', async () => {
-    render(<EditorWorkspace />);
+    renderWorkspace();
     await applySource('$$\nx=1\n$$\n\n$$\ny=2\n$$');
     const equations = screen.getAllByRole('button', {
       name: /ブロック数式 blockMath/,
@@ -131,7 +140,7 @@ describe('document feature workspace', () => {
   });
 
   it('imports valid JSON that cannot be represented as Markdown, without losing cells', async () => {
-    const { container } = render(<EditorWorkspace />);
+    const { container } = renderWorkspace();
     await screen.findByText('REPORT');
     const document = parseMarkdown('| a |\n|---|\n| b |').document;
     const table = document.children[0];
