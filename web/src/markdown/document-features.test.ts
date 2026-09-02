@@ -17,6 +17,23 @@ function normalized(value: unknown): unknown {
 }
 
 describe('document feature dialect', () => {
+  it('preserves references next to punctuation, including link-definition colons', () => {
+    const symbols = Array.from('!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~');
+    for (const text of [
+      ...symbols.map((symbol) => `${symbol} details`),
+      ':https://example.com',
+      ': 説明',
+    ]) {
+      const document = parseMarkdown('[@fig:a]').document;
+      const paragraph = document.children[0];
+      if (paragraph.type !== 'paragraph') throw new Error('Expected paragraph');
+      paragraph.content!.push({ type: 'text', text });
+      expect(
+        normalized(parseMarkdown(serializeDocument(document)).document),
+        text,
+      ).toEqual(normalized(document));
+    }
+  });
   it('ships a sample with resolved references after formatting', () => {
     const source = readFileSync(
       'examples/example-document-features.md',

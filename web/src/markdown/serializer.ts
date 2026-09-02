@@ -34,7 +34,7 @@ function escapeText(value: string): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/([\\`*_[\]$~{}()])/g, '\\$1');
+    .replace(/([\\`*_[\]$~{}():])/g, '\\$1');
 }
 
 function isEscaped(value: string, position: number): boolean {
