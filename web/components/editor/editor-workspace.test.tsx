@@ -24,25 +24,28 @@ describe('EditorWorkspace', () => {
     expect(await screen.findByText('REPORT')).toBeInTheDocument();
 
     const themeButton = screen.getByRole('button', {
-      name: 'ダークモードに切り替える',
+      name: 'ダークモード',
     });
     await waitFor(() => expect(themeButton).toBeEnabled());
+    expect(themeButton).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(themeButton);
     await waitFor(() => {
       expect(document.documentElement).toHaveClass('dark');
       expect(
-        screen.getByRole('button', { name: 'ライトモードに切り替える' }),
-      ).toBeInTheDocument();
+        screen.getByRole('button', { name: 'ダークモード' }),
+      ).toHaveAttribute('aria-pressed', 'true');
     });
 
-    fireEvent.click(
-      screen.getByRole('button', { name: '英語表示に切り替える' }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: '英語表示' }));
     await waitFor(() => {
       expect(document.documentElement.lang).toBe('en');
+      expect(screen.getByRole('button', { name: 'Dark mode' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
       expect(
-        screen.getByRole('button', { name: 'Switch to light mode' }),
-      ).toBeInTheDocument();
+        screen.getByRole('button', { name: 'English interface' }),
+      ).toHaveAttribute('aria-pressed', 'true');
       expect(
         screen.getByRole('button', { name: 'Switch to Markdown' }),
       ).toBeInTheDocument();

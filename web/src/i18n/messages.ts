@@ -4,6 +4,8 @@ export type AppLocale = (typeof supportedLocales)[number];
 
 export interface UiMessages {
   app: {
+    darkMode: string;
+    englishInterface: string;
     switchToEnglish: string;
     switchToJapanese: string;
     switchToDark: string;
@@ -158,6 +160,8 @@ export interface UiMessages {
 export const messages: Record<AppLocale, UiMessages> = {
   ja: {
     app: {
+      darkMode: 'ダークモード',
+      englishInterface: '英語表示',
       switchToEnglish: '英語表示に切り替える',
       switchToJapanese: '日本語表示に切り替える',
       switchToDark: 'ダークモードに切り替える',
@@ -333,6 +337,8 @@ export const messages: Record<AppLocale, UiMessages> = {
   },
   en: {
     app: {
+      darkMode: 'Dark mode',
+      englishInterface: 'English interface',
       switchToEnglish: 'Switch to English',
       switchToJapanese: 'Switch to Japanese',
       switchToDark: 'Switch to dark mode',

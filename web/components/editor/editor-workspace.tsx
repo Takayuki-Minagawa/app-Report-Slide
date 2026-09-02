@@ -1099,26 +1099,21 @@ export function EditorWorkspace() {
 
         <div className="flex min-w-72 justify-end gap-1.5">
           <Button
-            aria-label={
-              theme === 'light' ? copy.app.switchToDark : copy.app.switchToLight
-            }
+            aria-label={copy.app.darkMode}
             title={
               theme === 'light' ? copy.app.switchToDark : copy.app.switchToLight
             }
             size="icon-sm"
             variant="ghost"
             type="button"
+            aria-pressed={theme === 'dark'}
             disabled={!preferencesReady}
             onClick={toggleTheme}
           >
             {theme === 'light' ? <Moon /> : <Sun />}
           </Button>
           <Button
-            aria-label={
-              locale === 'ja'
-                ? copy.app.switchToEnglish
-                : copy.app.switchToJapanese
-            }
+            aria-label={copy.app.englishInterface}
             title={
               locale === 'ja'
                 ? copy.app.switchToEnglish
@@ -1127,6 +1122,7 @@ export function EditorWorkspace() {
             size="sm"
             variant="ghost"
             type="button"
+            aria-pressed={locale === 'en'}
             disabled={!preferencesReady}
             onClick={toggleLocale}
           >

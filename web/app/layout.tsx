@@ -1,5 +1,8 @@
 import type { Metadata } from 'next';
-import { AppPreferencesProvider } from '@/components/app-preferences';
+import {
+  AppPreferencesProvider,
+  preferenceBootstrapScript,
+} from '@/components/app-preferences';
 import 'katex/dist/katex.min.css';
 import './globals.css';
 
@@ -77,7 +80,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ja">
+    <html lang="ja" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{ __html: preferenceBootstrapScript }}
+        />
+      </head>
       <body>
         <AppPreferencesProvider>{children}</AppPreferencesProvider>
       </body>
