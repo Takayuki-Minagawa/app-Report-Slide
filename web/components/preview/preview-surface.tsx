@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { useAppPreferences } from '@/components/app-preferences';
+import { localizeDiagnosticMessage } from '@/src/i18n/diagnostics';
 import type { DocumentData } from '@/src/document/model';
 import { analyzeDocument, splitDocumentPages } from '@/src/document/semantics';
 import { DocumentRenderer } from './document-renderer';
@@ -16,7 +17,7 @@ export function PreviewSurface({
   document: DocumentData;
   resolveImageUrl?: (source: string) => string;
 }) {
-  const { copy } = useAppPreferences();
+  const { copy, locale } = useAppPreferences();
   const slide = document.type === 'slide';
   const requested =
     typeof document.metadata.theme === 'string' ? document.metadata.theme : '';
@@ -45,7 +46,9 @@ export function PreviewSurface({
           <strong>{copy.preview.checkReferences}</strong>
           <ul>
             {analysis.diagnostics.map((message) => (
-              <li key={message}>{message}</li>
+              <li key={message}>
+                {localizeDiagnosticMessage(message, locale)}
+              </li>
             ))}
           </ul>
         </output>

@@ -4,11 +4,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { AppPreferencesProvider, useAppPreferences } from './app-preferences';
 
 function PreferenceControls() {
-  const { locale, theme, toggleLocale, toggleTheme } = useAppPreferences();
+  const { locale, ready, theme, toggleLocale, toggleTheme } =
+    useAppPreferences();
   return (
     <>
       <output data-testid="locale">{locale}</output>
       <output data-testid="theme">{theme}</output>
+      <output data-testid="ready">{String(ready)}</output>
       <button type="button" onClick={toggleLocale}>
         locale
       </button>
@@ -37,6 +39,7 @@ describe('AppPreferencesProvider', () => {
     await waitFor(() => {
       expect(screen.getByTestId('locale')).toHaveTextContent('ja');
       expect(screen.getByTestId('theme')).toHaveTextContent('light');
+      expect(screen.getByTestId('ready')).toHaveTextContent('true');
       expect(document.documentElement.lang).toBe('ja');
       expect(document.documentElement).not.toHaveClass('dark');
     });
@@ -47,6 +50,7 @@ describe('AppPreferencesProvider', () => {
     await waitFor(() => {
       expect(screen.getByTestId('locale')).toHaveTextContent('en');
       expect(screen.getByTestId('theme')).toHaveTextContent('dark');
+      expect(screen.getByTestId('ready')).toHaveTextContent('true');
       expect(document.documentElement.lang).toBe('en');
       expect(document.documentElement).toHaveClass('dark');
       expect(window.localStorage.getItem('kumi.locale')).toBe('en');
@@ -69,6 +73,26 @@ describe('AppPreferencesProvider', () => {
       expect(screen.getByTestId('theme')).toHaveTextContent('dark');
       expect(document.documentElement.lang).toBe('en');
       expect(document.documentElement).toHaveClass('dark');
+    });
+  });
+
+  it('does not let an immediate toggle overwrite restored preferences', async () => {
+    window.localStorage.setItem('kumi.locale', 'en');
+    window.localStorage.setItem('kumi.theme', 'dark');
+
+    render(
+      <AppPreferencesProvider>
+        <PreferenceControls />
+      </AppPreferencesProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'locale' }));
+    fireEvent.click(screen.getByRole('button', { name: 'theme' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ready')).toHaveTextContent('true');
+      expect(screen.getByTestId('locale')).toHaveTextContent('en');
+      expect(screen.getByTestId('theme')).toHaveTextContent('dark');
     });
   });
 });

@@ -21,6 +21,7 @@ const themeStorageKey = 'kumi.theme';
 interface AppPreferences {
   locale: AppLocale;
   theme: AppTheme;
+  ready: boolean;
   copy: UiMessages;
   setLocale: (locale: AppLocale) => void;
   setTheme: (theme: AppTheme) => void;
@@ -91,15 +92,17 @@ export function AppPreferencesProvider({ children }: { children: ReactNode }) {
     () => ({
       locale,
       theme,
+      ready,
       copy: messages[locale],
       setLocale,
       setTheme,
       toggleLocale: () =>
-        setLocale((current) => (current === 'ja' ? 'en' : 'ja')),
+        ready && setLocale((current) => (current === 'ja' ? 'en' : 'ja')),
       toggleTheme: () =>
+        ready &&
         setTheme((current) => (current === 'light' ? 'dark' : 'light')),
     }),
-    [locale, theme],
+    [locale, ready, theme],
   );
 
   return (

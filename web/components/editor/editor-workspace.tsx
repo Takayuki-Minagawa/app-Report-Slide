@@ -78,22 +78,45 @@ import {
   createEditorExtensions,
   type MathSelection,
 } from '@/src/editor/extensions';
-import { MarkdownImportError } from '@/src/markdown/diagnostics';
+import {
+  MarkdownImportError,
+  type MarkdownDiagnostic,
+} from '@/src/markdown/diagnostics';
 import { parseMarkdown } from '@/src/markdown/parser';
 import { serializeDocument } from '@/src/markdown/serializer';
-import { messages, type UiMessages } from '@/src/i18n/messages';
+import {
+  localizeDiagnosticMessage,
+  localizeMarkdownDiagnostic,
+} from '@/src/i18n/diagnostics';
+import type { AppLocale, UiMessages } from '@/src/i18n/messages';
 
 type WorkspaceView = 'visual' | 'markdown' | 'preview';
+type StatusMessageKey = keyof UiMessages['status'];
+
+interface TranslationStatusMessage {
+  key: StatusMessageKey;
+  args?: readonly string[];
+}
+
+interface DiagnosticStatusMessage {
+  diagnostic: Pick<MarkdownDiagnostic, 'code' | 'message'>;
+}
+
+type StatusMessage =
+  | string
+  | TranslationStatusMessage
+  | DiagnosticStatusMessage;
+type StatusDescription = StatusMessage | readonly StatusMessage[];
 
 interface WorkspaceStatus {
   kind: 'idle' | 'success' | 'error';
-  title: string;
-  description?: string;
+  title: StatusMessage;
+  description?: StatusDescription;
 }
 
 interface LoadDocumentOptions {
   assetUrls?: Record<string, string>;
-  description?: string;
+  description?: StatusDescription;
 }
 
 interface SelectedNode {
@@ -147,42 +170,76 @@ function cloneDocument(document: DocumentData): DocumentData {
   return JSON.parse(JSON.stringify(document)) as DocumentData;
 }
 
-function serializationFailureDescription(
-  error: unknown,
-  snapshot: DocumentData,
-  copy: UiMessages,
-): string {
-  const message =
-    error instanceof Error ? error.message : copy.status.unableToSerialize;
-  try {
-    validateDocumentData(snapshot);
-    return `${message} ${copy.status.markdownUnsupported}`;
-  } catch {
-    return `${message} ${copy.status.invalidDocumentData}`;
+function statusMessage(
+  key: StatusMessageKey,
+  ...args: string[]
+): TranslationStatusMessage {
+  return args.length > 0 ? { key, args } : { key };
+}
+
+function diagnosticStatusMessage(
+  diagnostic: MarkdownDiagnostic,
+): DiagnosticStatusMessage {
+  return { diagnostic };
+}
+
+class WorkspaceStatusError extends Error {
+  constructor(readonly status: StatusMessage) {
+    super('A localized workspace status is available.');
   }
 }
 
-function localizedStaticStatusText(
-  value: string | undefined,
+function statusMessageText(
+  value: StatusMessage,
   copy: UiMessages,
+  locale: AppLocale,
+): string {
+  if (typeof value === 'string')
+    return localizeDiagnosticMessage(value, locale);
+  if ('diagnostic' in value)
+    return localizeMarkdownDiagnostic(value.diagnostic, locale);
+
+  const translation = copy.status[value.key];
+  return typeof translation === 'function'
+    ? translation(value.args?.[0] ?? '')
+    : translation;
+}
+
+function statusMessages(value: StatusDescription | undefined): StatusMessage[] {
+  if (!value) return [];
+  return Array.isArray(value) ? [...value] : [value as StatusMessage];
+}
+
+function statusDescriptionText(
+  value: StatusDescription | undefined,
+  copy: UiMessages,
+  locale: AppLocale,
 ): string | undefined {
-  if (!value) return value;
-  for (const key of Object.keys(messages.ja.status) as Array<
-    keyof UiMessages['status']
-  >) {
-    const japanese = messages.ja.status[key];
-    const english = messages.en.status[key];
-    const translated = copy.status[key];
-    if (
-      typeof japanese === 'string' &&
-      typeof english === 'string' &&
-      typeof translated === 'string' &&
-      (value === japanese || value === english)
-    ) {
-      return translated;
-    }
+  const messages = statusMessages(value)
+    .map((message) => statusMessageText(message, copy, locale))
+    .filter(Boolean);
+  return messages.length > 0 ? messages.join(' / ') : undefined;
+}
+
+function combinedStatusDescription(
+  ...values: Array<StatusDescription | undefined>
+): StatusDescription | undefined {
+  const messages = values.flatMap(statusMessages);
+  return messages.length > 0 ? messages : undefined;
+}
+
+function serializationFailureDescription(
+  error: unknown,
+  snapshot: DocumentData,
+): StatusDescription {
+  const message =
+    error instanceof Error ? error.message : statusMessage('unableToSerialize');
+  try {
+    validateDocumentData(snapshot);
+    return [message, statusMessage('markdownUnsupported')];
+  } catch {
+    return [message, statusMessage('invalidDocumentData')];
   }
-  return value;
 }
 
 function currentDocument(
@@ -377,8 +434,14 @@ function revokeAssetUrls(urls: Record<string, string>): void {
 }
 
 export function EditorWorkspace() {
-  const { copy, locale, theme, toggleLocale, toggleTheme } =
-    useAppPreferences();
+  const {
+    copy,
+    locale,
+    ready: preferencesReady,
+    theme,
+    toggleLocale,
+    toggleTheme,
+  } = useAppPreferences();
   const [document, setDocument] = useState<DocumentData>(() =>
     cloneDocument(initialDocument),
   );
@@ -390,8 +453,8 @@ export function EditorWorkspace() {
   }));
   const [status, setStatus] = useState<WorkspaceStatus>({
     kind: 'idle',
-    title: copy.status.ready,
-    description: copy.status.readyDescription,
+    title: statusMessage('ready'),
+    description: statusMessage('readyDescription'),
   });
   const [documentDirty, setDocumentDirty] = useState(false);
   const [markdownDirty, setMarkdownDirty] = useState(false);
@@ -402,21 +465,16 @@ export function EditorWorkspace() {
   );
   const [mathDraft, setMathDraft] = useState('');
   const markdownInput = useRef<HTMLInputElement>(null);
-  const copyRef = useRef(copy);
   const dirty = documentDirty || markdownDirty;
   const documentWriteLocked = view === 'markdown' || markdownDirty;
   const displayedStatus = useMemo(
     () => ({
       ...status,
-      title: localizedStaticStatusText(status.title, copy) ?? status.title,
-      description: localizedStaticStatusText(status.description, copy),
+      title: statusMessageText(status.title, copy, locale),
+      description: statusDescriptionText(status.description, copy, locale),
     }),
-    [copy, status],
+    [copy, locale, status],
   );
-
-  useEffect(() => {
-    copyRef.current = copy;
-  }, [copy]);
 
   const replaceAssetUrls = useCallback((next: Record<string, string>) => {
     setAssetUrls(next);
@@ -493,8 +551,8 @@ export function EditorWorkspace() {
         });
         setStatus({
           kind: 'idle',
-          title: copyRef.current.status.editing,
-          description: copyRef.current.status.editingDescription,
+          title: statusMessage('editing'),
+          description: statusMessage('editingDescription'),
         });
       },
       onSelectionUpdate: ({ editor: updatedEditor }) => {
@@ -571,17 +629,17 @@ export function EditorWorkspace() {
   const loadDocument = useCallback(
     (
       nextDocument: DocumentData,
-      message: string,
+      message: StatusMessage,
       options: LoadDocumentOptions = {},
     ) => {
       nextDocument = migrateDocumentData(nextDocument);
       editor?.schema.nodeFromJSON(toEditorDocument(nextDocument));
       let serialized = '';
-      let markdownWarning: string | undefined;
+      let markdownWarning: StatusMessage | undefined;
       try {
         serialized = serializeDocument(nextDocument);
       } catch {
-        markdownWarning = copy.status.markdownUnsupported;
+        markdownWarning = statusMessage('markdownUnsupported');
       }
       if (options.assetUrls !== undefined) {
         replaceAssetUrls(options.assetUrls);
@@ -599,12 +657,13 @@ export function EditorWorkspace() {
       setStatus({
         kind: 'success',
         title: message,
-        description:
-          [options.description, markdownWarning].filter(Boolean).join(' / ') ||
-          undefined,
+        description: combinedStatusDescription(
+          options.description,
+          markdownWarning,
+        ),
       });
     },
-    [copy, editor, replaceAssetUrls],
+    [editor, replaceAssetUrls],
   );
 
   const importMarkdown = useCallback(
@@ -617,7 +676,7 @@ export function EditorWorkspace() {
       try {
         const markdownFiles = files.filter(isMarkdownFile);
         if (markdownFiles.length !== 1) {
-          throw new Error(copy.status.selectOneSource);
+          throw new WorkspaceStatusError(statusMessage('selectOneSource'));
         }
         const file = markdownFiles[0];
         const imageFiles = files.filter(
@@ -627,23 +686,24 @@ export function EditorWorkspace() {
           (candidate) => candidate !== file && !isImageAsset(candidate),
         );
         if (unsupported.length > 0) {
-          throw new Error(
-            copy.status.unsupportedAttachments(
+          throw new WorkspaceStatusError(
+            statusMessage(
+              'unsupportedAttachments',
               unsupported.map((candidate) => candidate.name).join(', '),
             ),
           );
         }
         if (file.size > 5 * 1024 * 1024) {
-          throw new Error(copy.status.markdownTooLarge);
+          throw new WorkspaceStatusError(statusMessage('markdownTooLarge'));
         }
         if (imageFiles.some((asset) => asset.size > maximumAssetBytes)) {
-          throw new Error(copy.status.imageTooLarge);
+          throw new WorkspaceStatusError(statusMessage('imageTooLarge'));
         }
         if (
           imageFiles.reduce((total, asset) => total + asset.size, 0) >
           maximumTotalAssetBytes
         ) {
-          throw new Error(copy.status.imagesTooLarge);
+          throw new WorkspaceStatusError(statusMessage('imagesTooLarge'));
         }
         const source = await file.text();
         const result = /\.json$/i.test(file.name)
@@ -654,22 +714,26 @@ export function EditorWorkspace() {
           : parseMarkdown(source);
         const localAssets = createLocalAssetUrls(result.document, imageFiles);
         pendingAssetUrls = localAssets.urls;
-        const descriptions = [
-          ...result.diagnostics.map((item) => item.message),
+        const descriptions: StatusMessage[] = [
+          ...result.diagnostics.map(diagnosticStatusMessage),
           ...(localAssets.unresolved.length > 0
-            ? [copy.status.unresolvedImages(localAssets.unresolved.join(', '))]
+            ? [
+                statusMessage(
+                  'unresolvedImages',
+                  localAssets.unresolved.join(', '),
+                ),
+              ]
             : []),
         ];
         const hasWarnings = descriptions.length > 0;
         loadDocument(
           result.document,
           hasWarnings
-            ? copy.status.loadedWithWarnings(file.name)
-            : copy.status.loaded(file.name),
+            ? statusMessage('loadedWithWarnings', file.name)
+            : statusMessage('loaded', file.name),
           {
             assetUrls: localAssets.urls,
-            description:
-              descriptions.length > 0 ? descriptions.join(' / ') : undefined,
+            description: descriptions.length > 0 ? descriptions : undefined,
           },
         );
         pendingAssetUrls = undefined;
@@ -677,18 +741,20 @@ export function EditorWorkspace() {
         if (pendingAssetUrls) revokeAssetUrls(pendingAssetUrls);
         const description =
           error instanceof MarkdownImportError
-            ? error.diagnostics.map((item) => item.message).join(' / ')
-            : error instanceof Error
-              ? error.message
-              : copy.status.unableToLoad;
+            ? error.diagnostics.map(diagnosticStatusMessage)
+            : error instanceof WorkspaceStatusError
+              ? error.status
+              : error instanceof Error
+                ? error.message
+                : statusMessage('unableToLoad');
         setStatus({
           kind: 'error',
-          title: copy.status.unableToLoadTitle,
+          title: statusMessage('unableToLoadTitle'),
           description,
         });
       }
     },
-    [copy, loadDocument],
+    [loadDocument],
   );
 
   const applyMarkdown = useCallback(() => {
@@ -696,39 +762,39 @@ export function EditorWorkspace() {
       const result = parseMarkdown(markdownDraft, {
         fallbackType: document.type,
       });
-      loadDocument(result.document, copy.status.appliedMarkdown, {
+      loadDocument(result.document, statusMessage('appliedMarkdown'), {
         description:
           result.diagnostics.length > 0
-            ? result.diagnostics.map((item) => item.message).join(' / ')
+            ? result.diagnostics.map(diagnosticStatusMessage)
             : undefined,
       });
       setView('visual');
     } catch (error) {
       setStatus({
         kind: 'error',
-        title: copy.status.unableToApplyMarkdown,
+        title: statusMessage('unableToApplyMarkdown'),
         description:
           error instanceof MarkdownImportError
-            ? error.diagnostics.map((item) => item.message).join(' / ')
+            ? error.diagnostics.map(diagnosticStatusMessage)
             : error instanceof Error
               ? error.message
-              : copy.status.unableToParseMarkdown,
+              : statusMessage('unableToParseMarkdown'),
       });
     }
-  }, [copy, document.type, loadDocument, markdownDraft]);
+  }, [document.type, loadDocument, markdownDraft]);
 
   const createDocument = useCallback(
     (type: DocumentType) => {
       loadDocument(
         createDefaultDocument(type),
         type === 'report'
-          ? copy.status.createdReport
-          : copy.status.createdSlide,
+          ? statusMessage('createdReport')
+          : statusMessage('createdSlide'),
         { assetUrls: {} },
       );
       setView('visual');
     },
-    [copy, loadDocument],
+    [loadDocument],
   );
 
   const changeView = useCallback(
@@ -736,8 +802,8 @@ export function EditorWorkspace() {
       if (nextView === 'visual' && markdownDirty) {
         setStatus({
           kind: 'error',
-          title: copy.status.resolveMarkdownChanges,
-          description: copy.status.resolveMarkdownChangesDescription,
+          title: statusMessage('resolveMarkdownChanges'),
+          description: statusMessage('resolveMarkdownChangesDescription'),
         });
         return;
       }
@@ -748,15 +814,15 @@ export function EditorWorkspace() {
         } catch (error) {
           setStatus({
             kind: 'error',
-            title: copy.status.unableToRefreshMarkdown,
-            description: serializationFailureDescription(error, snapshot, copy),
+            title: statusMessage('unableToRefreshMarkdown'),
+            description: serializationFailureDescription(error, snapshot),
           });
           return;
         }
       }
       setView(nextView);
     },
-    [copy, document, editor, markdownDirty],
+    [document, editor, markdownDirty],
   );
 
   const discardMarkdown = useCallback(() => {
@@ -765,15 +831,15 @@ export function EditorWorkspace() {
       setMarkdownDraft(serializeDocument(snapshot));
       setMarkdownDirty(false);
       setView('visual');
-      setStatus({ kind: 'idle', title: copy.status.discardedMarkdown });
+      setStatus({ kind: 'idle', title: statusMessage('discardedMarkdown') });
     } catch (error) {
       setStatus({
         kind: 'error',
-        title: copy.status.unableToDiscardMarkdown,
-        description: serializationFailureDescription(error, snapshot, copy),
+        title: statusMessage('unableToDiscardMarkdown'),
+        description: serializationFailureDescription(error, snapshot),
       });
     }
-  }, [copy, document, editor]);
+  }, [document, editor]);
 
   const focusNode = useCallback(
     (nodeId: string) => {
@@ -842,25 +908,25 @@ export function EditorWorkspace() {
         'text/markdown;charset=utf-8',
       );
       if (markdownDirty) {
-        loadDocument(snapshot, copy.status.savedMarkdownAfterApplying, {
+        loadDocument(snapshot, statusMessage('savedMarkdownAfterApplying'), {
           description:
             result.diagnostics.length > 0
-              ? result.diagnostics.map((item) => item.message).join(' / ')
+              ? result.diagnostics.map(diagnosticStatusMessage)
               : undefined,
         });
       } else {
         setDocumentDirty(false);
-        setStatus({ kind: 'success', title: copy.status.savedMarkdown });
+        setStatus({ kind: 'success', title: statusMessage('savedMarkdown') });
       }
     } catch (error) {
       const snapshot = currentDocument(editor, document);
       setStatus({
         kind: 'error',
-        title: copy.status.unableToSaveMarkdown,
-        description: serializationFailureDescription(error, snapshot, copy),
+        title: statusMessage('unableToSaveMarkdown'),
+        description: serializationFailureDescription(error, snapshot),
       });
     }
-  }, [copy, document, documentForSave, editor, loadDocument, markdownDirty]);
+  }, [document, documentForSave, editor, loadDocument, markdownDirty]);
 
   const saveJson = useCallback(() => {
     try {
@@ -872,27 +938,27 @@ export function EditorWorkspace() {
         'application/json;charset=utf-8',
       );
       if (markdownDirty) {
-        loadDocument(snapshot, copy.status.savedJsonAfterApplying, {
+        loadDocument(snapshot, statusMessage('savedJsonAfterApplying'), {
           description:
             result.diagnostics.length > 0
-              ? result.diagnostics.map((item) => item.message).join(' / ')
+              ? result.diagnostics.map(diagnosticStatusMessage)
               : undefined,
         });
       } else {
         setDocumentDirty(false);
-        setStatus({ kind: 'success', title: copy.status.savedJson });
+        setStatus({ kind: 'success', title: statusMessage('savedJson') });
       }
     } catch (error) {
       setStatus({
         kind: 'error',
-        title: copy.status.unableToSaveJson,
+        title: statusMessage('unableToSaveJson'),
         description:
           error instanceof Error
             ? error.message
-            : copy.status.invalidDocumentData,
+            : statusMessage('invalidDocumentData'),
       });
     }
-  }, [copy, documentForSave, loadDocument, markdownDirty]);
+  }, [documentForSave, loadDocument, markdownDirty]);
 
   const updateTheme = useCallback((theme: string) => {
     setDocument((current) => ({
@@ -913,11 +979,11 @@ export function EditorWorkspace() {
           latex: mathDraft.trim(),
         })
       ) {
-        setStatus({ kind: 'error', title: copy.status.selectMathAgain });
+        setStatus({ kind: 'error', title: statusMessage('selectMathAgain') });
         return;
       }
       setMathSelection({ ...mathSelection, latex: mathDraft.trim() });
-      setStatus({ kind: 'success', title: copy.status.updatedEquation });
+      setStatus({ kind: 'success', title: statusMessage('updatedEquation') });
       return;
     }
     const selectedMath = editor.state.doc.nodeAt(mathSelection.position);
@@ -926,7 +992,7 @@ export function EditorWorkspace() {
       selectedMath?.type.name !== 'inlineMath' ||
       selectedMath.attrs.latex !== mathSelection.latex
     ) {
-      setStatus({ kind: 'error', title: copy.status.selectMathAgain });
+      setStatus({ kind: 'error', title: statusMessage('selectMathAgain') });
       return;
     }
     const chain = editor.chain().focus();
@@ -938,29 +1004,26 @@ export function EditorWorkspace() {
       .run();
     if (updated) {
       setMathSelection({ ...mathSelection, latex: mathDraft.trim() });
-      setStatus({ kind: 'success', title: copy.status.updatedEquation });
+      setStatus({ kind: 'success', title: statusMessage('updatedEquation') });
     }
-  }, [
-    copy,
-    documentWriteLocked,
-    editor,
-    mathDraft,
-    mathSelection,
-    selectedNode,
-  ]);
+  }, [documentWriteLocked, editor, mathDraft, mathSelection, selectedNode]);
 
   const applyAttributes = (nodeId: string, attrs: Record<string, unknown>) => {
     if (!editor || documentWriteLocked) return;
     try {
       if (!updateDocumentNode(editor, nodeId, attrs))
-        throw new Error(copy.status.selectedElementRemoved);
-      setStatus({ kind: 'success', title: copy.status.updatedAttributes });
+        throw new WorkspaceStatusError(statusMessage('selectedElementRemoved'));
+      setStatus({ kind: 'success', title: statusMessage('updatedAttributes') });
     } catch (error) {
       setStatus({
         kind: 'error',
-        title: copy.status.unableToUpdateAttributes,
+        title: statusMessage('unableToUpdateAttributes'),
         description:
-          error instanceof Error ? error.message : copy.status.checkAttributes,
+          error instanceof WorkspaceStatusError
+            ? error.status
+            : error instanceof Error
+              ? error.message
+              : statusMessage('checkAttributes'),
       });
     }
   };
@@ -1045,7 +1108,7 @@ export function EditorWorkspace() {
             size="icon-sm"
             variant="ghost"
             type="button"
-            aria-pressed={theme === 'dark'}
+            disabled={!preferencesReady}
             onClick={toggleTheme}
           >
             {theme === 'light' ? <Moon /> : <Sun />}
@@ -1064,7 +1127,7 @@ export function EditorWorkspace() {
             size="sm"
             variant="ghost"
             type="button"
-            aria-pressed={locale === 'en'}
+            disabled={!preferencesReady}
             onClick={toggleLocale}
           >
             <Languages data-icon="inline-start" />
@@ -1361,8 +1424,8 @@ export function EditorWorkspace() {
                   setMarkdownDirty(true);
                   setStatus({
                     kind: 'idle',
-                    title: copy.status.editingMarkdown,
-                    description: copy.status.editingMarkdownDescription,
+                    title: statusMessage('editingMarkdown'),
+                    description: statusMessage('editingMarkdownDescription'),
                   });
                 }}
               />
@@ -1520,7 +1583,9 @@ export function EditorWorkspace() {
                     aria-label={copy.workspace.referenceDiagnostics}
                   >
                     {analysis.diagnostics.map((message) => (
-                      <p key={message}>{message}</p>
+                      <p key={message}>
+                        {localizeDiagnosticMessage(message, locale)}
+                      </p>
                     ))}
                   </div>
                 )}

@@ -10,6 +10,7 @@ import {
 import katex from 'katex';
 
 import { useAppPreferences } from '@/components/app-preferences';
+import { formatSemanticReference } from '@/src/i18n/diagnostics';
 import type {
   DocumentData,
   DocumentNode,
@@ -28,14 +29,14 @@ const AnalysisContext = createContext<DocumentAnalysis | null>(null);
 const anchorId = (nodeId: string) => `kumi-${nodeId}`;
 
 function Reference({ target }: { target: string }) {
-  const { copy } = useAppPreferences();
+  const { copy, locale } = useAppPreferences();
   const resolved = useContext(AnalysisContext)?.labels.get(target);
   return resolved ? (
     <a
       className="preview-reference"
       href={`#${encodeURIComponent(anchorId(resolved.nodeId))}`}
     >
-      {resolved.referenceText}
+      {formatSemanticReference(resolved, locale)}
     </a>
   ) : (
     <span
@@ -48,12 +49,13 @@ function Reference({ target }: { target: string }) {
 }
 
 function Caption({ node }: { node: DocumentNode }) {
+  const { locale } = useAppPreferences();
   const target = useContext(AnalysisContext)?.targets.get(node.attrs.nodeId);
   if (!target?.number && !node.attrs.caption) return null;
   return (
     <span>
       {target?.number
-        ? `${target.referenceText}${node.attrs.caption ? ' — ' : ''}`
+        ? `${formatSemanticReference(target, locale)}${node.attrs.caption ? ' — ' : ''}`
         : ''}
       {node.attrs.caption}
     </span>

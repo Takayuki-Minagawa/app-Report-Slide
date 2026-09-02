@@ -23,9 +23,11 @@ describe('EditorWorkspace', () => {
     renderWorkspace();
     expect(await screen.findByText('REPORT')).toBeInTheDocument();
 
-    fireEvent.click(
-      screen.getByRole('button', { name: 'ダークモードに切り替える' }),
-    );
+    const themeButton = screen.getByRole('button', {
+      name: 'ダークモードに切り替える',
+    });
+    await waitFor(() => expect(themeButton).toBeEnabled());
+    fireEvent.click(themeButton);
     await waitFor(() => {
       expect(document.documentElement).toHaveClass('dark');
       expect(
@@ -46,6 +48,21 @@ describe('EditorWorkspace', () => {
       ).toBeInTheDocument();
       expect(screen.getByText('Ready')).toBeInTheDocument();
     });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to Markdown' }));
+    const source = await screen.findByRole('textbox', {
+      name: 'Markdown draft',
+    });
+    fireEvent.change(source, {
+      target: { value: '---\ntype: book\n---\n\n# Broken document' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Markdown' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Could not apply Markdown');
+    expect(alert).toHaveTextContent(
+      'The document type must be report or slide.',
+    );
+    expect(alert).not.toHaveTextContent('typeには');
 
     fireEvent.click(screen.getByRole('button', { name: 'Guide' }));
     expect(await screen.findByRole('dialog')).toHaveTextContent(
