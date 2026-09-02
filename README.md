@@ -20,7 +20,7 @@
 - 明示的な改ページと複数スライドのプレビュー、ページ／スライド番号
 - Document JSON v1／v2のImport、v2への非破壊移行
 
-使い方・構文・制限・次の計画は [文書機能ガイド](./web/docs/document-features.md) を参照してください。元の全体仕様は [仕様書](./md_report_slide_editor_web_spec.md) にあります。自動ページ割り、厳密なA4組版、PDF／HTML export、脚注・文献、段組み、Chart、TeXファイル互換はまだ未実装です。
+使い方・構文・制限は [文書機能ガイド](./web/docs/document-features.md) を参照してください。元の全体仕様は [仕様書](./md_report_slide_editor_web_spec.md) にあります。自動ページ割り、厳密なA4組版、PDF／HTML export、脚注・文献、段組み、Chart、TeXファイル互換はまだ未実装です。
 
 ## 開発
 
