@@ -127,11 +127,13 @@ function parseInline(token: MarkdownToken, cursor: ParseCursor): InlineNode[] {
   const marks: Mark[] = [];
   const children = inlineTokens(token);
   const hasInlineImageMarker =
+    token.content.endsWith(inlineImageMarker) &&
     children.length === 2 &&
     children[0].type === 'image' &&
     children[1].type === 'text' &&
     children[1].content === inlineImageMarker;
   const hasEmptyParagraphMarker =
+    token.content === emptyParagraphMarker &&
     children.length === 1 &&
     children[0].type === 'text' &&
     children[0].content === emptyParagraphMarker;

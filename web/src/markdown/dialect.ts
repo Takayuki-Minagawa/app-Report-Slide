@@ -1,5 +1,7 @@
 import MarkdownIt from 'markdown-it';
 
+export const canonicalHardBreakMarker = '{.kumi-br}';
+
 function isEscaped(source: string, position: number): boolean {
   let slashes = 0;
   for (
@@ -18,6 +20,22 @@ export function createMarkdownIt(): MarkdownIt {
     linkify: false,
     typographer: false,
     breaks: false,
+  });
+
+  markdown.inline.ruler.after('escape', 'kumi_hard_break', (state, silent) => {
+    const start = state.pos;
+    if (
+      !state.src.startsWith(canonicalHardBreakMarker, start) ||
+      isEscaped(state.src, start)
+    ) {
+      return false;
+    }
+    if (!silent) {
+      const token = state.push('hardbreak', 'br', 0);
+      token.markup = canonicalHardBreakMarker;
+    }
+    state.pos = start + canonicalHardBreakMarker.length;
+    return true;
   });
 
   markdown.inline.ruler.after('escape', 'math_inline', (state, silent) => {

@@ -54,7 +54,7 @@ Tiptap editor
 
 Runtime validatorはNode型、必須属性、親子関係、既知metadata型、URL、`nodeId`の非空・一意性を確認します。Markdownで表現できない表構造は黙って欠落させず、typed errorとして保存を止めます。
 
-空段落と画像だけのinline paragraphを無損失で往復するため、canonical Markdownでは予約マーカー `{.kumi-empty}` と `{.kumi-inline}` を使用します。
+空段落、段落末の強制改行、画像だけのinline paragraphを無損失で往復するため、canonical Markdownでは予約マーカー `{.kumi-empty}`、`{.kumi-br}`、`{.kumi-inline}` を使用します。
 
 ## サンプル
 

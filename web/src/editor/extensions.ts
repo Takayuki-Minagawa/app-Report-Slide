@@ -16,6 +16,7 @@ export interface MathSelection {
 
 interface EditorExtensionsOptions {
   onMathSelect: (selection: MathSelection) => void;
+  resolveImageUrl?: (source: string) => string;
 }
 
 const identifiedTypes = [
@@ -116,131 +117,152 @@ const DocumentAttributes = Extension.create({
   },
 });
 
-export const Figure = Image.extend({
-  name: 'figure',
+function createFigureExtension(resolveImageUrl: (source: string) => string) {
+  return Image.extend({
+    name: 'figure',
 
-  parseHTML() {
-    return [
-      {
-        tag: 'img[src]:not([data-inline-image])',
-        getAttrs: (element) => {
-          const src =
-            element instanceof HTMLElement ? element.getAttribute('src') : null;
-          return src && safeResourceUrl(src, 'image') ? null : false;
+    parseHTML() {
+      return [
+        {
+          tag: 'img[src]:not([data-inline-image])',
+          getAttrs: (element) => {
+            const src =
+              element instanceof HTMLElement
+                ? element.getAttribute('src')
+                : null;
+            return src && safeResourceUrl(src, 'image') ? null : false;
+          },
         },
-      },
-    ];
-  },
+      ];
+    },
 
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      alt: {
-        default: '',
-        parseHTML: (element) => element.getAttribute('alt') ?? '',
-      },
-      nodeId: {
-        default: null,
-        parseHTML: (element) => element.getAttribute('data-node-id'),
-      },
-      width: {
-        default: 100,
-        parseHTML: (element) => {
-          const parsed = Number.parseFloat(
-            element.getAttribute('data-width') ?? '100',
-          );
-          return Number.isFinite(parsed) ? parsed : 100;
+    addAttributes() {
+      return {
+        ...this.parent?.(),
+        alt: {
+          default: '',
+          parseHTML: (element) => element.getAttribute('alt') ?? '',
         },
-      },
-      align: {
-        default: 'center',
-        parseHTML: (element) => element.getAttribute('data-align') ?? 'center',
-      },
-    };
-  },
-
-  renderHTML({ HTMLAttributes }) {
-    const {
-      align,
-      nodeId,
-      src,
-      style: _discardedStyle,
-      width,
-      ...imageAttributes
-    } = HTMLAttributes;
-    const numericWidth =
-      typeof width === 'number' ? width : Number.parseFloat(String(width));
-    const safeWidth = Number.isFinite(numericWidth)
-      ? Math.min(100, Math.max(10, numericWidth))
-      : 100;
-    const safeAlign =
-      align === 'left' || align === 'right' || align === 'center'
-        ? align
-        : 'center';
-    const safeSource =
-      typeof src === 'string' ? safeResourceUrl(src, 'image') : undefined;
-
-    return [
-      'img',
-      mergeAttributes(this.options.HTMLAttributes, imageAttributes, {
-        src: safeSource,
-        'data-node-id': typeof nodeId === 'string' ? nodeId : undefined,
-        'data-width': safeWidth,
-        'data-align': safeAlign,
-        class: 'kumi-figure',
-        style: `display:block;width:${safeWidth}%;height:auto;margin-left:${
-          safeAlign === 'right' || safeAlign === 'center' ? 'auto' : '0'
-        };margin-right:${safeAlign === 'left' || safeAlign === 'center' ? 'auto' : '0'}`,
-      }),
-    ];
-  },
-});
-
-export const InlineImage = Image.extend({
-  name: 'inlineImage',
-
-  parseHTML() {
-    return [
-      {
-        tag: 'img[data-inline-image][src]',
-        getAttrs: (element) => {
-          const src =
-            element instanceof HTMLElement ? element.getAttribute('src') : null;
-          return src && safeResourceUrl(src, 'image') ? null : false;
+        nodeId: {
+          default: null,
+          parseHTML: (element) => element.getAttribute('data-node-id'),
         },
-      },
-    ];
-  },
+        width: {
+          default: 100,
+          parseHTML: (element) => {
+            const parsed = Number.parseFloat(
+              element.getAttribute('data-width') ?? '100',
+            );
+            return Number.isFinite(parsed) ? parsed : 100;
+          },
+        },
+        align: {
+          default: 'center',
+          parseHTML: (element) =>
+            element.getAttribute('data-align') ?? 'center',
+        },
+      };
+    },
 
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      alt: {
-        default: '',
-        parseHTML: (element) => element.getAttribute('alt') ?? '',
-      },
-    };
-  },
+    renderHTML({ HTMLAttributes }) {
+      const {
+        align,
+        nodeId,
+        src,
+        style: _discardedStyle,
+        width,
+        ...imageAttributes
+      } = HTMLAttributes;
+      const numericWidth =
+        typeof width === 'number' ? width : Number.parseFloat(String(width));
+      const safeWidth = Number.isFinite(numericWidth)
+        ? Math.min(100, Math.max(10, numericWidth))
+        : 100;
+      const safeAlign =
+        align === 'left' || align === 'right' || align === 'center'
+          ? align
+          : 'center';
+      const safeSource =
+        typeof src === 'string' ? safeResourceUrl(src, 'image') : undefined;
+      const resolvedSource = safeSource
+        ? resolveImageUrl(safeSource)
+        : undefined;
 
-  renderHTML({ HTMLAttributes }) {
-    const { nodeId, src, ...imageAttributes } = HTMLAttributes;
-    const safeSource =
-      typeof src === 'string' ? safeResourceUrl(src, 'image') : undefined;
-    return [
-      'img',
-      mergeAttributes(this.options.HTMLAttributes, imageAttributes, {
-        src: safeSource,
-        'data-inline-image': '',
-        'data-node-id': typeof nodeId === 'string' ? nodeId : undefined,
-        class: 'kumi-inline-image',
-      }),
-    ];
-  },
-});
+      return [
+        'img',
+        mergeAttributes(this.options.HTMLAttributes, imageAttributes, {
+          src: resolvedSource,
+          'data-node-id': typeof nodeId === 'string' ? nodeId : undefined,
+          'data-width': safeWidth,
+          'data-align': safeAlign,
+          class: 'kumi-figure',
+          style: `display:block;width:${safeWidth}%;height:auto;margin-left:${
+            safeAlign === 'right' || safeAlign === 'center' ? 'auto' : '0'
+          };margin-right:${safeAlign === 'left' || safeAlign === 'center' ? 'auto' : '0'}`,
+        }),
+      ];
+    },
+  });
+}
+
+function createInlineImageExtension(
+  resolveImageUrl: (source: string) => string,
+) {
+  return Image.extend({
+    name: 'inlineImage',
+
+    parseHTML() {
+      return [
+        {
+          tag: 'img[data-inline-image][src]',
+          getAttrs: (element) => {
+            const src =
+              element instanceof HTMLElement
+                ? element.getAttribute('src')
+                : null;
+            return src && safeResourceUrl(src, 'image') ? null : false;
+          },
+        },
+      ];
+    },
+
+    addAttributes() {
+      return {
+        ...this.parent?.(),
+        alt: {
+          default: '',
+          parseHTML: (element) => element.getAttribute('alt') ?? '',
+        },
+      };
+    },
+
+    renderHTML({ HTMLAttributes }) {
+      const { nodeId, src, ...imageAttributes } = HTMLAttributes;
+      const safeSource =
+        typeof src === 'string' ? safeResourceUrl(src, 'image') : undefined;
+      const resolvedSource = safeSource
+        ? resolveImageUrl(safeSource)
+        : undefined;
+      return [
+        'img',
+        mergeAttributes(this.options.HTMLAttributes, imageAttributes, {
+          src: resolvedSource,
+          'data-inline-image': '',
+          'data-node-id': typeof nodeId === 'string' ? nodeId : undefined,
+          class: 'kumi-inline-image',
+        }),
+      ];
+    },
+  });
+}
 
 export function createEditorExtensions({
   onMathSelect,
+  resolveImageUrl = (source) => source,
 }: EditorExtensionsOptions): Extensions {
+  const InlineImage = createInlineImageExtension(resolveImageUrl);
+  const Figure = createFigureExtension(resolveImageUrl);
+
   return [
     StarterKit.configure({
       link: {

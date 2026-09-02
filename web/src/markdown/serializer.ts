@@ -13,6 +13,8 @@ import type {
 import { validateDocumentData } from '@/src/document/validation';
 import { isSafeResourceUrl } from '@/src/security/resource-url';
 
+import { canonicalHardBreakMarker } from './dialect';
+
 export class MarkdownSerializationError extends Error {
   readonly code: string;
 
@@ -27,7 +29,43 @@ const inlineImageMarker = '{.kumi-inline}';
 const emptyParagraphMarker = '{.kumi-empty}';
 
 function escapeText(value: string): string {
-  return value.replace(/([\\`*_[\]$])/g, '\\$1');
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/([\\`*_[\]$~{}])/g, '\\$1');
+}
+
+function isEscaped(value: string, position: number): boolean {
+  let slashes = 0;
+  for (
+    let index = position - 1;
+    index >= 0 && value[index] === '\\';
+    index -= 1
+  ) {
+    slashes += 1;
+  }
+  return slashes % 2 === 1;
+}
+
+function serializeInlineMath(latex: string): string {
+  for (let index = 0; index < latex.length; index += 1) {
+    if (latex[index] === '$' && !isEscaped(latex, index)) {
+      throw new MarkdownSerializationError(
+        'markdown.inline-math-delimiter',
+        'インライン数式内の$は\\$としてエスケープしてください',
+      );
+    }
+  }
+  return `$${latex}$`;
+}
+
+function codeFence(code: string): string {
+  const longestClosingRun = code.split('\n').reduce((longest, line) => {
+    const run = /^ {0,3}(~+)\s*$/.exec(line)?.[1].length ?? 0;
+    return Math.max(longest, run);
+  }, 0);
+  return '~'.repeat(Math.max(3, longestClosingRun + 1));
 }
 
 function escapeLinkTarget(value: string): string {
@@ -103,7 +141,7 @@ function serializeInline(nodes: InlineNode[] | undefined): string {
         case 'text':
           return serializeText(node.text, node.marks);
         case 'inlineMath':
-          return `$${node.attrs.latex}$`;
+          return serializeInlineMath(node.attrs.latex);
         case 'inlineImage':
           return serializeImage(
             node.attrs.src,
@@ -111,7 +149,7 @@ function serializeInline(nodes: InlineNode[] | undefined): string {
             node.attrs.title,
           );
         case 'hardBreak':
-          return '  \n';
+          return canonicalHardBreakMarker;
       }
     })
     .join('');
@@ -282,11 +320,20 @@ function serializeNode(node: DocumentNode): string {
     case 'codeBlock': {
       const language = node.attrs.language ?? '';
       const code = node.content?.map((text) => text.text).join('') ?? '';
-      return `~~~${language}\n${code}\n~~~`;
+      const fence = codeFence(code);
+      return `${fence}${language}\n${code}\n${fence}`;
     }
     case 'figure':
       return serializeImage(node.attrs.src, node.attrs.alt, node.attrs.title);
     case 'blockMath':
+      if (
+        node.attrs.latex.split(/\r?\n/).some((line) => line.trim() === '$$')
+      ) {
+        throw new MarkdownSerializationError(
+          'markdown.block-math-delimiter',
+          'ブロック数式内に単独行の$$は保存できません',
+        );
+      }
       return `$$\n${node.attrs.latex}\n$$`;
     case 'horizontalRule':
       return '---';
@@ -320,7 +367,7 @@ export function serializeDocument(document: DocumentData): string {
       lineWidth: 0,
     },
   ).trimEnd();
-  const body = serializeBlocks(document.children).trimEnd();
+  const body = serializeBlocks(document.children);
 
   return `---\n${frontMatter}\n---\n${body ? `\n${body}\n` : ''}`;
 }

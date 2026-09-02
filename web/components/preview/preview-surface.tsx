@@ -14,7 +14,13 @@ function resolvedTheme(document: DocumentData): string {
   return slideThemes.has(requested) ? requested : 'beamer-simple';
 }
 
-export function PreviewSurface({ document }: { document: DocumentData }) {
+export function PreviewSurface({
+  document,
+  resolveImageUrl,
+}: {
+  document: DocumentData;
+  resolveImageUrl?: (source: string) => string;
+}) {
   const theme = resolvedTheme(document);
 
   if (document.type === 'slide') {
@@ -24,7 +30,10 @@ export function PreviewSurface({ document }: { document: DocumentData }) {
         data-theme={theme}
         aria-label="スライドプレビュー"
       >
-        <DocumentRenderer document={document} />
+        <DocumentRenderer
+          document={document}
+          resolveImageUrl={resolveImageUrl}
+        />
         <footer>
           <span>{document.metadata.author ?? ''}</span>
           <span>1</span>
@@ -39,7 +48,7 @@ export function PreviewSurface({ document }: { document: DocumentData }) {
       data-theme={theme}
       aria-label="A4レポートプレビュー"
     >
-      <DocumentRenderer document={document} />
+      <DocumentRenderer document={document} resolveImageUrl={resolveImageUrl} />
       <footer>1</footer>
     </article>
   );

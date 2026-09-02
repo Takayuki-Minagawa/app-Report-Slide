@@ -276,4 +276,20 @@ describe('validateDocumentData', () => {
       DocumentValidationError,
     );
   });
+
+  it.each([
+    ['colspan', 2],
+    ['rowspan', 2],
+    ['colwidth', [120]],
+  ])('Markdownで表現できない表属性%sを拒否する', (attribute, value) => {
+    const document = comprehensiveDocument();
+    const table = document.children.find((node) => node.type === 'table');
+    if (!table || table.type !== 'table') throw new Error('table expected');
+    const cell = table.content[1].content[0];
+    (cell.attrs as Record<string, unknown>)[attribute] = value;
+
+    expect(() => validateDocumentData(document)).toThrow(
+      DocumentValidationError,
+    );
+  });
 });

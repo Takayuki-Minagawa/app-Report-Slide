@@ -486,6 +486,21 @@ function validateBlockNode(
       break;
     case 'tableHeader':
     case 'tableCell':
+      if (attrs?.colspan !== undefined && attrs.colspan !== 1) {
+        issues.push(
+          `${path}.attrs.colspan: Markdownでは結合セルを保存できないため1が必要です`,
+        );
+      }
+      if (attrs?.rowspan !== undefined && attrs.rowspan !== 1) {
+        issues.push(
+          `${path}.attrs.rowspan: Markdownでは結合セルを保存できないため1が必要です`,
+        );
+      }
+      if (attrs?.colwidth !== undefined && attrs.colwidth !== null) {
+        issues.push(
+          `${path}.attrs.colwidth: Markdownでは列幅を保存できないためnullが必要です`,
+        );
+      }
       if (
         attrs?.align !== null &&
         attrs?.align !== 'left' &&

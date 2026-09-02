@@ -362,6 +362,119 @@ describe('Markdown round-trip', () => {
     ).toBe(true);
   });
 
+  it.each(['~~literal~~', '&copy;', '<https://example.com>', '{.kumi-empty}'])(
+    'Markdownとして意味を持つplain text %sを再解釈しない',
+    (text) => {
+      const document: DocumentData = {
+        schemaVersion: 1,
+        type: 'report',
+        metadata: {},
+        children: [
+          {
+            type: 'paragraph',
+            attrs: { nodeId: 'plain-text' },
+            content: [{ type: 'text', text }],
+          },
+        ],
+      };
+
+      const second = parseMarkdown(serializeDocument(document), {
+        idFactory: idFactory(),
+      }).document;
+      const paragraph = second.children[0];
+      expect(paragraph.type).toBe('paragraph');
+      if (paragraph.type !== 'paragraph') throw new Error('paragraph expected');
+      expect(paragraph.content).toHaveLength(1);
+      expect(paragraph.content?.[0]).toMatchObject({ type: 'text', text });
+      expect(
+        paragraph.content?.[0].type === 'text'
+          ? (paragraph.content[0].marks ?? [])
+          : [],
+      ).toHaveLength(0);
+    },
+  );
+
+  it('段落末尾のHardBreakを往復保持する', () => {
+    const document: DocumentData = {
+      schemaVersion: 1,
+      type: 'report',
+      metadata: {},
+      children: [
+        {
+          type: 'paragraph',
+          attrs: { nodeId: 'hard-break' },
+          content: [{ type: 'text', text: 'line' }, { type: 'hardBreak' }],
+        },
+      ],
+    };
+
+    const second = parseMarkdown(serializeDocument(document), {
+      idFactory: idFactory(),
+    }).document;
+    expect(second.children[0]).toMatchObject({
+      type: 'paragraph',
+      content: [{ type: 'text', text: 'line' }, { type: 'hardBreak' }],
+    });
+  });
+
+  it('本文中のtilde行より長いcode fenceを選びCodeBlockを保持する', () => {
+    const code = 'before\n~~~\nafter';
+    const document: DocumentData = {
+      schemaVersion: 1,
+      type: 'report',
+      metadata: {},
+      children: [
+        {
+          type: 'codeBlock',
+          attrs: { nodeId: 'code', language: 'text' },
+          content: [{ type: 'text', text: code }],
+        },
+      ],
+    };
+
+    const markdown = serializeDocument(document);
+    expect(markdown).toContain('~~~~text');
+    const second = parseMarkdown(markdown, { idFactory: idFactory() }).document;
+    expect(second.children).toHaveLength(1);
+    expect(second.children[0]).toMatchObject({
+      type: 'codeBlock',
+      content: [{ type: 'text', text: code }],
+    });
+  });
+
+  it('数式delimiterと衝突するlatexをtyped errorで拒否する', () => {
+    const inlineDocument: DocumentData = {
+      schemaVersion: 1,
+      type: 'report',
+      metadata: {},
+      children: [
+        {
+          type: 'paragraph',
+          attrs: { nodeId: 'inline-math' },
+          content: [{ type: 'inlineMath', attrs: { latex: 'a$b' } }],
+        },
+      ],
+    };
+    expect(() => serializeDocument(inlineDocument)).toThrow(
+      MarkdownSerializationError,
+    );
+
+    const blockDocument: DocumentData = {
+      schemaVersion: 1,
+      type: 'report',
+      metadata: {},
+      children: [
+        {
+          type: 'blockMath',
+          attrs: { nodeId: 'block-math', latex: 'a\n$$\nb' },
+        },
+      ],
+    };
+    expect(() => serializeDocument(blockDocument)).toThrow(
+      MarkdownSerializationError,
+    );
+  });
+
   it('metadata.typeによる文書種類の上書きを拒否する', () => {
     const document = parseMarkdown(reportFixture, {
       idFactory: idFactory(),

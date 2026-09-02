@@ -15,6 +15,21 @@ import { safeResourceUrl } from '@/src/security/resource-url';
 
 interface DocumentRendererProps {
   document: DocumentData;
+  resolveImageUrl?: (source: string) => string;
+}
+
+type ImageUrlResolver = (source: string) => string;
+
+function resolvedImageUrl(
+  source: string,
+  resolveImageUrl: ImageUrlResolver,
+): string | undefined {
+  const safeSource = safeResourceUrl(source, 'image');
+  if (!safeSource) return undefined;
+  const resolved = resolveImageUrl(safeSource);
+  return resolved.startsWith('blob:')
+    ? resolved
+    : safeResourceUrl(resolved, 'image');
 }
 
 function MathContent({ display, latex }: { display: boolean; latex: string }) {
@@ -72,16 +87,18 @@ function applyMark(content: ReactNode, mark: Mark, key: string): ReactNode {
 
 function InlineImageContent({
   alt,
+  resolveImageUrl,
   src,
   title,
 }: {
   alt: string;
+  resolveImageUrl: ImageUrlResolver;
   src: string;
   title: string | null;
 }) {
   const [failed, setFailed] = useState(false);
-  const safeSrc = safeResourceUrl(src, 'image');
-  if (!safeSrc || failed) {
+  const resolvedSrc = resolvedImageUrl(src, resolveImageUrl);
+  if (!resolvedSrc || failed) {
     return (
       <span className="preview-inline-image-fallback">
         {alt || '画像を表示できません'}
@@ -91,7 +108,7 @@ function InlineImageContent({
   return (
     <img
       className="preview-inline-image"
-      src={safeSrc}
+      src={resolvedSrc}
       alt={alt}
       title={title ?? undefined}
       loading="lazy"
@@ -101,7 +118,10 @@ function InlineImageContent({
   );
 }
 
-function renderInline(nodes: InlineNode[] | undefined): ReactNode[] {
+function renderInline(
+  nodes: InlineNode[] | undefined,
+  resolveImageUrl: ImageUrlResolver,
+): ReactNode[] {
   return (nodes ?? []).map((node, index) => {
     const key = `${node.type}-${index}`;
     switch (node.type) {
@@ -115,6 +135,7 @@ function renderInline(nodes: InlineNode[] | undefined): ReactNode[] {
         return (
           <InlineImageContent
             key={key}
+            resolveImageUrl={resolveImageUrl}
             src={node.attrs.src}
             alt={node.attrs.alt}
             title={node.attrs.title}
@@ -133,11 +154,13 @@ function renderInline(nodes: InlineNode[] | undefined): ReactNode[] {
 
 function FigureBlock({
   node,
+  resolveImageUrl,
 }: {
   node: Extract<DocumentNode, { type: 'figure' }>;
+  resolveImageUrl: ImageUrlResolver;
 }) {
   const [failed, setFailed] = useState(false);
-  const src = safeResourceUrl(node.attrs.src, 'image');
+  const src = resolvedImageUrl(node.attrs.src, resolveImageUrl);
   const width = Math.min(100, Math.max(10, Number(node.attrs.width) || 100));
 
   if (!src || failed) {
@@ -169,13 +192,29 @@ function FigureBlock({
   );
 }
 
-function TableCellContent({ cell }: { cell: TableCellNode | TableHeaderNode }) {
+function TableCellContent({
+  cell,
+  resolveImageUrl,
+}: {
+  cell: TableCellNode | TableHeaderNode;
+  resolveImageUrl: ImageUrlResolver;
+}) {
   return (
-    <>{cell.content.map((paragraph) => renderInline(paragraph.content))}</>
+    <>
+      {cell.content.map((paragraph) =>
+        renderInline(paragraph.content, resolveImageUrl),
+      )}
+    </>
   );
 }
 
-function BlockNode({ node }: { node: DocumentNode }) {
+function BlockNode({
+  node,
+  resolveImageUrl,
+}: {
+  node: DocumentNode;
+  resolveImageUrl: ImageUrlResolver;
+}) {
   const key = node.attrs.nodeId;
   switch (node.type) {
     case 'heading': {
@@ -186,15 +225,19 @@ function BlockNode({ node }: { node: DocumentNode }) {
         | 'h4'
         | 'h5'
         | 'h6';
-      return <Tag id={key}>{renderInline(node.content)}</Tag>;
+      return <Tag id={key}>{renderInline(node.content, resolveImageUrl)}</Tag>;
     }
     case 'paragraph':
-      return <p>{renderInline(node.content)}</p>;
+      return <p>{renderInline(node.content, resolveImageUrl)}</p>;
     case 'bulletList':
       return (
         <ul>
           {node.content.map((item) => (
-            <BlockNode key={item.attrs.nodeId} node={item} />
+            <BlockNode
+              key={item.attrs.nodeId}
+              node={item}
+              resolveImageUrl={resolveImageUrl}
+            />
           ))}
         </ul>
       );
@@ -202,7 +245,11 @@ function BlockNode({ node }: { node: DocumentNode }) {
       return (
         <ol start={node.attrs.start}>
           {node.content.map((item) => (
-            <BlockNode key={item.attrs.nodeId} node={item} />
+            <BlockNode
+              key={item.attrs.nodeId}
+              node={item}
+              resolveImageUrl={resolveImageUrl}
+            />
           ))}
         </ol>
       );
@@ -210,7 +257,11 @@ function BlockNode({ node }: { node: DocumentNode }) {
       return (
         <li>
           {node.content.map((child) => (
-            <BlockNode key={child.attrs.nodeId} node={child} />
+            <BlockNode
+              key={child.attrs.nodeId}
+              node={child}
+              resolveImageUrl={resolveImageUrl}
+            />
           ))}
         </li>
       );
@@ -218,7 +269,11 @@ function BlockNode({ node }: { node: DocumentNode }) {
       return (
         <blockquote>
           {node.content.map((child) => (
-            <BlockNode key={child.attrs.nodeId} node={child} />
+            <BlockNode
+              key={child.attrs.nodeId}
+              node={child}
+              resolveImageUrl={resolveImageUrl}
+            />
           ))}
         </blockquote>
       );
@@ -229,7 +284,7 @@ function BlockNode({ node }: { node: DocumentNode }) {
         </pre>
       );
     case 'figure':
-      return <FigureBlock node={node} />;
+      return <FigureBlock node={node} resolveImageUrl={resolveImageUrl} />;
     case 'blockMath':
       return <MathContent display latex={node.attrs.latex} />;
     case 'horizontalRule':
@@ -248,7 +303,10 @@ function BlockNode({ node }: { node: DocumentNode }) {
                         key={cell.attrs.nodeId}
                         style={{ textAlign: cell.attrs.align ?? undefined }}
                       >
-                        <TableCellContent cell={cell} />
+                        <TableCellContent
+                          cell={cell}
+                          resolveImageUrl={resolveImageUrl}
+                        />
                       </Cell>
                     );
                   })}
@@ -265,11 +323,18 @@ function BlockNode({ node }: { node: DocumentNode }) {
   }
 }
 
-export function DocumentRenderer({ document }: DocumentRendererProps) {
+export function DocumentRenderer({
+  document,
+  resolveImageUrl = (source) => source,
+}: DocumentRendererProps) {
   return (
     <div className="document-renderer">
       {document.children.map((node) => (
-        <BlockNode key={node.attrs.nodeId} node={node} />
+        <BlockNode
+          key={node.attrs.nodeId}
+          node={node}
+          resolveImageUrl={resolveImageUrl}
+        />
       ))}
     </div>
   );

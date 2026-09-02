@@ -2,6 +2,7 @@
 
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -67,6 +68,11 @@ type WorkspaceView = 'visual' | 'markdown' | 'preview';
 interface WorkspaceStatus {
   kind: 'idle' | 'success' | 'error';
   title: string;
+  description?: string;
+}
+
+interface LoadDocumentOptions {
+  assetUrls?: Record<string, string>;
   description?: string;
 }
 
@@ -239,6 +245,105 @@ function filenameFor(document: DocumentData, extension: string): string {
   return `${base || 'document'}.${extension}`;
 }
 
+const maximumAssetBytes = 20 * 1024 * 1024;
+const maximumTotalAssetBytes = 50 * 1024 * 1024;
+
+function isMarkdownFile(file: File): boolean {
+  return file.type === 'text/markdown' || /\.(?:md|markdown)$/i.test(file.name);
+}
+
+function isImageAsset(file: File): boolean {
+  return (
+    /^image\/(?:png|jpe?g|webp|gif|svg\+xml)$/i.test(file.type) ||
+    /\.(?:png|jpe?g|webp|gif|svg)$/i.test(file.name)
+  );
+}
+
+function normalizedAssetPath(value: string): string {
+  const path = value.split(/[?#]/, 1)[0].replace(/\\/g, '/');
+  let decoded = path;
+  try {
+    decoded = decodeURIComponent(path);
+  } catch {
+    // Invalid percent escapes are kept verbatim for a deterministic mismatch.
+  }
+  return decoded.replace(/^(?:\.\/)+/, '').replace(/^\/+/, '');
+}
+
+function localImageSources(document: DocumentData): string[] {
+  const sources = new Set<string>();
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (typeof value !== 'object' || value === null) return;
+    const record = value as Record<string, unknown>;
+    if (record.type === 'figure' || record.type === 'inlineImage') {
+      const attrs = record.attrs;
+      if (typeof attrs === 'object' && attrs !== null) {
+        const source = (attrs as Record<string, unknown>).src;
+        if (
+          typeof source === 'string' &&
+          !/^[a-z][a-z\d+.-]*:/i.test(source) &&
+          !source.startsWith('/') &&
+          !source.startsWith('//')
+        ) {
+          sources.add(source);
+        }
+      }
+    }
+    visit(record.content);
+  };
+  visit(document.children);
+  return [...sources];
+}
+
+function createLocalAssetUrls(
+  document: DocumentData,
+  files: File[],
+): { urls: Record<string, string>; unresolved: string[] } {
+  const urls: Record<string, string> = {};
+  const unresolved: string[] = [];
+  const urlByFile = new Map<File, string>();
+
+  for (const source of localImageSources(document)) {
+    const normalizedSource = normalizedAssetPath(source);
+    const exactMatches = files.filter((file) => {
+      const candidate = normalizedAssetPath(
+        file.webkitRelativePath || file.name,
+      );
+      return (
+        candidate === normalizedSource ||
+        candidate.endsWith(`/${normalizedSource}`)
+      );
+    });
+    const basename = normalizedSource.split('/').at(-1);
+    const matches =
+      exactMatches.length > 0
+        ? exactMatches
+        : files.filter(
+            (file) =>
+              normalizedAssetPath(file.name).split('/').at(-1) === basename,
+          );
+
+    if (matches.length !== 1) {
+      unresolved.push(source);
+      continue;
+    }
+    const file = matches[0];
+    const url = urlByFile.get(file) ?? URL.createObjectURL(file);
+    urlByFile.set(file, url);
+    urls[source] = url;
+  }
+
+  return { urls, unresolved };
+}
+
+function revokeAssetUrls(urls: Record<string, string>): void {
+  for (const url of new Set(Object.values(urls))) URL.revokeObjectURL(url);
+}
+
 export function EditorWorkspace() {
   const [document, setDocument] = useState<DocumentData>(() =>
     cloneDocument(initialDocument),
@@ -254,13 +359,28 @@ export function EditorWorkspace() {
     title: '準備完了',
     description: 'Document ModelとEditorを同期しています',
   });
-  const [dirty, setDirty] = useState(false);
+  const [documentDirty, setDocumentDirty] = useState(false);
+  const [markdownDirty, setMarkdownDirty] = useState(false);
+  const [assetUrls, setAssetUrls] = useState<Record<string, string>>({});
   const [selectedNode, setSelectedNode] = useState<SelectedNode | null>(null);
   const [mathSelection, setMathSelection] = useState<MathSelection | null>(
     null,
   );
   const [mathDraft, setMathDraft] = useState('');
   const markdownInput = useRef<HTMLInputElement>(null);
+  const dirty = documentDirty || markdownDirty;
+  const documentWriteLocked = view === 'markdown' || markdownDirty;
+
+  const replaceAssetUrls = useCallback((next: Record<string, string>) => {
+    setAssetUrls(next);
+  }, []);
+
+  const resolveImageUrl = useCallback(
+    (source: string) => assetUrls[source] ?? source,
+    [assetUrls],
+  );
+
+  useEffect(() => () => revokeAssetUrls(assetUrls), [assetUrls]);
 
   const handleMathSelect = useCallback((selection: MathSelection) => {
     setMathSelection(selection);
@@ -273,8 +393,12 @@ export function EditorWorkspace() {
   }, []);
 
   const extensions = useMemo(
-    () => createEditorExtensions({ onMathSelect: handleMathSelect }),
-    [handleMathSelect],
+    () =>
+      createEditorExtensions({
+        onMathSelect: handleMathSelect,
+        resolveImageUrl,
+      }),
+    [handleMathSelect, resolveImageUrl],
   );
 
   const editor = useEditor(
@@ -295,7 +419,7 @@ export function EditorWorkspace() {
           ...current,
           children: content as DocumentNode[],
         }));
-        setDirty(true);
+        setDocumentDirty(true);
         setStatus({
           kind: 'idle',
           title: '編集中',
@@ -343,52 +467,103 @@ export function EditorWorkspace() {
   );
 
   const loadDocument = useCallback(
-    (nextDocument: DocumentData, message: string) => {
+    (
+      nextDocument: DocumentData,
+      message: string,
+      options: LoadDocumentOptions = {},
+    ) => {
       validateDocumentData(nextDocument);
       editor?.schema.nodeFromJSON(toEditorDocument(nextDocument));
       const serialized = serializeDocument(nextDocument);
+      if (options.assetUrls !== undefined) {
+        replaceAssetUrls(options.assetUrls);
+      }
       setDocument(nextDocument);
       setEditorSource((current) => ({
         revision: current.revision + 1,
         document: nextDocument,
       }));
       setMarkdownDraft(serialized);
+      setMarkdownDirty(false);
       setSelectedNode(null);
       setMathSelection(null);
-      setDirty(false);
-      setStatus({ kind: 'success', title: message });
+      setDocumentDirty(false);
+      setStatus({
+        kind: 'success',
+        title: message,
+        description: options.description,
+      });
     },
-    [editor],
+    [editor, replaceAssetUrls],
   );
 
   const importMarkdown = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
+      const files = Array.from(event.target.files ?? []);
       event.target.value = '';
-      if (!file) return;
+      if (files.length === 0) return;
 
+      let pendingAssetUrls: Record<string, string> | undefined;
       try {
+        const markdownFiles = files.filter(isMarkdownFile);
+        if (markdownFiles.length !== 1) {
+          throw new Error('Markdownファイルを1つだけ選択してください');
+        }
+        const file = markdownFiles[0];
+        const imageFiles = files.filter(
+          (candidate) => candidate !== file && isImageAsset(candidate),
+        );
+        const unsupported = files.filter(
+          (candidate) => candidate !== file && !isImageAsset(candidate),
+        );
+        if (unsupported.length > 0) {
+          throw new Error(
+            `画像以外の添付ファイルは読み込めません: ${unsupported
+              .map((candidate) => candidate.name)
+              .join(', ')}`,
+          );
+        }
         if (file.size > 5 * 1024 * 1024) {
           throw new Error('Markdownファイルは5MB以下にしてください');
         }
+        if (imageFiles.some((asset) => asset.size > maximumAssetBytes)) {
+          throw new Error('画像ファイルは1件20MB以下にしてください');
+        }
+        if (
+          imageFiles.reduce((total, asset) => total + asset.size, 0) >
+          maximumTotalAssetBytes
+        ) {
+          throw new Error('画像ファイルの合計は50MB以下にしてください');
+        }
         const source = await file.text();
         const result = parseMarkdown(source);
+        const localAssets = createLocalAssetUrls(result.document, imageFiles);
+        pendingAssetUrls = localAssets.urls;
+        const descriptions = [
+          ...result.diagnostics.map((item) => item.message),
+          ...(localAssets.unresolved.length > 0
+            ? [
+                `ローカル画像を解決できません: ${localAssets.unresolved.join(
+                  ', ',
+                )}（Markdownと画像を同時に選択してください）`,
+              ]
+            : []),
+        ];
+        const hasWarnings = descriptions.length > 0;
         loadDocument(
           result.document,
-          result.diagnostics.length > 0
+          hasWarnings
             ? `${file.name}を警告付きで読み込みました`
             : `${file.name}を読み込みました`,
+          {
+            assetUrls: localAssets.urls,
+            description:
+              descriptions.length > 0 ? descriptions.join(' / ') : undefined,
+          },
         );
-        if (result.diagnostics.length > 0) {
-          setStatus({
-            kind: 'success',
-            title: `${file.name}を読み込みました`,
-            description: result.diagnostics
-              .map((item) => item.message)
-              .join(' / '),
-          });
-        }
+        pendingAssetUrls = undefined;
       } catch (error) {
+        if (pendingAssetUrls) revokeAssetUrls(pendingAssetUrls);
         const description =
           error instanceof MarkdownImportError
             ? error.diagnostics.map((item) => item.message).join(' / ')
@@ -410,7 +585,12 @@ export function EditorWorkspace() {
       const result = parseMarkdown(markdownDraft, {
         fallbackType: document.type,
       });
-      loadDocument(result.document, 'Markdownの変更を適用しました');
+      loadDocument(result.document, 'Markdownの変更を適用しました', {
+        description:
+          result.diagnostics.length > 0
+            ? result.diagnostics.map((item) => item.message).join(' / ')
+            : undefined,
+      });
       setView('visual');
     } catch (error) {
       setStatus({
@@ -431,6 +611,7 @@ export function EditorWorkspace() {
       loadDocument(
         createDefaultDocument(type),
         `新しい${type}文書を作成しました`,
+        { assetUrls: {} },
       );
       setView('visual');
     },
@@ -439,7 +620,16 @@ export function EditorWorkspace() {
 
   const changeView = useCallback(
     (nextView: WorkspaceView) => {
-      if (nextView === 'markdown') {
+      if (nextView === 'visual' && markdownDirty) {
+        setStatus({
+          kind: 'error',
+          title: 'Markdownの変更を先に処理してください',
+          description:
+            'ビジュアル編集へ戻る前に、Markdownの変更を適用または破棄してください',
+        });
+        return;
+      }
+      if (nextView === 'markdown' && !markdownDirty) {
         const snapshot = currentDocument(editor, document);
         try {
           setMarkdownDraft(serializeDocument(snapshot));
@@ -454,8 +644,24 @@ export function EditorWorkspace() {
       }
       setView(nextView);
     },
-    [document, editor],
+    [document, editor, markdownDirty],
   );
+
+  const discardMarkdown = useCallback(() => {
+    const snapshot = currentDocument(editor, document);
+    try {
+      setMarkdownDraft(serializeDocument(snapshot));
+      setMarkdownDirty(false);
+      setView('visual');
+      setStatus({ kind: 'idle', title: 'Markdownの変更を破棄しました' });
+    } catch (error) {
+      setStatus({
+        kind: 'error',
+        title: 'Markdownの変更を破棄できませんでした',
+        description: serializationFailureDescription(error, snapshot),
+      });
+    }
+  }, [document, editor]);
 
   const focusNode = useCallback(
     (nodeId: string) => {
@@ -486,35 +692,73 @@ export function EditorWorkspace() {
     [editor],
   );
 
+  const documentForSave = useCallback(() => {
+    if (markdownDirty) {
+      return parseMarkdown(markdownDraft, {
+        fallbackType: document.type,
+      });
+    }
+    return {
+      document: currentDocument(editor, document),
+      diagnostics: [],
+    };
+  }, [document, editor, markdownDirty, markdownDraft]);
+
   const saveMarkdown = useCallback(() => {
-    const snapshot = currentDocument(editor, document);
     try {
+      const result = documentForSave();
+      const snapshot = result.document;
+      const serialized = serializeDocument(snapshot);
       download(
         filenameFor(snapshot, 'md'),
-        serializeDocument(snapshot),
+        serialized,
         'text/markdown;charset=utf-8',
       );
-      setDirty(false);
-      setStatus({ kind: 'success', title: 'Markdownを保存しました' });
+      if (markdownDirty) {
+        loadDocument(snapshot, 'Markdownを適用して保存しました', {
+          description:
+            result.diagnostics.length > 0
+              ? result.diagnostics.map((item) => item.message).join(' / ')
+              : undefined,
+        });
+      } else {
+        setDocumentDirty(false);
+        setStatus({ kind: 'success', title: 'Markdownを保存しました' });
+      }
     } catch (error) {
+      const snapshot = currentDocument(editor, document);
       setStatus({
         kind: 'error',
         title: 'Markdownを保存できませんでした',
         description: serializationFailureDescription(error, snapshot),
       });
     }
-  }, [document, editor]);
+  }, [document, documentForSave, editor, loadDocument, markdownDirty]);
 
   const saveJson = useCallback(() => {
     try {
-      const snapshot = validateDocumentData(currentDocument(editor, document));
+      const result = documentForSave();
+      const snapshot = validateDocumentData(result.document);
       download(
         filenameFor(snapshot, 'json'),
         `${JSON.stringify(snapshot, null, 2)}\n`,
         'application/json;charset=utf-8',
       );
-      setDirty(false);
-      setStatus({ kind: 'success', title: 'Document JSONを保存しました' });
+      if (markdownDirty) {
+        loadDocument(
+          snapshot,
+          'Markdownを適用してDocument JSONを保存しました',
+          {
+            description:
+              result.diagnostics.length > 0
+                ? result.diagnostics.map((item) => item.message).join(' / ')
+                : undefined,
+          },
+        );
+      } else {
+        setDocumentDirty(false);
+        setStatus({ kind: 'success', title: 'Document JSONを保存しました' });
+      }
     } catch (error) {
       setStatus({
         kind: 'error',
@@ -523,14 +767,14 @@ export function EditorWorkspace() {
           error instanceof Error ? error.message : '文書データを検証できません',
       });
     }
-  }, [document, editor]);
+  }, [documentForSave, loadDocument, markdownDirty]);
 
   const updateTheme = useCallback((theme: string) => {
     setDocument((current) => ({
       ...current,
       metadata: { ...current.metadata, theme },
     }));
-    setDirty(true);
+    setDocumentDirty(true);
   }, []);
 
   const applyMath = useCallback(() => {
@@ -573,7 +817,9 @@ export function EditorWorkspace() {
         ref={markdownInput}
         className="sr-only"
         type="file"
-        accept=".md,.markdown,text/markdown,text/plain"
+        accept=".md,.markdown,text/markdown,image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.svg"
+        multiple
+        disabled={documentWriteLocked}
         onChange={importMarkdown}
         aria-label="Markdownファイル"
       />
@@ -617,7 +863,7 @@ export function EditorWorkspace() {
             aria-label="元に戻す"
             size="icon-sm"
             variant="ghost"
-            disabled={!editor?.can().undo()}
+            disabled={documentWriteLocked || !editor?.can().undo()}
             onClick={() => editor?.chain().focus().undo().run()}
           >
             <Undo2 />
@@ -626,7 +872,7 @@ export function EditorWorkspace() {
             aria-label="やり直す"
             size="icon-sm"
             variant="ghost"
-            disabled={!editor?.can().redo()}
+            disabled={documentWriteLocked || !editor?.can().redo()}
             onClick={() => editor?.chain().focus().redo().run()}
           >
             <Redo2 />
@@ -649,6 +895,7 @@ export function EditorWorkspace() {
               aria-label="Markdownを開く"
               size="icon-xs"
               variant="ghost"
+              disabled={documentWriteLocked}
               onClick={() => markdownInput.current?.click()}
             >
               <FolderOpen />
@@ -690,6 +937,7 @@ export function EditorWorkspace() {
             <Button
               className="w-full justify-start"
               variant="outline"
+              disabled={documentWriteLocked}
               onClick={() => markdownInput.current?.click()}
             >
               <FolderOpen data-icon="inline-start" /> Markdownを開く
@@ -698,6 +946,7 @@ export function EditorWorkspace() {
               <Button
                 size="sm"
                 variant="ghost"
+                disabled={documentWriteLocked}
                 onClick={() => createDocument('report')}
               >
                 <FilePlus2 /> Report
@@ -705,6 +954,7 @@ export function EditorWorkspace() {
               <Button
                 size="sm"
                 variant="ghost"
+                disabled={documentWriteLocked}
                 onClick={() => createDocument('slide')}
               >
                 <FilePlus2 /> Slide
@@ -867,10 +1117,19 @@ export function EditorWorkspace() {
                 className="min-h-0 flex-1 resize-none rounded-md bg-[#101923] p-5 font-mono text-[13px] leading-6 text-slate-100"
                 value={markdownDraft}
                 spellCheck={false}
-                onChange={(event) => setMarkdownDraft(event.target.value)}
+                onChange={(event) => {
+                  setMarkdownDraft(event.target.value);
+                  setMarkdownDirty(true);
+                  setStatus({
+                    kind: 'idle',
+                    title: 'Markdownを編集中',
+                    description:
+                      '適用または保存するまで下書きとして保持されます',
+                  });
+                }}
               />
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => changeView('visual')}>
+                <Button variant="outline" onClick={discardMarkdown}>
                   破棄
                 </Button>
                 <Button onClick={applyMarkdown}>
@@ -883,7 +1142,10 @@ export function EditorWorkspace() {
           {view === 'preview' && (
             <ScrollArea className="min-h-0 flex-1">
               <div className="preview-stage">
-                <PreviewSurface document={currentDocument(editor, document)} />
+                <PreviewSurface
+                  document={currentDocument(editor, document)}
+                  resolveImageUrl={resolveImageUrl}
+                />
               </div>
             </ScrollArea>
           )}
@@ -921,6 +1183,7 @@ export function EditorWorkspace() {
                     <NativeSelect
                       size="sm"
                       className="w-full"
+                      disabled={documentWriteLocked}
                       value={
                         typeof document.metadata.theme === 'string'
                           ? document.metadata.theme
@@ -962,12 +1225,14 @@ export function EditorWorkspace() {
                         <Textarea
                           id="math-latex"
                           className="min-h-24 font-mono text-xs"
+                          disabled={documentWriteLocked}
                           value={mathDraft}
                           onChange={(event) => setMathDraft(event.target.value)}
                         />
                         <Button
                           className="w-full"
                           size="sm"
+                          disabled={documentWriteLocked}
                           onClick={applyMath}
                         >
                           数式を更新
@@ -1011,6 +1276,11 @@ export function EditorWorkspace() {
               }`}
             />
             <span className="ml-2">{status.title}</span>
+            {status.description && (
+              <span className="ml-1 block truncate" title={status.description}>
+                {status.description}
+              </span>
+            )}
           </output>
         </aside>
       </section>
