@@ -139,7 +139,7 @@ describe('validateDocumentData', () => {
   it('未知schema versionを拒否する', () => {
     const document = {
       ...createDefaultDocument('report', idFactory()),
-      schemaVersion: 2,
+      schemaVersion: 999,
     };
     expect(() => validateDocumentData(document)).toThrow(
       DocumentValidationError,

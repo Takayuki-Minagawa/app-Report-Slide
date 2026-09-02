@@ -3,10 +3,11 @@ import { z } from 'zod';
 import { isSafeResourceUrl } from '@/src/security/resource-url';
 
 import type { DocumentData } from './model';
+import { labelPattern, semanticTypes } from './semantics';
 
 const documentEnvelopeSchema = z
   .object({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.union([z.literal(1), z.literal(2)]),
     type: z.enum(['report', 'slide']),
     metadata: z.record(z.string(), z.unknown()),
     children: z.array(z.unknown()),
@@ -34,6 +35,8 @@ const blockTypes = new Set([
   'figure',
   'blockMath',
   'horizontalRule',
+  'pageBreak',
+  'slideBreak',
   'table',
 ]);
 const markTypes = new Set(['bold', 'italic', 'strike', 'code', 'link']);
@@ -193,6 +196,23 @@ function validateInlineNode(
   if (!node) return;
 
   switch (node.type) {
+    case 'reference': {
+      const attrs = validateAttrs(node, path, issues);
+      if (
+        typeof attrs?.target !== 'string' ||
+        !labelPattern.test(attrs.target)
+      ) {
+        issues.push(`${path}.attrs.target: 有効な参照ラベルが必要です`);
+      }
+      if (
+        node.content !== undefined ||
+        node.text !== undefined ||
+        node.marks !== undefined
+      ) {
+        issues.push(`${path}: referenceにcontent/text/marksは指定できません`);
+      }
+      break;
+    }
     case 'text':
       expectString(node.text, `${path}.text`, issues);
       validateMarks(node.marks, `${path}.marks`, issues);
@@ -333,6 +353,31 @@ function validateBlockNode(
   const attrs = validateAttrs(node, path, issues);
   validateNodeId(attrs, path, issues, nodeIds);
 
+  if (attrs) {
+    for (const key of ['label', 'caption', 'numbered']) {
+      const entry = attrs[key];
+      if (entry === undefined || entry === null) continue;
+      if (!semanticTypes.has(node.type))
+        issues.push(`${path}.attrs.${key}: このnodeには指定できません`);
+      if (
+        key === 'label' &&
+        (typeof entry !== 'string' || !labelPattern.test(entry))
+      )
+        issues.push(
+          `${path}.attrs.label: 英字から始まる128文字以内の英数字・:._-を指定してください`,
+        );
+      if (
+        key === 'caption' &&
+        (node.type === 'heading' || typeof entry !== 'string')
+      )
+        issues.push(
+          `${path}.attrs.caption: 図・表・式の文字列だけを指定できます`,
+        );
+      if (key === 'numbered' && typeof entry !== 'boolean')
+        issues.push(`${path}.attrs.numbered: booleanが必要です`);
+    }
+  }
+
   switch (node.type) {
     case 'paragraph':
       validateInlineContent(node.content, `${path}.content`, issues, nodeIds);
@@ -459,6 +504,15 @@ function validateBlockNode(
         issues.push(`${path}.content: blockMathにcontentは指定できません`);
       }
       break;
+    case 'pageBreak':
+    case 'slideBreak':
+      if (parent !== 'root')
+        issues.push(
+          `${path}: 改ページ・スライド区切りは文書直下に指定してください`,
+        );
+      if (node.content !== undefined)
+        issues.push(`${path}: 区切りにcontentは指定できません`);
+      break;
     case 'horizontalRule':
       if (node.content !== undefined) {
         issues.push(`${path}.content: horizontalRuleにcontentは指定できません`);
@@ -570,4 +624,10 @@ export function validateDocumentData(value: unknown): DocumentData {
     throw new DocumentValidationError(issues);
   }
   return value as DocumentData;
+}
+
+/** Accept legacy JSON without mutating the caller's data. Unknown versions are rejected. */
+export function migrateDocumentData(value: unknown): DocumentData {
+  const document = validateDocumentData(value);
+  return { ...document, schemaVersion: 2 };
 }
