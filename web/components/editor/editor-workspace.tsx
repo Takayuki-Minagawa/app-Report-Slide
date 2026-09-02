@@ -35,6 +35,17 @@ import {
 } from 'lucide-react';
 
 import { PreviewSurface } from '@/components/preview/preview-surface';
+import { SemanticProperties } from './semantic-properties';
+import { Input } from '@/components/ui/input';
+import {
+  analyzeDocument,
+  labelPattern,
+  semanticTypes,
+} from '@/src/document/semantics';
+import {
+  insertDocumentBreak,
+  updateDocumentNode,
+} from '@/src/editor/document-commands';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -54,7 +65,10 @@ import {
   type DocumentNode,
   type DocumentType,
 } from '@/src/document/model';
-import { validateDocumentData } from '@/src/document/validation';
+import {
+  migrateDocumentData,
+  validateDocumentData,
+} from '@/src/document/validation';
 import {
   createEditorExtensions,
   type MathSelection,
@@ -125,20 +139,6 @@ const initialDocument = parseMarkdown(initialMarkdown, {
 
 function cloneDocument(document: DocumentData): DocumentData {
   return JSON.parse(JSON.stringify(document)) as DocumentData;
-}
-
-function selectedString(value: unknown, fallback: string): string {
-  return typeof value === 'string' ? value : fallback;
-}
-
-function selectedWidth(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 100;
-}
-
-function selectedAlignment(value: unknown): string {
-  return value === 'left' || value === 'center' || value === 'right'
-    ? value
-    : 'center';
 }
 
 function serializationFailureDescription(
@@ -249,7 +249,9 @@ const maximumAssetBytes = 20 * 1024 * 1024;
 const maximumTotalAssetBytes = 50 * 1024 * 1024;
 
 function isMarkdownFile(file: File): boolean {
-  return file.type === 'text/markdown' || /\.(?:md|markdown)$/i.test(file.name);
+  return (
+    file.type === 'text/markdown' || /\.(?:md|markdown|json)$/i.test(file.name)
+  );
 }
 
 function isImageAsset(file: File): boolean {
@@ -387,6 +389,7 @@ export function EditorWorkspace() {
     setMathDraft(selection.latex);
     setSelectedNode({
       type: selection.type,
+      nodeId: selection.nodeId,
       position: selection.position,
       attrs: { latex: selection.latex },
     });
@@ -420,6 +423,29 @@ export function EditorWorkspace() {
           children: content as DocumentNode[],
         }));
         setDocumentDirty(true);
+        const updatedSelection = updatedEditor.state.selection;
+        if (
+          updatedSelection instanceof NodeSelection &&
+          (updatedSelection.node.type.name === 'blockMath' ||
+            updatedSelection.node.type.name === 'inlineMath')
+        ) {
+          setMathSelection({
+            type: updatedSelection.node.type.name,
+            nodeId: updatedSelection.node.attrs.nodeId,
+            position: updatedSelection.from,
+            latex: String(updatedSelection.node.attrs.latex ?? ''),
+          });
+          setMathDraft(String(updatedSelection.node.attrs.latex ?? ''));
+        }
+        setSelectedNode((previous) => {
+          if (!previous?.nodeId) return previous;
+          let next: SelectedNode | null = null;
+          updatedEditor.state.doc.descendants((node, position) => {
+            if (node.attrs.nodeId === previous.nodeId)
+              next = { ...previous, attrs: node.attrs, position };
+          });
+          return next;
+        });
         setStatus({
           kind: 'idle',
           title: '編集中',
@@ -429,6 +455,18 @@ export function EditorWorkspace() {
       onSelectionUpdate: ({ editor: updatedEditor }) => {
         const { selection } = updatedEditor.state;
         if (selection instanceof NodeSelection) {
+          if (
+            selection.node.type.name === 'blockMath' ||
+            selection.node.type.name === 'inlineMath'
+          ) {
+            setMathSelection({
+              type: selection.node.type.name,
+              nodeId: selection.node.attrs.nodeId,
+              position: selection.from,
+              latex: String(selection.node.attrs.latex ?? ''),
+            });
+            setMathDraft(String(selection.node.attrs.latex ?? ''));
+          } else setMathSelection(null);
           setSelectedNode({
             nodeId:
               typeof selection.node.attrs.nodeId === 'string'
@@ -441,7 +479,15 @@ export function EditorWorkspace() {
           return;
         }
 
-        const depth = selection.$from.depth;
+        setMathSelection(null);
+
+        let depth = selection.$from.depth;
+        for (let level = depth; level > 0; level--) {
+          if (semanticTypes.has(selection.$from.node(level).type.name)) {
+            depth = level;
+            break;
+          }
+        }
         if (depth === 0) {
           setSelectedNode(null);
           return;
@@ -465,6 +511,13 @@ export function EditorWorkspace() {
     () => navigatorNodes(document.children),
     [document.children],
   );
+  const analysis = useMemo(() => analyzeDocument(document), [document]);
+  const selectedSemantic = outline.find(
+    (node) =>
+      node.attrs.nodeId === selectedNode?.nodeId &&
+      semanticTypes.has(node.type),
+  );
+  const [referenceTarget, setReferenceTarget] = useState('');
 
   const loadDocument = useCallback(
     (
@@ -472,9 +525,16 @@ export function EditorWorkspace() {
       message: string,
       options: LoadDocumentOptions = {},
     ) => {
-      validateDocumentData(nextDocument);
+      nextDocument = migrateDocumentData(nextDocument);
       editor?.schema.nodeFromJSON(toEditorDocument(nextDocument));
-      const serialized = serializeDocument(nextDocument);
+      let serialized = '';
+      let markdownWarning: string | undefined;
+      try {
+        serialized = serializeDocument(nextDocument);
+      } catch {
+        markdownWarning =
+          'この文書はDocument JSONで保存してください。Markdownでは表現できない構造を保持しています。';
+      }
       if (options.assetUrls !== undefined) {
         replaceAssetUrls(options.assetUrls);
       }
@@ -491,7 +551,9 @@ export function EditorWorkspace() {
       setStatus({
         kind: 'success',
         title: message,
-        description: options.description,
+        description:
+          [options.description, markdownWarning].filter(Boolean).join(' / ') ||
+          undefined,
       });
     },
     [editor, replaceAssetUrls],
@@ -507,7 +569,9 @@ export function EditorWorkspace() {
       try {
         const markdownFiles = files.filter(isMarkdownFile);
         if (markdownFiles.length !== 1) {
-          throw new Error('Markdownファイルを1つだけ選択してください');
+          throw new Error(
+            'MarkdownまたはDocument JSONを1つだけ選択してください',
+          );
         }
         const file = markdownFiles[0];
         const imageFiles = files.filter(
@@ -536,7 +600,12 @@ export function EditorWorkspace() {
           throw new Error('画像ファイルの合計は50MB以下にしてください');
         }
         const source = await file.text();
-        const result = parseMarkdown(source);
+        const result = /\.json$/i.test(file.name)
+          ? {
+              document: migrateDocumentData(JSON.parse(source)),
+              diagnostics: [],
+            }
+          : parseMarkdown(source);
         const localAssets = createLocalAssetUrls(result.document, imageFiles);
         pendingAssetUrls = localAssets.urls;
         const descriptions = [
@@ -670,6 +739,21 @@ export function EditorWorkspace() {
       editor.state.doc.descendants((node, position) => {
         if (node.attrs.nodeId !== nodeId) return !found;
         found = true;
+        setSelectedNode({
+          nodeId,
+          position,
+          type: node.type.name,
+          attrs: node.attrs,
+        });
+        if (node.type.name === 'blockMath' || node.type.name === 'inlineMath') {
+          setMathSelection({
+            type: node.type.name,
+            nodeId,
+            position,
+            latex: String(node.attrs.latex ?? ''),
+          });
+          setMathDraft(String(node.attrs.latex ?? ''));
+        } else setMathSelection(null);
         if (node.isTextblock) {
           editor
             .chain()
@@ -738,7 +822,7 @@ export function EditorWorkspace() {
   const saveJson = useCallback(() => {
     try {
       const result = documentForSave();
-      const snapshot = validateDocumentData(result.document);
+      const snapshot = migrateDocumentData(result.document);
       download(
         filenameFor(snapshot, 'json'),
         `${JSON.stringify(snapshot, null, 2)}\n`,
@@ -778,27 +862,69 @@ export function EditorWorkspace() {
   }, []);
 
   const applyMath = useCallback(() => {
-    if (!editor || !mathSelection || !mathDraft.trim()) return;
+    if (!editor || !mathSelection || !mathDraft.trim() || documentWriteLocked)
+      return;
+    if (mathSelection.type === 'blockMath') {
+      if (
+        !mathSelection.nodeId ||
+        selectedNode?.nodeId !== mathSelection.nodeId ||
+        !updateDocumentNode(editor, mathSelection.nodeId, {
+          latex: mathDraft.trim(),
+        })
+      ) {
+        setStatus({ kind: 'error', title: '数式を選択し直してください' });
+        return;
+      }
+      setMathSelection({ ...mathSelection, latex: mathDraft.trim() });
+      setStatus({ kind: 'success', title: '数式を更新しました' });
+      return;
+    }
+    const selectedMath = editor.state.doc.nodeAt(mathSelection.position);
+    if (
+      selectedNode?.position !== mathSelection.position ||
+      selectedMath?.type.name !== 'inlineMath' ||
+      selectedMath.attrs.latex !== mathSelection.latex
+    ) {
+      setStatus({ kind: 'error', title: '数式を選択し直してください' });
+      return;
+    }
     const chain = editor.chain().focus();
-    const updated =
-      mathSelection.type === 'inlineMath'
-        ? chain
-            .updateInlineMath({
-              pos: mathSelection.position,
-              latex: mathDraft.trim(),
-            })
-            .run()
-        : chain
-            .updateBlockMath({
-              pos: mathSelection.position,
-              latex: mathDraft.trim(),
-            })
-            .run();
+    const updated = chain
+      .updateInlineMath({
+        pos: mathSelection.position,
+        latex: mathDraft.trim(),
+      })
+      .run();
     if (updated) {
       setMathSelection({ ...mathSelection, latex: mathDraft.trim() });
       setStatus({ kind: 'success', title: '数式を更新しました' });
     }
-  }, [editor, mathDraft, mathSelection]);
+  }, [documentWriteLocked, editor, mathDraft, mathSelection, selectedNode]);
+
+  const applyAttributes = (nodeId: string, attrs: Record<string, unknown>) => {
+    if (!editor || documentWriteLocked) return;
+    try {
+      if (!updateDocumentNode(editor, nodeId, attrs))
+        throw new Error('対象の要素は削除されています。選択し直してください');
+      setStatus({ kind: 'success', title: '属性を更新しました' });
+    } catch (error) {
+      setStatus({
+        kind: 'error',
+        title: '属性を更新できませんでした',
+        description:
+          error instanceof Error ? error.message : '属性を確認してください',
+      });
+    }
+  };
+
+  const updateDocumentFlag = (key: string, checked: boolean) => {
+    if (documentWriteLocked) return;
+    setDocument((current) => ({
+      ...current,
+      metadata: { ...current.metadata, [key]: checked },
+    }));
+    setDocumentDirty(true);
+  };
 
   const themeOptions =
     document.type === 'report'
@@ -817,7 +943,7 @@ export function EditorWorkspace() {
         ref={markdownInput}
         className="sr-only"
         type="file"
-        accept=".md,.markdown,text/markdown,image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.svg"
+        accept=".md,.markdown,.json,application/json,text/markdown,image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.svg"
         multiple
         disabled={documentWriteLocked}
         onChange={importMarkdown}
@@ -934,6 +1060,9 @@ export function EditorWorkspace() {
             </nav>
           </ScrollArea>
           <div className="space-y-2 border-t p-3">
+            <p className="text-[10px] text-muted-foreground">
+              Markdown / Document JSON ＋ 画像
+            </p>
             <Button
               className="w-full justify-start"
               variant="outline"
@@ -1099,6 +1228,19 @@ export function EditorWorkspace() {
                 >
                   <Table2 />
                 </FormatButton>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    editor &&
+                    insertDocumentBreak(
+                      editor,
+                      document.type === 'slide' ? 'slideBreak' : 'pageBreak',
+                    )
+                  }
+                >
+                  {document.type === 'slide' ? 'スライドを区切る' : '改ページ'}
+                </Button>
               </div>
               <ScrollArea className="min-h-0 flex-1">
                 <div className="editor-stage">
@@ -1181,6 +1323,7 @@ export function EditorWorkspace() {
                   <dt>テーマ</dt>
                   <dd>
                     <NativeSelect
+                      aria-label="テーマ"
                       size="sm"
                       className="w-full"
                       disabled={documentWriteLocked}
@@ -1199,6 +1342,83 @@ export function EditorWorkspace() {
                     </NativeSelect>
                   </dd>
                 </dl>
+                <div className="mt-3 space-y-2">
+                  {[
+                    ['toc', '目次'],
+                    ['number_sections', '節番号'],
+                    ...(document.type === 'slide'
+                      ? [['slide_number', 'スライド番号']]
+                      : []),
+                  ].map(([key, title]) => (
+                    <label
+                      key={key}
+                      className="flex items-center gap-2 text-xs"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={
+                          key === 'slide_number'
+                            ? document.metadata[key] !== false
+                            : document.metadata[key] === true
+                        }
+                        disabled={documentWriteLocked}
+                        onChange={(event) =>
+                          updateDocumentFlag(key, event.target.checked)
+                        }
+                      />
+                      {title}
+                    </label>
+                  ))}
+                </div>
+                <div className="mt-4 space-y-2">
+                  <label className="property-field" htmlFor="reference-target">
+                    参照先ラベル
+                    <Input
+                      aria-label="参照先ラベル"
+                      id="reference-target"
+                      value={referenceTarget}
+                      disabled={documentWriteLocked}
+                      onChange={(event) =>
+                        setReferenceTarget(event.target.value)
+                      }
+                      placeholder="fig:response"
+                    />
+                  </label>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      documentWriteLocked || !labelPattern.test(referenceTarget)
+                    }
+                    onClick={() =>
+                      editor
+                        ?.chain()
+                        .focus()
+                        .insertContent({
+                          type: 'reference',
+                          attrs: { target: referenceTarget },
+                        })
+                        .run()
+                    }
+                  >
+                    参照を挿入
+                  </Button>
+                  <p className="text-[10px] text-muted-foreground">
+                    利用可能:{' '}
+                    {[...analysis.labels.keys()].join(', ') ||
+                      '要素に参照ラベルを設定してください'}
+                  </p>
+                </div>
+                {analysis.diagnostics.length > 0 && (
+                  <div
+                    className="semantic-warnings mt-3"
+                    aria-label="文書の参照診断"
+                  >
+                    {analysis.diagnostics.map((message) => (
+                      <p key={message}>{message}</p>
+                    ))}
+                  </div>
+                )}
               </section>
 
               <Separator />
@@ -1239,15 +1459,13 @@ export function EditorWorkspace() {
                         </Button>
                       </div>
                     )}
-                    {selectedNode.type === 'figure' && (
-                      <dl className="property-grid">
-                        <dt>代替テキスト</dt>
-                        <dd>{selectedString(selectedNode.attrs.alt, '—')}</dd>
-                        <dt>幅</dt>
-                        <dd>{selectedWidth(selectedNode.attrs.width)}%</dd>
-                        <dt>配置</dt>
-                        <dd>{selectedAlignment(selectedNode.attrs.align)}</dd>
-                      </dl>
+                    {selectedSemantic && (
+                      <SemanticProperties
+                        key={`${selectedSemantic.attrs.nodeId}:${JSON.stringify(selectedSemantic.attrs)}`}
+                        node={selectedSemantic}
+                        disabled={documentWriteLocked}
+                        onApply={applyAttributes}
+                      />
                     )}
                   </div>
                 ) : (

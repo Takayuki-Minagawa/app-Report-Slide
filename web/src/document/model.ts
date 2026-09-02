@@ -53,14 +53,26 @@ export interface HardBreakNode {
   type: 'hardBreak';
 }
 
+export interface ReferenceNode {
+  type: 'reference';
+  attrs: { target: string };
+}
+
+export interface SemanticAttributes {
+  label?: string | null;
+  caption?: string | null;
+  numbered?: boolean | null;
+}
+
 export type InlineNode =
   | TextNode
   | InlineMathNode
   | InlineImageNode
+  | ReferenceNode
   | HardBreakNode;
 
 interface IdentifiedNode {
-  attrs: {
+  attrs: SemanticAttributes & {
     nodeId: string;
     [key: string]: unknown;
   };
@@ -132,6 +144,10 @@ export interface HorizontalRuleNode extends IdentifiedNode {
   type: 'horizontalRule';
 }
 
+export interface DocumentBreakNode extends IdentifiedNode {
+  type: 'pageBreak' | 'slideBreak';
+}
+
 export interface TableNode extends IdentifiedNode {
   type: 'table';
   content: TableRowNode[];
@@ -175,13 +191,14 @@ export type DocumentNode =
   | FigureNode
   | BlockMathNode
   | HorizontalRuleNode
+  | DocumentBreakNode
   | TableNode
   | TableRowNode
   | TableHeaderNode
   | TableCellNode;
 
 export interface DocumentData {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   type: DocumentType;
   metadata: DocumentMetadata;
   children: DocumentNode[];
@@ -210,7 +227,7 @@ export function createDefaultDocument(
   idFactory: IdFactory = createNodeId,
 ): DocumentData {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     type,
     metadata: {
       title: type === 'report' ? '無題のレポート' : '無題のスライド',
@@ -254,6 +271,7 @@ export function inlineText(content: InlineNode[] | undefined): string {
       if (node.type === 'text') return node.text;
       if (node.type === 'inlineMath') return node.attrs.latex;
       if (node.type === 'inlineImage') return node.attrs.alt;
+      if (node.type === 'reference') return `@${node.attrs.target}`;
       return '\n';
     })
     .join('');

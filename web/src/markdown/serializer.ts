@@ -1,4 +1,5 @@
 import { stringify } from 'yaml';
+import { serializeBlockAttributes } from './attributes';
 
 import type {
   DocumentData,
@@ -33,7 +34,7 @@ function escapeText(value: string): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/([\\`*_[\]$~{}])/g, '\\$1');
+    .replace(/([\\`*_[\]$~{}():])/g, '\\$1');
 }
 
 function isEscaped(value: string, position: number): boolean {
@@ -138,6 +139,8 @@ function serializeInline(nodes: InlineNode[] | undefined): string {
   return (nodes ?? [])
     .map((node) => {
       switch (node.type) {
+        case 'reference':
+          return `[@${node.attrs.target}]`;
         case 'text':
           return serializeText(node.text, node.marks);
         case 'inlineMath':
@@ -161,6 +164,9 @@ function protectParagraphLine(line: string): string {
       ? `&#9;${line.slice(1)}`
       : `&#32;${line.slice(1)}`;
   }
+
+  if (/^\s*:::\s+(?:pagebreak|slidebreak)\s*$/.test(line))
+    return line.replace(':', '\\:');
 
   const match = /^( {0,3})(.*)$/.exec(line);
   if (!match) return line;
@@ -335,6 +341,10 @@ function serializeNode(node: DocumentNode): string {
         );
       }
       return `$$\n${node.attrs.latex}\n$$`;
+    case 'pageBreak':
+      return '::: pagebreak\n:::';
+    case 'slideBreak':
+      return '::: slidebreak\n:::';
     case 'horizontalRule':
       return '---';
     case 'table':
@@ -348,7 +358,9 @@ function serializeNode(node: DocumentNode): string {
 }
 
 function serializeBlocks(nodes: DocumentNode[]): string {
-  return nodes.map(serializeNode).join('\n\n');
+  return nodes
+    .map((node) => serializeNode(node) + serializeBlockAttributes(node))
+    .join('\n\n');
 }
 
 export function serializeDocument(document: DocumentData): string {

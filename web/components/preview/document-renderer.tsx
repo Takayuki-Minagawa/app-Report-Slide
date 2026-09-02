@@ -1,6 +1,12 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import katex from 'katex';
 
 import type {
@@ -12,10 +18,52 @@ import type {
   TableHeaderNode,
 } from '@/src/document/model';
 import { safeResourceUrl } from '@/src/security/resource-url';
+import {
+  analyzeDocument,
+  type DocumentAnalysis,
+} from '@/src/document/semantics';
+
+const AnalysisContext = createContext<DocumentAnalysis | null>(null);
+const anchorId = (nodeId: string) => `kumi-${nodeId}`;
+
+function Reference({ target }: { target: string }) {
+  const resolved = useContext(AnalysisContext)?.labels.get(target);
+  return resolved ? (
+    <a
+      className="preview-reference"
+      href={`#${encodeURIComponent(anchorId(resolved.nodeId))}`}
+    >
+      {resolved.referenceText}
+    </a>
+  ) : (
+    <span
+      className="preview-reference-unresolved"
+      title="参照先が未定義、または重複しています"
+    >
+      [@{target}]
+    </span>
+  );
+}
+
+function Caption({ node }: { node: DocumentNode }) {
+  const target = useContext(AnalysisContext)?.targets.get(node.attrs.nodeId);
+  if (!target?.number && !node.attrs.caption) return null;
+  return (
+    <span>
+      {target?.number
+        ? `${target.referenceText}${node.attrs.caption ? ' — ' : ''}`
+        : ''}
+      {node.attrs.caption}
+    </span>
+  );
+}
 
 interface DocumentRendererProps {
   document: DocumentData;
   resolveImageUrl?: (source: string) => string;
+  nodes?: DocumentNode[];
+  analysis?: DocumentAnalysis;
+  showToc?: boolean;
 }
 
 type ImageUrlResolver = (source: string) => string;
@@ -125,6 +173,8 @@ function renderInline(
   return (nodes ?? []).map((node, index) => {
     const key = `${node.type}-${index}`;
     switch (node.type) {
+      case 'reference':
+        return <Reference key={key} target={node.attrs.target} />;
       case 'hardBreak':
         return <br key={key} />;
       case 'inlineMath':
@@ -170,6 +220,9 @@ function FigureBlock({
           <span>画像を表示できません</span>
           <small>{node.attrs.alt || node.attrs.src}</small>
         </div>
+        <figcaption>
+          <Caption node={node} />
+        </figcaption>
       </figure>
     );
   }
@@ -188,6 +241,9 @@ function FigureBlock({
         referrerPolicy="no-referrer"
         onError={() => setFailed(true)}
       />
+      <figcaption>
+        <Caption node={node} />
+      </figcaption>
     </figure>
   );
 }
@@ -216,6 +272,7 @@ function BlockNode({
   resolveImageUrl: ImageUrlResolver;
 }) {
   const key = node.attrs.nodeId;
+  const target = useContext(AnalysisContext)?.targets.get(key);
   switch (node.type) {
     case 'heading': {
       const Tag = `h${node.attrs.level}` as
@@ -225,7 +282,14 @@ function BlockNode({
         | 'h4'
         | 'h5'
         | 'h6';
-      return <Tag id={key}>{renderInline(node.content, resolveImageUrl)}</Tag>;
+      return (
+        <Tag id={anchorId(key)}>
+          {target?.number && (
+            <span className="section-number">{target.number} </span>
+          )}
+          {renderInline(node.content, resolveImageUrl)}
+        </Tag>
+      );
     }
     case 'paragraph':
       return <p>{renderInline(node.content, resolveImageUrl)}</p>;
@@ -284,15 +348,39 @@ function BlockNode({
         </pre>
       );
     case 'figure':
-      return <FigureBlock node={node} resolveImageUrl={resolveImageUrl} />;
+      return (
+        <div id={anchorId(key)}>
+          <FigureBlock node={node} resolveImageUrl={resolveImageUrl} />
+        </div>
+      );
     case 'blockMath':
-      return <MathContent display latex={node.attrs.latex} />;
+      return (
+        <div id={anchorId(key)} className="numbered-equation">
+          <div className="equation-body">
+            <MathContent display latex={node.attrs.latex} />
+            {target?.number && (
+              <span className="equation-number">({target.number})</span>
+            )}
+          </div>
+          {node.attrs.caption && (
+            <div className="equation-caption">{node.attrs.caption}</div>
+          )}
+        </div>
+      );
+    case 'pageBreak':
+    case 'slideBreak':
+      return null;
     case 'horizontalRule':
       return <hr />;
     case 'table':
       return (
-        <div className="preview-table-wrap">
+        <div className="preview-table-wrap" id={anchorId(key)}>
           <table>
+            {(target?.number || node.attrs.caption) && (
+              <caption>
+                <Caption node={node} />
+              </caption>
+            )}
             <tbody>
               {node.content.map((row) => (
                 <tr key={row.attrs.nodeId}>
@@ -326,16 +414,47 @@ function BlockNode({
 export function DocumentRenderer({
   document,
   resolveImageUrl = (source) => source,
+  nodes,
+  analysis,
+  showToc = true,
 }: DocumentRendererProps) {
+  const computed = useMemo(
+    () => analysis ?? analyzeDocument(document),
+    [analysis, document],
+  );
   return (
-    <div className="document-renderer">
-      {document.children.map((node) => (
-        <BlockNode
-          key={node.attrs.nodeId}
-          node={node}
-          resolveImageUrl={resolveImageUrl}
-        />
-      ))}
-    </div>
+    <AnalysisContext.Provider value={computed}>
+      <div className="document-renderer">
+        {showToc &&
+          document.metadata.toc === true &&
+          computed.outline.length > 0 && (
+            <nav className="document-toc" aria-label="目次">
+              <h2>目次</h2>
+              <ol>
+                {computed.outline.map((entry) => (
+                  <li
+                    key={entry.nodeId}
+                    style={{
+                      paddingLeft: `${((entry.level ?? 1) - 1) * 16}px`,
+                    }}
+                  >
+                    <a href={`#${encodeURIComponent(anchorId(entry.nodeId))}`}>
+                      {entry.number ? `${entry.number} ` : ''}
+                      {entry.title}
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </nav>
+          )}
+        {(nodes ?? document.children).map((node) => (
+          <BlockNode
+            key={node.attrs.nodeId}
+            node={node}
+            resolveImageUrl={resolveImageUrl}
+          />
+        ))}
+      </div>
+    </AnalysisContext.Provider>
   );
 }

@@ -20,11 +20,13 @@ import type {
   TableRowNode,
 } from '@/src/document/model';
 import { createNodeId } from '@/src/document/model';
+import { validateDocumentData } from '@/src/document/validation';
 import { isSafeResourceUrl } from '@/src/security/resource-url';
 
 import { createMarkdownIt } from './dialect';
 import { MarkdownImportError, type MarkdownDiagnostic } from './diagnostics';
 import { parseFrontMatter } from './frontmatter';
+import { parseBlockAttributes } from './attributes';
 
 type MarkdownToken = ReturnType<
   ReturnType<typeof createMarkdownIt>['parse']
@@ -35,6 +37,7 @@ interface ParseCursor {
   index: number;
   idFactory: IdFactory;
   diagnostics: MarkdownDiagnostic[];
+  lineOffset: number;
 }
 
 const inlineImageMarker = '{.kumi-inline}';
@@ -140,6 +143,9 @@ function parseInline(token: MarkdownToken, cursor: ParseCursor): InlineNode[] {
 
   for (const [index, child] of children.entries()) {
     switch (child.type) {
+      case 'kumi_reference':
+        nodes.push({ type: 'reference', attrs: { target: child.content } });
+        break;
       case 'text':
         if (hasEmptyParagraphMarker) break;
         if (hasInlineImageMarker && index === 1) break;
@@ -383,6 +389,42 @@ function parseBlocks(
     if (stopTypes.has(token.type)) break;
 
     switch (token.type) {
+      case 'kumi_attributes': {
+        try {
+          if (cursor.tokens[cursor.index - 1]?.type === 'kumi_attributes')
+            throw new Error('属性行は1つにまとめてください');
+          const previous = nodes.at(-1);
+          const attrs = parseBlockAttributes(token.content, previous);
+          Object.assign(previous!.attrs, attrs);
+        } catch (error) {
+          cursor.diagnostics.push({
+            severity: 'error',
+            code: 'markdown.attributes-invalid',
+            message:
+              error instanceof Error ? error.message : '属性行が不正です',
+            line: (token.map?.[0] ?? 0) + 1 + cursor.lineOffset,
+          });
+        }
+        cursor.index++;
+        break;
+      }
+      case 'kumi_break':
+      case 'kumi_invalid_break':
+        if (stopTypes.size || token.type === 'kumi_invalid_break') {
+          cursor.diagnostics.push({
+            severity: 'error',
+            code: 'markdown.break-invalid',
+            message:
+              '区切りは文書直下に ::: pagebreak または ::: slidebreak と、次行の ::: で指定してください',
+            line: (token.map?.[0] ?? 0) + 1 + cursor.lineOffset,
+          });
+        } else
+          nodes.push({
+            type: token.content === 'pagebreak' ? 'pageBreak' : 'slideBreak',
+            attrs: { nodeId: cursor.idFactory() },
+          });
+        cursor.index++;
+        break;
       case 'heading_open': {
         const level = Number.parseInt(
           token.tag.slice(1),
@@ -524,6 +566,9 @@ export function parseMarkdown(
     index: 0,
     idFactory,
     diagnostics,
+    lineOffset:
+      source.replace(/\r\n?/g, '\n').split('\n').length -
+      frontMatter.body.split('\n').length,
   };
   const children = parseBlocks(cursor);
 
@@ -542,8 +587,8 @@ export function parseMarkdown(
   }
 
   return {
-    document: {
-      schemaVersion: 1,
+    document: validateDocumentData({
+      schemaVersion: 2,
       type: frontMatter.type,
       metadata: {
         theme:
@@ -552,7 +597,7 @@ export function parseMarkdown(
         ...frontMatter.metadata,
       },
       children,
-    },
+    }),
     diagnostics,
   };
 }

@@ -1,4 +1,9 @@
-import { Extension, mergeAttributes, type Extensions } from '@tiptap/core';
+import {
+  Extension,
+  Node,
+  mergeAttributes,
+  type Extensions,
+} from '@tiptap/core';
 import { Image } from '@tiptap/extension-image';
 import { Mathematics } from '@tiptap/extension-mathematics';
 import { TableKit } from '@tiptap/extension-table';
@@ -9,6 +14,7 @@ import { createNodeId } from '@/src/document/model';
 import { safeResourceUrl } from '@/src/security/resource-url';
 
 export interface MathSelection {
+  nodeId?: string;
   type: 'inlineMath' | 'blockMath';
   position: number;
   latex: string;
@@ -28,6 +34,8 @@ const identifiedTypes = [
   'blockquote',
   'codeBlock',
   'horizontalRule',
+  'pageBreak',
+  'slideBreak',
   'inlineImage',
   'figure',
   'blockMath',
@@ -42,6 +50,39 @@ const DocumentAttributes = Extension.create({
 
   addGlobalAttributes() {
     return [
+      {
+        types: ['heading', 'figure', 'table', 'blockMath'],
+        attributes: {
+          label: {
+            default: null,
+            parseHTML: (element) => element.getAttribute('data-label'),
+            renderHTML: (attrs) =>
+              attrs.label ? { 'data-label': attrs.label } : {},
+          },
+          numbered: {
+            default: null,
+            parseHTML: (element) =>
+              element.hasAttribute('data-numbered')
+                ? element.getAttribute('data-numbered') === 'true'
+                : null,
+            renderHTML: (attrs) =>
+              attrs.numbered != null
+                ? { 'data-numbered': String(attrs.numbered) }
+                : {},
+          },
+        },
+      },
+      {
+        types: ['figure', 'table', 'blockMath'],
+        attributes: {
+          caption: {
+            default: null,
+            parseHTML: (element) => element.getAttribute('data-caption'),
+            renderHTML: (attrs) =>
+              attrs.caption != null ? { 'data-caption': attrs.caption } : {},
+          },
+        },
+      },
       {
         types: identifiedTypes,
         attributes: {
@@ -264,7 +305,54 @@ export function createEditorExtensions({
   const Figure = createFigureExtension(resolveImageUrl);
 
   return [
+    Node.create({
+      name: 'doc',
+      topNode: true,
+      content: '(block | documentBreak)+',
+    }),
+    Node.create({
+      name: 'reference',
+      group: 'inline',
+      inline: true,
+      atom: true,
+      marks: '',
+      addAttributes: () => ({
+        target: {
+          default: '',
+          parseHTML: (element) => element.getAttribute('data-reference') ?? '',
+        },
+      }),
+      parseHTML: () => [{ tag: 'span[data-reference]' }],
+      renderHTML: ({ node }) => [
+        'span',
+        {
+          'data-reference': node.attrs.target,
+          class: 'kumi-reference',
+          contenteditable: 'false',
+        },
+        `[@${node.attrs.target}]`,
+      ],
+      renderText: ({ node }) => `[@${node.attrs.target}]`,
+    }),
+    ...(['pageBreak', 'slideBreak'] as const).map((type) =>
+      Node.create({
+        name: type,
+        group: 'documentBreak',
+        atom: true,
+        parseHTML: () => [{ tag: `div[data-document-break="${type}"]` }],
+        renderHTML: ({ HTMLAttributes }) => [
+          'div',
+          mergeAttributes(HTMLAttributes, {
+            'data-document-break': type,
+            class: 'kumi-document-break',
+            contenteditable: 'false',
+          }),
+          type === 'pageBreak' ? '改ページ' : '次のスライド',
+        ],
+      }),
+    ),
     StarterKit.configure({
+      document: false,
       link: {
         openOnClick: false,
         autolink: false,
@@ -312,6 +400,7 @@ export function createEditorExtensions({
         onClick: (node, position) =>
           onMathSelect({
             type: 'blockMath',
+            nodeId: node.attrs.nodeId,
             position,
             latex: String(node.attrs.latex ?? ''),
           }),

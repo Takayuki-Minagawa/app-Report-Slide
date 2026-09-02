@@ -1,6 +1,6 @@
 # KUMI — Markdown Report / Slide Editor
 
-技術レポートとプレゼンテーションを、同じMarkdown／Document Modelから編集するWebアプリです。現在は仕様書の「MVP 1：共通基盤」を実装しています。
+技術レポートとプレゼンテーションを、同じMarkdown／Document Modelから編集するWebアプリです。共通基盤に加え、LaTeX風の番号付け・相互参照・目次と明示的なページ／スライド区切りを実装しています。TeXエンジンではなく、MarkdownとKaTeXを使用します。
 
 ## MVP 1でできること
 
@@ -12,7 +12,15 @@
 - 3ペイン構成のNavigator、Editor、Properties
 - Undo／Redo、Markdown直接編集、破損入力を適用しないエラー処理
 
-実装対象の詳細は [md_report_slide_editor_web_spec.md](./md_report_slide_editor_web_spec.md) を参照してください。MVP 2以降のFigure属性、ページ区切り、Slide layout、Chart、PDF／HTML exportは今回の対象外です。
+## 文書機能
+
+- 図・表・式のキャプション、安定した参照ラベル、自動番号付け
+- 見出し階層の節番号、リンク付き目次、前方参照・重複／未解決参照の警告
+- 図の幅（10〜100%）・配置・代替テキストをPropertiesで編集し、Markdownでも保持
+- 明示的な改ページと複数スライドのプレビュー、ページ／スライド番号
+- Document JSON v1／v2のImport、v2への非破壊移行
+
+使い方・構文・制限は [文書機能ガイド](./web/docs/document-features.md) を参照してください。元の全体仕様は [仕様書](./md_report_slide_editor_web_spec.md) にあります。自動ページ割り、厳密なA4組版、PDF／HTML export、脚注・文献、段組み、Chart、TeXファイル互換はまだ未実装です。
 
 ## 開発
 
@@ -60,3 +68,4 @@ Runtime validatorはNode型、必須属性、親子関係、既知metadata型、
 
 - [Reportサンプル](./web/examples/example-report.md)
 - [Slideサンプル](./web/examples/example-slide.md)
+- [番号・参照・改ページのサンプル](./web/examples/example-document-features.md)
