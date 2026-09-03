@@ -5,7 +5,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { validateDocumentData } from '@/src/document/validation';
 
 import { createEditorExtensions } from './extensions';
-import { applyTableBorders } from './table-commands';
+import {
+  applyTableBorders,
+  hasIncompatibleMergeBorders,
+  mergeTableCellsPreservingBorders,
+  splitTableCellPreservingBorders,
+} from './table-commands';
 
 let editor: Editor | undefined;
 
@@ -14,7 +19,7 @@ afterEach(() => {
   editor = undefined;
 });
 
-function createEditor(): Editor {
+function createEditor(withHeaderRow = true): Editor {
   editor = new Editor({
     extensions: createEditorExtensions({ onMathSelect: () => undefined }),
     content: {
@@ -22,7 +27,7 @@ function createEditor(): Editor {
       content: [{ type: 'paragraph', attrs: { nodeId: 'initial' } }],
     },
   });
-  editor.commands.insertTable({ rows: 2, cols: 2, withHeaderRow: true });
+  editor.commands.insertTable({ rows: 2, cols: 2, withHeaderRow });
   return editor;
 }
 
@@ -124,11 +129,108 @@ describe('advanced table commands', () => {
     });
   });
 
-  it('keeps native merge and split operations valid in the document model', () => {
+  it('applies a directional border only to the selected range perimeter', () => {
+    const current = createEditor();
+    selectCells(current, 0, 3);
+    const border = {
+      color: '#0f766e',
+      style: 'dashed' as const,
+      width: 2 as const,
+    };
+
+    expect(applyTableBorders(current, 'top', 'draw', border)).toBe(true);
+    const table = tableJson(current);
+    expect(table.content[0].content[0].attrs.borders).toMatchObject({
+      top: border,
+    });
+    expect(table.content[0].content[1].attrs.borders).toMatchObject({
+      top: border,
+    });
+    expect(table.content[1].content[0].attrs.borders).toBeNull();
+    expect(table.content[1].content[1].attrs.borders).toBeNull();
+  });
+
+  it('preserves outer borders when merged cells are split again', () => {
+    const current = createEditor(false);
+    selectCells(current, 0, 3);
+    const border = {
+      color: '#ef4444',
+      style: 'double' as const,
+      width: 2 as const,
+    };
+
+    expect(applyTableBorders(current, 'outer', 'draw', border)).toBe(true);
+    expect(mergeTableCellsPreservingBorders(current)).toBe(true);
+    let table = tableJson(current);
+    expect(table.content[0].content[0].attrs.borders).toMatchObject({
+      top: border,
+      right: border,
+      bottom: border,
+      left: border,
+    });
+
+    expect(splitTableCellPreservingBorders(current)).toBe(true);
+    table = tableJson(current);
+    expect(table.content[0].content[0].attrs.borders).toMatchObject({
+      top: border,
+      left: border,
+    });
+    expect(table.content[0].content[1].attrs.borders).toMatchObject({
+      top: border,
+      right: border,
+    });
+    expect(table.content[1].content[0].attrs.borders).toMatchObject({
+      bottom: border,
+      left: border,
+    });
+    expect(table.content[1].content[1].attrs.borders).toMatchObject({
+      bottom: border,
+      right: border,
+    });
+    expect(table.content[0].content[0].attrs.borders).not.toHaveProperty(
+      'right',
+    );
+    expect(table.content[0].content[0].attrs.borders).not.toHaveProperty(
+      'bottom',
+    );
+  });
+
+  it('rejects a merge that would flatten different perimeter borders', () => {
+    const current = createEditor();
+    const red = {
+      color: '#ef4444',
+      style: 'solid' as const,
+      width: 1 as const,
+    };
+    const blue = {
+      color: '#2563eb',
+      style: 'dashed' as const,
+      width: 2 as const,
+    };
+
+    selectCells(current, 0);
+    expect(applyTableBorders(current, 'top', 'draw', red)).toBe(true);
+    selectCells(current, 1);
+    expect(applyTableBorders(current, 'top', 'draw', blue)).toBe(true);
+    selectCells(current, 0, 1);
+
+    expect(hasIncompatibleMergeBorders(current)).toBe(true);
+    expect(mergeTableCellsPreservingBorders(current)).toBe(false);
+    const table = tableJson(current);
+    expect(table.content[0].content).toHaveLength(2);
+    expect(table.content[0].content[0].attrs.borders).toMatchObject({
+      top: red,
+    });
+    expect(table.content[0].content[1].attrs.borders).toMatchObject({
+      top: blue,
+    });
+  });
+
+  it('keeps border-preserving merge and split operations valid in the document model', () => {
     const current = createEditor();
     selectCells(current, 0, 1);
 
-    expect(current.commands.mergeCells()).toBe(true);
+    expect(mergeTableCellsPreservingBorders(current)).toBe(true);
     let table = tableJson(current);
     expect(table.content[0].content).toHaveLength(1);
     expect(table.content[0].content[0].attrs.colspan).toBe(2);
@@ -141,7 +243,7 @@ describe('advanced table commands', () => {
       }),
     ).not.toThrow();
 
-    expect(current.commands.splitCell()).toBe(true);
+    expect(splitTableCellPreservingBorders(current)).toBe(true);
     table = tableJson(current);
     expect(table.content[0].content).toHaveLength(2);
     expect(() =>

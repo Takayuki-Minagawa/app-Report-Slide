@@ -390,7 +390,7 @@ function BlockNode({
             <tbody>
               {node.content.map((row) => (
                 <tr key={row.attrs.nodeId}>
-                  {row.content.map((cell) => {
+                  {(row.content ?? []).map((cell) => {
                     const Cell = cell.type === 'tableHeader' ? 'th' : 'td';
                     return (
                       <Cell

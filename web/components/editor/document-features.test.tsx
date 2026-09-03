@@ -145,7 +145,7 @@ describe('document feature workspace', () => {
     const document = parseMarkdown('| a |\n|---|\n| b |').document;
     const table = document.children[0];
     if (table.type !== 'table') throw new Error('Expected table');
-    table.content[1].content[0].content.push({
+    table.content[1].content![0].content.push({
       type: 'paragraph',
       attrs: { nodeId: 'extra' },
       content: [{ type: 'text', text: '複数段落セルの本文' }],

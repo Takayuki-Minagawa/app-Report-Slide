@@ -173,8 +173,8 @@ describe('report project ZIP', () => {
     ).document;
     const table = document.children[0];
     if (table.type !== 'table') throw new Error('table expected');
-    const merged = table.content[0].content[0];
-    table.content[0].content.splice(1, 1);
+    const merged = table.content[0].content![0];
+    table.content[0].content!.splice(1, 1);
     merged.attrs.colspan = 2;
     merged.attrs.borders = {
       top: { color: '#0f766e', style: 'double', width: 2 },
@@ -192,7 +192,7 @@ describe('report project ZIP', () => {
     const loadedTable = loaded.project.chapters[0].document.children[0];
     if (loadedTable.type !== 'table') throw new Error('loaded table expected');
     expect(loaded.project.chapters[0].file).toMatch(/\.md$/);
-    expect(loadedTable.content[0].content[0].attrs).toMatchObject({
+    expect(loadedTable.content[0].content![0].attrs).toMatchObject({
       colspan: 2,
       borders: {
         top: { color: '#0f766e', style: 'double', width: 2 },

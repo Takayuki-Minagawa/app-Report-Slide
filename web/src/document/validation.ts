@@ -427,7 +427,10 @@ function validateTableGrid(
     );
   }
 
-  if (width === 0) return;
+  if (width === 0) {
+    issues.push(`${path}.content: 表には少なくとも1つのセルが必要です`);
+    return;
+  }
   for (const [rowIndex, columns] of occupied.entries()) {
     for (let column = 0; column < width; column += 1) {
       if (!columns.has(column)) {
@@ -659,9 +662,12 @@ function validateBlockNode(
       validateTableGrid(node, path, issues);
       break;
     case 'tableRow':
-      requireNonEmptyContent(node.content, `${path}.content`, issues);
+      if (node.content !== undefined && !Array.isArray(node.content)) {
+        issues.push(`${path}.content: 配列が必要です`);
+        break;
+      }
       validateChildNodes(
-        node.content,
+        node.content ?? [],
         `${path}.content`,
         'tableRow',
         issues,

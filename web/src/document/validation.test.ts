@@ -136,6 +136,46 @@ describe('validateDocumentData', () => {
     expect(validateDocumentData(document)).toBe(document);
   });
 
+  it('rowspanで完全に覆われた表行を受け入れる', () => {
+    const document = {
+      schemaVersion: 2,
+      type: 'report',
+      metadata: {},
+      children: [
+        {
+          type: 'table',
+          attrs: { nodeId: 'table' },
+          content: [
+            {
+              type: 'tableRow',
+              attrs: { nodeId: 'row-1' },
+              content: [
+                {
+                  type: 'tableCell',
+                  attrs: {
+                    nodeId: 'cell',
+                    align: 'left',
+                    colspan: 1,
+                    rowspan: 2,
+                  },
+                  content: [
+                    {
+                      type: 'paragraph',
+                      attrs: { nodeId: 'paragraph' },
+                      content: [{ type: 'text', text: '結合セル' }],
+                    },
+                  ],
+                },
+              ],
+            },
+            { type: 'tableRow', attrs: { nodeId: 'row-2' } },
+          ],
+        },
+      ],
+    };
+    expect(() => validateDocumentData(document)).not.toThrow();
+  });
+
   it('未知schema versionを拒否する', () => {
     const document = {
       ...createDefaultDocument('report', idFactory()),
@@ -282,11 +322,11 @@ describe('validateDocumentData', () => {
     const table = document.children.find((node) => node.type === 'table');
     if (!table || table.type !== 'table') throw new Error('table expected');
 
-    const firstHeader = table.content[0].content[0];
+    const firstHeader = table.content[0].content![0];
     firstHeader.attrs.colspan = 2;
     firstHeader.attrs.colwidth = [120, 120];
-    table.content[1].content[0].attrs.colspan = 2;
-    table.content[1].content[0].attrs.borders = {
+    table.content[1].content![0].attrs.colspan = 2;
+    table.content[1].content![0].attrs.borders = {
       top: { color: '#0f172a', style: 'solid', width: 2 },
       right: null,
       bottom: { color: '#0f172a', style: 'dashed', width: 1 },
@@ -301,9 +341,9 @@ describe('validateDocumentData', () => {
     const table = document.children.find((node) => node.type === 'table');
     if (!table || table.type !== 'table') throw new Error('table expected');
 
-    const firstHeader = table.content[0].content[0];
+    const firstHeader = table.content[0].content![0];
     firstHeader.attrs.rowspan = 2;
-    table.content[0].content.push({
+    table.content[0].content!.push({
       type: 'tableHeader',
       attrs: { nodeId: 'second-header', align: 'left' },
       content: [
@@ -327,7 +367,7 @@ describe('validateDocumentData', () => {
     const document = comprehensiveDocument();
     const table = document.children.find((node) => node.type === 'table');
     if (!table || table.type !== 'table') throw new Error('table expected');
-    const cell = table.content[1].content[0];
+    const cell = table.content[1].content![0];
     (cell.attrs as Record<string, unknown>)[attribute] = value;
 
     expect(() => validateDocumentData(document)).toThrow(
@@ -339,7 +379,7 @@ describe('validateDocumentData', () => {
     const document = comprehensiveDocument();
     const table = document.children.find((node) => node.type === 'table');
     if (!table || table.type !== 'table') throw new Error('table expected');
-    table.content[0].content[0].attrs.colspan = 2;
+    table.content[0].content![0].attrs.colspan = 2;
 
     expect(() => validateDocumentData(document)).toThrow(
       DocumentValidationError,

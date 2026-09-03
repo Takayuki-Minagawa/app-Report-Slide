@@ -20,30 +20,38 @@ import { useAppPreferences } from '@/components/app-preferences';
 import { Button } from '@/components/ui/button';
 import {
   applyTableBorders,
+  hasIncompatibleMergeBorders,
+  mergeTableCellsPreservingBorders,
+  splitTableCellPreservingBorders,
   type TableBorderMode,
   type TableBorderPreset,
 } from '@/src/editor/table-commands';
 import type { TableBorderStyle, TableBorderWidth } from '@/src/document/table';
 
 function TableActionButton({
-  active = false,
+  active,
   children,
+  description,
   destructive = false,
+  disabled = false,
   label,
   onClick,
 }: {
   active?: boolean;
   children: ReactNode;
+  description?: string;
   destructive?: boolean;
+  disabled?: boolean;
   label: string;
   onClick: () => void;
 }) {
   return (
     <Button
-      aria-label={label}
+      aria-label={description ? `${label}: ${description}` : label}
       aria-pressed={active}
+      disabled={disabled}
       size="icon-sm"
-      title={label}
+      title={description ?? label}
       type="button"
       variant={destructive ? 'destructive' : active ? 'secondary' : 'ghost'}
       onMouseDown={(event) => event.preventDefault()}
@@ -70,13 +78,18 @@ function TableToolbarGroup({
 }
 
 function useTableActive(editor: Editor | null): boolean {
-  const [active, setActive] = useState(
-    () => editor?.isActive('table') ?? false,
-  );
+  const [state, setState] = useState(() => ({
+    active: editor?.isActive('table') ?? false,
+    revision: 0,
+  }));
 
   useEffect(() => {
     if (!editor) return;
-    const update = () => setActive(editor.isActive('table'));
+    const update = () =>
+      setState((current) => ({
+        active: editor.isActive('table'),
+        revision: current.revision + 1,
+      }));
     const refresh = window.setTimeout(update, 0);
     editor.on('selectionUpdate', update);
     editor.on('transaction', update);
@@ -87,7 +100,7 @@ function useTableActive(editor: Editor | null): boolean {
     };
   }, [editor]);
 
-  return active;
+  return state.active;
 }
 
 export function TableToolbar({ editor }: { editor: Editor | null }) {
@@ -99,6 +112,8 @@ export function TableToolbar({ editor }: { editor: Editor | null }) {
   const [borderWidth, setBorderWidth] = useState<TableBorderWidth>(1);
 
   if (!editor || !tableActive) return null;
+
+  const mergeBorderConflict = hasIncompatibleMergeBorders(editor);
 
   const run = (command: () => boolean) => {
     command();
@@ -167,14 +182,18 @@ export function TableToolbar({ editor }: { editor: Editor | null }) {
 
       <TableToolbarGroup label={copy.workspace.tableTools}>
         <TableActionButton
+          description={
+            mergeBorderConflict ? copy.workspace.mergeBorderConflict : undefined
+          }
+          disabled={mergeBorderConflict}
           label={copy.workspace.mergeCells}
-          onClick={() => run(() => editor.chain().focus().mergeCells().run())}
+          onClick={() => run(() => mergeTableCellsPreservingBorders(editor))}
         >
           <TableCellsMerge />
         </TableActionButton>
         <TableActionButton
           label={copy.workspace.splitCell}
-          onClick={() => run(() => editor.chain().focus().splitCell().run())}
+          onClick={() => run(() => splitTableCellPreservingBorders(editor))}
         >
           <TableCellsSplit />
         </TableActionButton>

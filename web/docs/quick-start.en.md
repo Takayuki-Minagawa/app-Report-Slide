@@ -17,7 +17,7 @@ KUMI is a browser application for editing and reviewing technical reports and sl
 
 ## 3. Edit tables in detail
 
-- Place the cursor in a table cell to reveal the table toolbar. You can add or remove rows and columns, toggle the first row as a header, and merge or split adjacent cells.
+- Place the cursor in a table cell to reveal the table toolbar. You can add or remove rows and columns, toggle the selected row as a header, and merge or split adjacent cells. If the same perimeter edge has different border settings across the selected cells, make them consistent before merging.
 - Choose all, outer, inner, or one edge to draw borders with a color, solid/dashed/dotted/double style, and width. Switch to **Erase borders** to remove only the selected edges.
 - Simple tables save as standard Markdown tables. Tables with merged cells, per-edge borders, or multiple paragraphs save as a lossless KUMI table block in Markdown. Do not alter that block in an external Markdown editor; also keep JSON or a project ZIP as the source of record.
 - Preview and Slide HTML exports preserve merged cells and per-edge borders.

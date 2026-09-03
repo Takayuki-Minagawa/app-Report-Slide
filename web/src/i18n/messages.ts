@@ -53,6 +53,7 @@ export interface UiMessages {
     addColumnAfter: string;
     deleteColumn: string;
     mergeCells: string;
+    mergeBorderConflict: string;
     splitCell: string;
     toggleHeaderRow: string;
     deleteTable: string;
@@ -274,6 +275,8 @@ export const messages: Record<AppLocale, UiMessages> = {
       addColumnAfter: '右に列を追加',
       deleteColumn: '列を削除',
       mergeCells: 'セルを結合',
+      mergeBorderConflict:
+        '選択範囲の外周罫線が異なります。罫線を統一してから結合してください。',
       splitCell: 'セルを分割',
       toggleHeaderRow: 'ヘッダー行を切り替え',
       deleteTable: '表を削除',
@@ -469,8 +472,8 @@ export const messages: Record<AppLocale, UiMessages> = {
       ],
       tableTitle: '3. 表を高度に編集する',
       tableSteps: [
-        '表のセル内にカーソルを置くと、表専用ツールバーが現れます。上／下の行、左／右の列を追加・削除し、先頭行をヘッダー行へ切り替えられます。',
-        '隣接する複数セルを選択して「セルを結合」を押します。結合済みセル内で「セルを分割」を押すと元のグリッドへ戻せます。',
+        '表のセル内にカーソルを置くと、表専用ツールバーが現れます。上／下の行、左／右の列を追加・削除し、選択中の行をヘッダー行へ切り替えられます。',
+        '隣接する複数セルを選択して「セルを結合」を押します。結合範囲の同じ外周辺で罫線設定が異なる場合は、設定を統一するまで結合できません。結合済みセル内で「セルを分割」を押すと元のグリッドへ戻せます。',
         '罫線では、全体・外側・内側・各辺を選び、色・実線／破線／点線／二重線・太さを指定して適用します。「罫線を消す」に切り替えると、同じ対象の線だけを消去できます。',
         '通常の表は標準Markdown表として保存されます。結合セル、個別罫線、複数段落を含む表は、KUMIの可逆表ブロックとしてMarkdownに保存されます。外部のMarkdown編集器でそのブロックを変更せず、JSONまたはプロジェクトZIPも原本として保存してください。',
       ],
@@ -540,6 +543,8 @@ export const messages: Record<AppLocale, UiMessages> = {
       addColumnAfter: 'Add column after',
       deleteColumn: 'Delete column',
       mergeCells: 'Merge cells',
+      mergeBorderConflict:
+        'The selected perimeter borders differ. Make them consistent before merging.',
       splitCell: 'Split cell',
       toggleHeaderRow: 'Toggle header row',
       deleteTable: 'Delete table',
@@ -736,8 +741,8 @@ export const messages: Record<AppLocale, UiMessages> = {
       ],
       tableTitle: '3. Edit tables in detail',
       tableSteps: [
-        'Place the cursor in a table cell to reveal the table toolbar. Add or remove rows above/below and columns before/after, and toggle the first row as a header row.',
-        'Select adjacent cells and choose “Merge cells”. In a merged cell, choose “Split cell” to restore its grid.',
+        'Place the cursor in a table cell to reveal the table toolbar. Add or remove rows above/below and columns before/after, and toggle the selected row as a header row.',
+        'Select adjacent cells and choose “Merge cells”. If the same perimeter edge has different border settings across the selected cells, make them consistent before merging. In a merged cell, choose “Split cell” to restore its grid.',
         'For borders, choose all, outer, inner, or a single edge; then set the color, solid/dashed/dotted/double style, and width. Switch to “Erase borders” to remove only the same targeted edges.',
         'Simple tables save as standard Markdown tables. Tables with merged cells, per-edge borders, or multiple paragraphs save as a lossless KUMI table block in Markdown. Do not alter that block in an external Markdown editor; also keep JSON or a project ZIP as the source of record.',
       ],

@@ -230,15 +230,15 @@ describe('Markdown round-trip', () => {
     table.attrs.label = 'table:advanced';
     table.attrs.caption = '可逆表';
     const header = table.content[0];
-    const merged = header.content[0];
-    header.content.splice(1, 1);
+    const merged = header.content![0];
+    header.content!.splice(1, 1);
     merged.attrs.colspan = 2;
     merged.attrs.colwidth = [120, 120];
     merged.attrs.borders = {
       top: { color: '#0f766e', style: 'double', width: 2 },
       left: null,
     };
-    const bodyCell = table.content[1].content[0];
+    const bodyCell = table.content[1].content![0];
     bodyCell.content.push({
       type: 'paragraph',
       attrs: { nodeId: 'advanced-table-paragraph' },
@@ -537,7 +537,7 @@ describe('Markdown round-trip', () => {
     }).document;
     const table = document.children.find((node) => node.type === 'table');
     if (!table || table.type !== 'table') throw new Error('table expected');
-    table.content[0].content = table.content[0].content.map((cell) => ({
+    table.content[0].content = table.content[0].content!.map((cell) => ({
       ...cell,
       type: 'tableCell',
     }));
@@ -556,7 +556,7 @@ describe('Markdown round-trip', () => {
     }).document;
     const table = document.children.find((node) => node.type === 'table');
     if (!table || table.type !== 'table') throw new Error('table expected');
-    const cell = table.content[1].content[0];
+    const cell = table.content[1].content![0];
     if (cell.type !== 'tableCell') throw new Error('tableCell expected');
     cell.content.push({
       type: 'paragraph',

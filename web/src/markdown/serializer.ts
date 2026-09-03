@@ -234,13 +234,15 @@ function tableAlignment(cell: TableHeaderNode): string {
 
 function canUsePipeTable(table: TableNode): boolean {
   const firstRow = table.content[0];
-  if (!firstRow || firstRow.content.length === 0) return false;
+  const firstCells = firstRow?.content;
+  if (!firstCells || firstCells.length === 0) return false;
 
-  const columnCount = firstRow.content.length;
+  const columnCount = firstCells.length;
   for (const [rowIndex, row] of table.content.entries()) {
+    const cells = row.content ?? [];
     if (
-      row.content.length !== columnCount ||
-      row.content.some(
+      cells.length !== columnCount ||
+      cells.some(
         (cell) =>
           cell.type !== (rowIndex === 0 ? 'tableHeader' : 'tableCell') ||
           (cell.attrs.colspan ?? 1) !== 1 ||
@@ -273,17 +275,18 @@ function serializeAdvancedTable(table: TableNode): string {
 function serializeTable(table: TableNode): string {
   if (!canUsePipeTable(table)) return serializeAdvancedTable(table);
   const firstRow = table.content[0]!;
+  const firstCells = firstRow.content ?? [];
 
-  const headers = firstRow.content.map((cell) =>
+  const headers = firstCells.map((cell) =>
     tableCellText(cell as TableHeaderNode),
   );
-  const alignments = firstRow.content.map((cell) =>
+  const alignments = firstCells.map((cell) =>
     tableAlignment(cell as TableHeaderNode),
   );
   const rows = table.content
     .slice(1)
     .map((row) =>
-      row.content.map((cell) => tableCellText(cell as TableCellNode)),
+      (row.content ?? []).map((cell) => tableCellText(cell as TableCellNode)),
     );
 
   return [
@@ -352,7 +355,9 @@ function serializeNode(node: DocumentNode): string {
     case 'table':
       return serializeTable(node);
     case 'tableRow':
-      return node.content.map((cell) => tableCellText(cell)).join(' | ');
+      return (node.content ?? [])
+        .map((cell) => tableCellText(cell))
+        .join(' | ');
     case 'tableHeader':
     case 'tableCell':
       return tableCellText(node);
