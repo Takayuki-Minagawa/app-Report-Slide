@@ -13,6 +13,14 @@ function renderWorkspace() {
 }
 
 describe('EditorWorkspace', () => {
+  it('opens the hidden side panels from header controls', async () => {
+    renderWorkspace();
+    expect(await screen.findByText('REPORT')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '文書パネルを開く' }));
+    expect(await screen.findByRole('dialog')).toHaveTextContent('DOCUMENT');
+  });
+
   it('previews a relative image named constructor without treating it as an object property', async () => {
     renderWorkspace();
     await screen.findByText('REPORT');

@@ -81,5 +81,5 @@ Image paths in a combined Markdown/JSON export are relative to the ZIP root. To 
 - A ZIP may be up to 60MiB; total expanded content is limited to 50MiB. Each source or manifest is limited to 5MiB and each image to 20MiB.
 - Absolute or escaping paths, duplicate filenames including case-only collisions, Windows reserved names, unsafe paths and unrelated attachments are rejected.
 - Apply or discard Markdown drafts before switching chapters. Edits during a ZIP operation invalidate its result; save again after editing.
-- There is no cloud storage or autosave. The downloaded ZIP is the resumable source. Save regularly rather than relying on the browser's unload warning.
+- There is no cloud storage. Unfinished work is temporarily kept as a device-local recovery copy, but the downloaded ZIP remains the resumable source. Save regularly rather than relying only on an unload warning or recovery copy.
 - PDF, Report HTML, automatic A4 typesetting, direct filesystem writes and collaboration are outside this feature.

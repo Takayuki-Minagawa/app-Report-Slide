@@ -143,6 +143,11 @@
   box-shadow: 0 1px 0 rgb(15 23 42 / 4%);
 }
 
+.workspace-header-navigator-toggle,
+.workspace-header-properties-toggle {
+  display: none;
+}
+
 .workspace-grid {
   display: grid;
   min-height: 0;
@@ -156,6 +161,17 @@
 
 .workspace-properties {
   @apply flex min-h-0 flex-col border-l bg-card;
+}
+
+.workspace-side-sheet {
+  display: flex !important;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+}
+
+.workspace-sheet {
+  width: min(24rem, calc(100vw - 2rem));
 }
 
 .workspace-center {
@@ -468,6 +484,10 @@
   .workspace-properties {
     display: none;
   }
+
+  .workspace-header-properties-toggle {
+    display: inline-flex;
+  }
 }
 
 @media (max-width: 820px) {
@@ -477,5 +497,17 @@
 
   .workspace-navigator {
     display: none;
+  }
+
+  .workspace-header-navigator-toggle {
+    display: inline-flex;
+  }
+
+  .workspace-brand {
+    min-width: auto;
+  }
+
+  .workspace-header-actions {
+    min-width: 0;
   }
 }

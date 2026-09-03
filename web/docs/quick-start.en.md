@@ -12,6 +12,7 @@ KUMI is a browser application for editing and reviewing technical reports and sl
 
 - Edit text directly in the **Visual editor**. The formatting toolbar adds headings, lists, quotes, tables, equations, and page or slide breaks.
 - Use the **Markdown** tab to edit source. Choose **Apply Markdown**, or save **Markdown/JSON** from the header when you finish. While a Markdown draft is unapplied, KUMI prevents a return to the visual editor to avoid conflicting changes.
+- Unfinished content, chapter structure, unapplied Markdown, and imported images are temporarily kept as a recovery copy in this browser. When you return, choose whether to restore or remove it. This is device-local help only, so keep Markdown, JSON, or a project ZIP as the source of record.
 - Select an element to configure its theme, table of contents, numbering, reference label, caption, and an image's width, alignment, or alternative text in **Properties**.
 
 ## 3. Review and save
@@ -36,6 +37,7 @@ HTML is for viewing and presenting; it cannot be re-imported into KUMI. Unapplie
 - Use the moon/sun button to switch light and dark mode. The workspace changes appearance, while the document canvas stays white for readability.
 - Use **EN** or **日本語** to change the application interface. Your document is never translated automatically.
 - Open **Guide** to view the same essential instructions inside the application.
+- On a narrower screen, use the header's Document panel and Properties buttons to open the document/chapter list and settings that normally appear at the sides.
 
 ## 5. Split a long report into chapters
 
@@ -47,7 +49,7 @@ HTML is for viewing and presenting; it cannot be re-imported into KUMI. Unapplie
 
 **Chapter Markdown/JSON** in the header saves only the active chapter. Combined exports produce one document containing the enabled chapters. Neither replaces a project ZIP or clears the project's unsaved indicator.
 
-Apply or discard Markdown and return to the visual editor before changing the chapter structure. Structural changes are outside Undo; switching or deleting chapters resets the body Undo history. **There is no autosave. Save a ZIP before closing the tab.** See [Chapter projects](./report-projects.en.md) for details.
+Apply or discard Markdown and return to the visual editor before changing the chapter structure. Structural changes are outside Undo; switching or deleting chapters resets the body Undo history. A device-local recovery copy can help resume unfinished work, but **save a ZIP before closing the tab**. See [Chapter projects](./report-projects.en.md) for details.
 
 ## Using the published version
 

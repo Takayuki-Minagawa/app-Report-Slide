@@ -58,6 +58,7 @@ function nodeIcon(type: string) {
 
 interface WorkspaceNavigatorProps {
   projectPanel?: ReactNode;
+  overlay?: boolean;
   outline: readonly DocumentNode[];
   selectedNodeId?: string;
   documentWriteLocked: boolean;
@@ -68,6 +69,7 @@ interface WorkspaceNavigatorProps {
 
 export function WorkspaceNavigator({
   projectPanel,
+  overlay = false,
   outline,
   selectedNodeId,
   documentWriteLocked,
@@ -78,7 +80,9 @@ export function WorkspaceNavigator({
   const { copy } = useAppPreferences();
   const markdownInput = useRef<HTMLInputElement>(null);
   return (
-    <aside className="workspace-navigator">
+    <aside
+      className={`workspace-navigator${overlay ? ' workspace-side-sheet' : ''}`}
+    >
       <input
         ref={markdownInput}
         className="sr-only"

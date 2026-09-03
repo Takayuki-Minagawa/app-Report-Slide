@@ -77,6 +77,7 @@ interface ProjectWorkspaceBridge {
   setStatus: Dispatch<SetStateAction<WorkspaceStatus>>;
   showEditor: () => void;
   markDocumentSaved: () => void;
+  clearRecovery: () => void;
   confirmReplacement: () => boolean;
   copy: ProjectMessages;
 }
@@ -95,6 +96,7 @@ export function useProjectActions(bridge: ProjectWorkspaceBridge) {
     setStatus,
     showEditor,
     markDocumentSaved,
+    clearRecovery,
     confirmReplacement,
     copy,
   } = bridge;
@@ -174,6 +176,7 @@ export function useProjectActions(bridge: ProjectWorkspaceBridge) {
         activeChapterId: chapter.id,
         dirty: false,
       });
+      clearRecovery();
       pendingAssets = undefined;
       showEditor();
     } catch (error) {
