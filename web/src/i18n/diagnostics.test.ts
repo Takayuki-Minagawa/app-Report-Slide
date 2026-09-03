@@ -8,6 +8,19 @@ import {
 } from './diagnostics';
 
 describe('diagnostics localization', () => {
+  it.each(['constructor', '__proto__', 'toString'])(
+    'keeps an unknown diagnostic named %s as text',
+    (value) => {
+      expect(localizeDiagnosticMessage(value, 'en')).toBe(value);
+      expect(
+        localizeMarkdownDiagnostic(
+          { code: value, message: 'Unknown diagnostic' },
+          'en',
+        ),
+      ).toBe('Unknown diagnostic');
+    },
+  );
+
   it('translates parser diagnostics by stable code', () => {
     expect(
       localizeMarkdownDiagnostic(

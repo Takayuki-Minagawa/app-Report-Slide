@@ -9,8 +9,7 @@ import {
 } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
 import { useAppPreferences } from '@/components/app-preferences';
-import type { DocumentNode } from '@/src/document/model';
-import { labelPattern } from '@/src/document/semantics';
+import { labelPattern, type SemanticNode } from '@/src/document/semantics';
 
 /** Parent keys this form by node ID + attributes, resetting selection/Undo drafts safely. */
 export function SemanticProperties({
@@ -18,7 +17,7 @@ export function SemanticProperties({
   disabled,
   onApply,
 }: {
-  node: DocumentNode;
+  node: SemanticNode;
   disabled: boolean;
   onApply: (nodeId: string, attrs: Record<string, unknown>) => void;
 }) {

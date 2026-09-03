@@ -11,12 +11,16 @@ import {
 
 import { messages, type AppLocale, type UiMessages } from '@/src/i18n/messages';
 
-export type AppTheme = 'light' | 'dark';
-
-const defaultLocale: AppLocale = 'ja';
-const defaultTheme: AppTheme = 'light';
-const localeStorageKey = 'kumi.locale';
-const themeStorageKey = 'kumi.theme';
+import {
+  defaultLocale,
+  defaultTheme,
+  localeStorageKey,
+  themeStorageKey,
+  normalizeLocale,
+  normalizeTheme,
+  type AppTheme,
+} from '@/src/preferences/settings';
+export type { AppTheme } from '@/src/preferences/settings';
 
 interface AppPreferences {
   locale: AppLocale;
@@ -48,13 +52,11 @@ function persistValue(key: string, value: string): void {
 }
 
 function storedLocale(): AppLocale {
-  const value = storedValue(localeStorageKey);
-  return value === 'en' ? 'en' : defaultLocale;
+  return normalizeLocale(storedValue(localeStorageKey));
 }
 
 function storedTheme(): AppTheme {
-  const value = storedValue(themeStorageKey);
-  return value === 'dark' ? 'dark' : defaultTheme;
+  return normalizeTheme(storedValue(themeStorageKey));
 }
 
 function applyDocumentPreferences(locale: AppLocale, theme: AppTheme): void {

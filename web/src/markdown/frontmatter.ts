@@ -1,4 +1,8 @@
 import { parseDocument } from 'yaml';
+import {
+  booleanMetadataKeys,
+  stringMetadataKeys,
+} from '@/src/document/metadata';
 
 import type {
   DocumentMetadata,
@@ -203,25 +207,14 @@ export function parseFrontMatter(
   }
 
   const { type: _discardedType, ...metadata } = metadataRecord;
-  const stringKeys = [
-    'title',
-    'subtitle',
-    'author',
-    'date',
-    'paper',
-    'orientation',
-    'theme',
-    'aspect_ratio',
-  ];
-  const booleanKeys = ['toc', 'number_sections', 'slide_number'];
   const invalidEntry = [
-    ...stringKeys
+    ...[...stringMetadataKeys]
       .filter(
         (key) =>
           metadata[key] !== undefined && typeof metadata[key] !== 'string',
       )
       .map((key) => `${key}には文字列が必要です`),
-    ...booleanKeys
+    ...[...booleanMetadataKeys]
       .filter(
         (key) =>
           metadata[key] !== undefined && typeof metadata[key] !== 'boolean',

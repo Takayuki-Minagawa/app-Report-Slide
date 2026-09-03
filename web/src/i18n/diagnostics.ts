@@ -4,46 +4,66 @@ import type { AppLocale } from './messages';
 
 const japaneseCharacter = /[ぁ-んァ-ン一-龠]/;
 
-const diagnosticByCode: Record<string, string> = {
-  'frontmatter.missing':
-    'No Front Matter was found; the fallback document type was used.',
-  'frontmatter.unclosed': 'A closing Front Matter delimiter (---) is required.',
-  'frontmatter.invalid-yaml':
-    'Front Matter YAML is invalid. Check its syntax and values.',
-  'frontmatter.unsafe': 'Front Matter could not be safely read.',
-  'frontmatter.not-object':
-    'Front Matter must be a mapping of keys and values.',
-  'frontmatter.unsupported-value':
-    'Front Matter contains an unsupported value.',
-  'frontmatter.type-missing':
-    'The document type is missing; the fallback document type was used.',
-  'frontmatter.type-invalid': 'The document type must be report or slide.',
-  'frontmatter.metadata-type-invalid':
-    'A Front Matter value has an invalid type.',
-  'markdown.image-url-unsafe': 'An unsafe image URL was rejected.',
-  'markdown.link-url-unsafe': 'An unsafe link URL was rejected.',
-  'markdown.attributes-invalid':
-    'An element attribute line is invalid. Check its syntax and values.',
-  'markdown.break-invalid':
-    'A page or slide break must be a top-level ::: pagebreak or ::: slidebreak block.',
-  'markdown.token-ignored': 'An unsupported Markdown element was ignored.',
-};
+const diagnosticByCode = new Map<string, string>(
+  Object.entries({
+    'frontmatter.missing':
+      'No Front Matter was found; the fallback document type was used.',
+    'frontmatter.unclosed':
+      'A closing Front Matter delimiter (---) is required.',
+    'frontmatter.invalid-yaml':
+      'Front Matter YAML is invalid. Check its syntax and values.',
+    'frontmatter.unsafe': 'Front Matter could not be safely read.',
+    'frontmatter.not-object':
+      'Front Matter must be a mapping of keys and values.',
+    'frontmatter.unsupported-value':
+      'Front Matter contains an unsupported value.',
+    'frontmatter.type-missing':
+      'The document type is missing; the fallback document type was used.',
+    'frontmatter.type-invalid': 'The document type must be report or slide.',
+    'frontmatter.metadata-type-invalid':
+      'A Front Matter value has an invalid type.',
+    'markdown.image-url-unsafe': 'An unsafe image URL was rejected.',
+    'markdown.link-url-unsafe': 'An unsafe link URL was rejected.',
+    'markdown.attributes-invalid':
+      'An element attribute line is invalid. Check its syntax and values.',
+    'markdown.break-invalid':
+      'A page or slide break must be a top-level ::: pagebreak or ::: slidebreak block.',
+    'markdown.token-ignored': 'An unsupported Markdown element was ignored.',
+    'markdown.inline-math-delimiter':
+      'Escape dollar signs inside inline math as \\$.',
+    'markdown.block-math-delimiter':
+      'A block equation cannot contain a closing $$ delimiter line.',
+    'markdown.table-multiple-blocks':
+      'Markdown tables require one paragraph per cell.',
+    'markdown.table-hard-break':
+      'Markdown table cells cannot contain hard breaks.',
+    'markdown.table-empty': 'Markdown tables require at least one row.',
+    'markdown.table-header-required':
+      'The first row of a Markdown table must contain header cells.',
+    'markdown.table-column-mismatch':
+      'Every row of a Markdown table must have the same number of cells.',
+    'markdown.table-body-cell-required':
+      'Markdown table body rows must contain ordinary cells, not headers.',
+  }),
+);
 
-const exactMessages: Record<string, string> = {
-  文書データの形式が正しくありません: 'The document data is invalid.',
-  Markdownを安全に読み込めませんでした: 'Markdown could not be safely read.',
-  'Front Matterが閉じられていません': 'Front Matter is not closed.',
-  'Front MatterのYAMLが正しくありません': 'Front Matter YAML is invalid.',
-  'Front Matterを安全に読み込めませんでした':
-    'Front Matter could not be safely read.',
-  'Front Matterはキーと値で記述してください':
-    'Front Matter must contain keys and values.',
-  'Front Matterに対応していない値があります':
-    'Front Matter contains an unsupported value.',
-  文書種類が正しくありません: 'The document type is invalid.',
-  'Front Matterの値の型が正しくありません':
-    'A Front Matter value has an invalid type.',
-};
+const exactMessages = new Map<string, string>(
+  Object.entries({
+    文書データの形式が正しくありません: 'The document data is invalid.',
+    Markdownを安全に読み込めませんでした: 'Markdown could not be safely read.',
+    'Front Matterが閉じられていません': 'Front Matter is not closed.',
+    'Front MatterのYAMLが正しくありません': 'Front Matter YAML is invalid.',
+    'Front Matterを安全に読み込めませんでした':
+      'Front Matter could not be safely read.',
+    'Front Matterはキーと値で記述してください':
+      'Front Matter must contain keys and values.',
+    'Front Matterに対応していない値があります':
+      'Front Matter contains an unsupported value.',
+    文書種類が正しくありません: 'The document type is invalid.',
+    'Front Matterの値の型が正しくありません':
+      'A Front Matter value has an invalid type.',
+  }),
+);
 
 export function localizeDiagnosticMessage(
   message: string,
@@ -60,7 +80,8 @@ export function localizeDiagnosticMessage(
   if (unresolved)
     return `The reference "${unresolved[1]}" is missing or duplicated.`;
 
-  if (exactMessages[message]) return exactMessages[message];
+  const exact = exactMessages.get(message);
+  if (exact) return exact;
   return japaneseCharacter.test(message)
     ? 'A document validation issue was found. Check the source and try again.'
     : message;
@@ -72,7 +93,7 @@ export function localizeMarkdownDiagnostic(
 ): string {
   if (locale === 'ja') return diagnostic.message;
   return (
-    diagnosticByCode[diagnostic.code] ??
+    diagnosticByCode.get(diagnostic.code) ??
     localizeDiagnosticMessage(diagnostic.message, locale)
   );
 }

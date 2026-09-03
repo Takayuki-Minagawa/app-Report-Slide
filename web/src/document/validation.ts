@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { isSafeResourceUrl } from '@/src/security/resource-url';
 
 import type { DocumentData } from './model';
+import { booleanMetadataKeys, stringMetadataKeys } from './metadata';
 import { labelPattern, semanticTypes } from './semantics';
 
 const documentEnvelopeSchema = z
@@ -14,17 +15,6 @@ const documentEnvelopeSchema = z
   })
   .strict();
 
-const stringMetadataKeys = new Set([
-  'title',
-  'subtitle',
-  'author',
-  'date',
-  'paper',
-  'orientation',
-  'theme',
-  'aspect_ratio',
-]);
-const booleanMetadataKeys = new Set(['toc', 'number_sections', 'slide_number']);
 const blockTypes = new Set([
   'paragraph',
   'heading',

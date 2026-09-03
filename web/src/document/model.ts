@@ -1,3 +1,5 @@
+import { resolveDocumentTheme } from './metadata';
+
 export type DocumentType = 'report' | 'slide';
 
 export type JsonValue =
@@ -231,7 +233,7 @@ export function createDefaultDocument(
     type,
     metadata: {
       title: type === 'report' ? '無題のレポート' : '無題のスライド',
-      theme: type === 'report' ? 'latex' : 'beamer-simple',
+      theme: resolveDocumentTheme(type),
     },
     children: [
       {

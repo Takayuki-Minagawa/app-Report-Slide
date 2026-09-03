@@ -11,7 +11,10 @@ import { Plugin } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 
 import { createNodeId } from '@/src/document/model';
-import { safeResourceUrl } from '@/src/security/resource-url';
+import {
+  safeResourceUrl,
+  resolveSafeImageUrl,
+} from '@/src/security/resource-url';
 
 export interface MathSelection {
   nodeId?: string;
@@ -223,11 +226,7 @@ function createFigureExtension(resolveImageUrl: (source: string) => string) {
         align === 'left' || align === 'right' || align === 'center'
           ? align
           : 'center';
-      const safeSource =
-        typeof src === 'string' ? safeResourceUrl(src, 'image') : undefined;
-      const resolvedSource = safeSource
-        ? resolveImageUrl(safeSource)
-        : undefined;
+      const resolvedSource = resolveSafeImageUrl(src, resolveImageUrl);
 
       return [
         'img',
@@ -279,11 +278,7 @@ function createInlineImageExtension(
 
     renderHTML({ HTMLAttributes }) {
       const { nodeId, src, ...imageAttributes } = HTMLAttributes;
-      const safeSource =
-        typeof src === 'string' ? safeResourceUrl(src, 'image') : undefined;
-      const resolvedSource = safeSource
-        ? resolveImageUrl(safeSource)
-        : undefined;
+      const resolvedSource = resolveSafeImageUrl(src, resolveImageUrl);
       return [
         'img',
         mergeAttributes(this.options.HTMLAttributes, imageAttributes, {

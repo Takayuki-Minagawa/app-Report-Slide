@@ -27,6 +27,7 @@ import { createMarkdownIt } from './dialect';
 import { MarkdownImportError, type MarkdownDiagnostic } from './diagnostics';
 import { parseFrontMatter } from './frontmatter';
 import { parseBlockAttributes } from './attributes';
+import { inlineImageMarker, emptyParagraphMarker } from './syntax';
 
 type MarkdownToken = ReturnType<
   ReturnType<typeof createMarkdownIt>['parse']
@@ -39,9 +40,6 @@ interface ParseCursor {
   diagnostics: MarkdownDiagnostic[];
   lineOffset: number;
 }
-
-const inlineImageMarker = '{.kumi-inline}';
-const emptyParagraphMarker = '{.kumi-empty}';
 
 export interface ParseMarkdownOptions {
   fallbackType?: 'report' | 'slide';

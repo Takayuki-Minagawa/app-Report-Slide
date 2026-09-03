@@ -64,7 +64,7 @@ GitHub Actionsでも同じゲートを実行します。
 
 ## 設計
 
-編集本文の唯一の状態源はTiptap／ProseMirror JSONです。React stateは文書種別とFront Matterを含むenvelopeを保持し、保存時に両者から `DocumentData` を作ります。
+ビジュアル編集の本文はTiptap／ProseMirror JSONで管理します。React stateは文書種別・Front Matterとプレビュー用の同期スナップショットを保持し、保存時にエディタの最新本文から `DocumentData` を作ります。未適用のMarkdown原稿は別の下書きとして保持します。
 
 ```text
 Markdown
@@ -76,6 +76,16 @@ Tiptap editor
 ```
 
 Runtime validatorはNode型、必須属性、親子関係、既知metadata型、URL、`nodeId`の非空・一意性を確認します。Markdownで表現できない表構造は黙って欠落させず、typed errorとして保存を止めます。
+
+実装の責務は次のように分けています。
+
+- `web/components/editor/`: 画面構成、文書操作フック、選択・属性編集フック、および各ペインの表示
+- `web/src/workspace/`: ファイル入出力、ローカル画像URLの管理、言語切り替えに追従する操作メッセージ
+- `web/src/document/`: 文書モデル、検証、メタデータ定義、文書走査、番号・参照の分析
+- `web/src/markdown/`: 共通の記法定義、読み込み、無損失で保存できる形式への変換
+- `web/src/security/` / `web/src/preferences/`: 編集画面とプレビューで共通のURL検証、表示設定
+
+読み込み待ちの間に編集・新規作成・別ファイルの読み込みが行われた場合、古い読み込み結果は破棄します。画像の一時URLは文書データとは別に管理し、文書の切り替えや破棄に合わせて解放します。
 
 空段落、段落末の強制改行、画像だけのinline paragraphを無損失で往復するため、canonical Markdownでは予約マーカー `{.kumi-empty}`、`{.kumi-br}`、`{.kumi-inline}` を使用します。
 
