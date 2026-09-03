@@ -180,7 +180,7 @@ describe('standalone slide HTML', () => {
       'slide_number: false\n',
     );
     const table = source.children.find((node) => node.type === 'table')!;
-    table.content[1].content[0].content.push({
+    table.content[1].content![0].content.push({
       type: 'paragraph',
       attrs: { nodeId: 'second-cell-paragraph' },
       content: [{ type: 'text', text: 'Second paragraph' }],
@@ -196,5 +196,54 @@ describe('standalone slide HTML', () => {
     expect(result.querySelector('td p + p')?.textContent).toBe(
       'Second paragraph',
     );
+  });
+
+  it('keeps merged cells and custom borders in standalone HTML', async () => {
+    const source = slides('| A | B | C |\n| --- | --- | --- |\n| 1 | 2 | 3 |');
+    const table = source.children.find((node) => node.type === 'table');
+    if (!table || table.type !== 'table') throw new Error('table expected');
+
+    const merged = table.content[0].content![0];
+    table.content[0].content!.splice(1, 1);
+    merged.attrs.colspan = 2;
+    merged.attrs.rowspan = 2;
+    merged.attrs.borders = {
+      top: { color: '#0f766e', style: 'double', width: 2 },
+      right: null,
+    };
+    table.content[1].content!.splice(0, 2);
+
+    const result = readHtml(
+      (await exportSlideHtml(source, new Map(), 'ja')).html,
+    );
+    const cell = result.querySelector('th') as HTMLTableCellElement;
+
+    expect(cell.colSpan).toBe(2);
+    expect(cell.rowSpan).toBe(2);
+    expect(cell.style.borderTop).toContain('double');
+    expect(cell.style.borderTop).toContain('rgb(15, 118, 110)');
+    expect(cell.style.borderRightColor).toBe('transparent');
+    expect(result.querySelectorAll('td')).toHaveLength(1);
+  });
+
+  it('renders a table row that is completely covered by a row-spanning cell', async () => {
+    const source = slides('| A | B |\n| --- | --- |\n| 1 | 2 |');
+    const table = source.children.find((node) => node.type === 'table');
+    if (!table || table.type !== 'table') throw new Error('table expected');
+
+    const merged = table.content[0].content![0];
+    table.content[0].content!.splice(1, 1);
+    merged.attrs.colspan = 2;
+    merged.attrs.rowspan = 2;
+    table.content[1].content!.splice(0, 2);
+    delete (table.content[1] as unknown as Record<string, unknown>).content;
+
+    const result = readHtml(
+      (await exportSlideHtml(source, new Map(), 'ja')).html,
+    );
+    const cell = result.querySelector('th') as HTMLTableCellElement;
+    expect(cell.colSpan).toBe(2);
+    expect(cell.rowSpan).toBe(2);
+    expect(result.querySelectorAll('tr')).toHaveLength(2);
   });
 });

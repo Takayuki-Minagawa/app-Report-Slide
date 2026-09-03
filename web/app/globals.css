@@ -242,6 +242,48 @@
   @apply flex h-10 shrink-0 items-center gap-0.5 border-b bg-card px-3;
 }
 
+.table-toolbar {
+  @apply flex min-h-11 shrink-0 items-center gap-2 overflow-x-auto border-b bg-card px-3 py-1;
+}
+
+.table-toolbar-group {
+  @apply flex shrink-0 items-center gap-1;
+}
+
+.table-toolbar-group + .table-toolbar-group {
+  @apply border-l pl-2;
+}
+
+.table-toolbar-label {
+  @apply hidden text-[10px] font-semibold text-muted-foreground;
+}
+
+.table-toolbar-actions {
+  @apply flex items-center gap-0.5;
+}
+
+.table-toolbar-color {
+  @apply flex size-7 shrink-0 overflow-hidden rounded-[min(var(--radius-md),12px)] border border-input bg-background p-0.5;
+}
+
+.table-toolbar-color input {
+  @apply size-full cursor-pointer border-0 bg-transparent p-0;
+}
+
+.table-toolbar-select {
+  @apply h-7 max-w-20 rounded-[min(var(--radius-md),10px)] border border-input bg-background px-1 text-[10px] text-foreground;
+}
+
+.table-toolbar-width {
+  width: 58px;
+}
+
+@media (min-width: 1280px) {
+  .table-toolbar-label {
+    display: inline;
+  }
+}
+
 .editor-stage,
 .preview-stage {
   @apply mx-auto flex min-h-full w-full justify-center px-7 py-8;

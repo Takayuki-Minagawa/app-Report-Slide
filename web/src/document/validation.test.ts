@@ -136,6 +136,46 @@ describe('validateDocumentData', () => {
     expect(validateDocumentData(document)).toBe(document);
   });
 
+  it('rowspanで完全に覆われた表行を受け入れる', () => {
+    const document = {
+      schemaVersion: 2,
+      type: 'report',
+      metadata: {},
+      children: [
+        {
+          type: 'table',
+          attrs: { nodeId: 'table' },
+          content: [
+            {
+              type: 'tableRow',
+              attrs: { nodeId: 'row-1' },
+              content: [
+                {
+                  type: 'tableCell',
+                  attrs: {
+                    nodeId: 'cell',
+                    align: 'left',
+                    colspan: 1,
+                    rowspan: 2,
+                  },
+                  content: [
+                    {
+                      type: 'paragraph',
+                      attrs: { nodeId: 'paragraph' },
+                      content: [{ type: 'text', text: '結合セル' }],
+                    },
+                  ],
+                },
+              ],
+            },
+            { type: 'tableRow', attrs: { nodeId: 'row-2' } },
+          ],
+        },
+      ],
+    };
+    expect(() => validateDocumentData(document)).not.toThrow();
+  });
+
   it('未知schema versionを拒否する', () => {
     const document = {
       ...createDefaultDocument('report', idFactory()),
@@ -277,16 +317,69 @@ describe('validateDocumentData', () => {
     );
   });
 
-  it.each([
-    ['colspan', 2],
-    ['rowspan', 2],
-    ['colwidth', [120]],
-  ])('Markdownで表現できない表属性%sを拒否する', (attribute, value) => {
+  it('結合セル、列幅、個別罫線を含む整合した表を受け入れる', () => {
     const document = comprehensiveDocument();
     const table = document.children.find((node) => node.type === 'table');
     if (!table || table.type !== 'table') throw new Error('table expected');
-    const cell = table.content[1].content[0];
+
+    const firstHeader = table.content[0].content![0];
+    firstHeader.attrs.colspan = 2;
+    firstHeader.attrs.colwidth = [120, 120];
+    table.content[1].content![0].attrs.colspan = 2;
+    table.content[1].content![0].attrs.borders = {
+      top: { color: '#0f172a', style: 'solid', width: 2 },
+      right: null,
+      bottom: { color: '#0f172a', style: 'dashed', width: 1 },
+      left: null,
+    };
+
+    expect(validateDocumentData(document)).toBe(document);
+  });
+
+  it('rowspanを含む整合した表を受け入れる', () => {
+    const document = comprehensiveDocument();
+    const table = document.children.find((node) => node.type === 'table');
+    if (!table || table.type !== 'table') throw new Error('table expected');
+
+    const firstHeader = table.content[0].content![0];
+    firstHeader.attrs.rowspan = 2;
+    table.content[0].content!.push({
+      type: 'tableHeader',
+      attrs: { nodeId: 'second-header', align: 'left' },
+      content: [
+        {
+          type: 'paragraph',
+          attrs: { nodeId: 'second-header-content' },
+          content: [{ type: 'text', text: '補助列' }],
+        },
+      ],
+    });
+
+    expect(validateDocumentData(document)).toBe(document);
+  });
+
+  it.each([
+    ['colspan', 0],
+    ['rowspan', 101],
+    ['colwidth', [120, 120]],
+    ['borders', { top: { color: 'red', style: 'solid', width: 1 } }],
+  ])('不正な表属性%sを拒否する', (attribute, value) => {
+    const document = comprehensiveDocument();
+    const table = document.children.find((node) => node.type === 'table');
+    if (!table || table.type !== 'table') throw new Error('table expected');
+    const cell = table.content[1].content![0];
     (cell.attrs as Record<string, unknown>)[attribute] = value;
+
+    expect(() => validateDocumentData(document)).toThrow(
+      DocumentValidationError,
+    );
+  });
+
+  it('結合セルによって列数が揃わない表を拒否する', () => {
+    const document = comprehensiveDocument();
+    const table = document.children.find((node) => node.type === 'table');
+    if (!table || table.type !== 'table') throw new Error('table expected');
+    table.content[0].content![0].attrs.colspan = 2;
 
     expect(() => validateDocumentData(document)).toThrow(
       DocumentValidationError,

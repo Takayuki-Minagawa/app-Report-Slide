@@ -15,11 +15,11 @@ GitHub Pagesを有効にすると、[公開版](https://takayuki-minagawa.github
 ## 主な機能
 
 - Report／SlideのYAML Front Matter判定
-- Tiptapによる見出し、段落、リスト、引用、コード、画像、表の編集
+- Tiptapによる見出し、段落、リスト、引用、コード、画像、表の編集（セル結合・分割、行列の追加／削除、ヘッダー行、個別罫線を含む）
 - KaTeXによるインライン／ブロック数式
 - MarkdownファイルのImportと、Markdown／Document JSONの保存
 - Reportの章別プロジェクト（追加・並べ替え・除外・削除、章単位の編集、画像を含むZIP保存・再読込）
-- Slide文書の単一HTML出力（スライド送り、全画面表示、数式フォント・取り込んだ画像の埋め込み）
+- Slide文書の単一HTML出力（スライド送り、全画面表示、数式フォント・取り込んだ画像、結合セル・罫線の埋め込み）
 - Report／Slide向けの基本テーマと完成プレビュー
 - 3ペイン構成のNavigator、Editor、Properties
 - Undo／Redo、Markdown直接編集、破損入力を適用しないエラー処理
@@ -35,6 +35,14 @@ GitHub Pagesを有効にすると、[公開版](https://takayuki-minagawa.github
 - 有効な章を通した目次・番号・相互参照と、ページを切り替える全体プレビュー
 
 使い方・構文・制限は [文書機能ガイド](./web/docs/document-features.md) を参照してください。最初の操作は [かんたんガイド（日本語）](./web/docs/quick-start.ja.md) / [Quick guide (English)](./web/docs/quick-start.en.md) にまとめています。元の全体仕様は [仕様書](./md_report_slide_editor_web_spec.md) にあります。自動ページ割り、厳密なA4組版、PDF出力、ReportのHTML出力、脚注・文献、段組み、Chart、TeXファイル互換はまだ未実装です。
+
+## 表の高度編集
+
+ビジュアル編集で表セルを選ぶと専用ツールバーが表示されます。行・列の追加／削除、選択中の行のヘッダー切替、隣接セルの結合／分割ができます。罫線は全体・外側・内側・各辺を対象に、色、実線／破線／点線／二重線、太さを指定し、同じ対象だけを消去できます。
+
+結合する範囲の同じ外周辺に異なる罫線設定がある場合は、設定を統一するまで結合できません。これは結合後の1つのセルで異なる線分を失わないための保護です。
+
+通常の表は標準のパイプ記法Markdownとして保存します。結合セル、個別罫線、複数段落を含む表はKUMIの可逆表ブロックで保存するため、再読み込み、Document JSON、プロジェクトZIP、完成プレビュー、SlideのHTML出力で内容を保持します。外部のMarkdown編集器ではこのブロックを変更せず、JSONまたはプロジェクトZIPも編集用の原本として保存してください。
 
 ## 長いレポートの章別管理
 
@@ -92,7 +100,7 @@ Tiptap editor
   → Report / Slide preview
 ```
 
-Runtime validatorはNode型、必須属性、親子関係、既知metadata型、URL、`nodeId`の非空・一意性を確認します。Markdownで表現できない表構造は黙って欠落させず、typed errorとして保存を止めます。
+Runtime validatorはNode型、必須属性、親子関係、既知metadata型、URL、nodeIdの非空・一意性、結合セルを含む表グリッドを確認します。標準Markdownで表現できない表構造は黙って欠落させず、可逆KUMI表ブロックとして保存します。
 
 実装の責務は次のように分けています。
 

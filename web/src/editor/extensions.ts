@@ -12,6 +12,11 @@ import StarterKit from '@tiptap/starter-kit';
 
 import { createNodeId } from '@/src/document/model';
 import {
+  isTableCellBorders,
+  parseTableCellBorders,
+  tableCellBordersToCss,
+} from '@/src/document/table';
+import {
   safeResourceUrl,
   resolveSafeImageUrl,
 } from '@/src/security/resource-url';
@@ -118,6 +123,26 @@ const DocumentAttributes = Extension.create({
               attributes.align === 'right'
                 ? { style: `text-align: ${attributes.align}` }
                 : {},
+          },
+        },
+      },
+      {
+        types: ['tableHeader', 'tableCell'],
+        attributes: {
+          borders: {
+            default: null,
+            parseHTML: (element) =>
+              parseTableCellBorders(element.getAttribute('data-kumi-borders')),
+            renderHTML: (attributes) => {
+              if (!isTableCellBorders(attributes.borders)) return {};
+              const style = tableCellBordersToCss(attributes.borders);
+              return style
+                ? {
+                    'data-kumi-borders': JSON.stringify(attributes.borders),
+                    style,
+                  }
+                : {};
+            },
           },
         },
       },

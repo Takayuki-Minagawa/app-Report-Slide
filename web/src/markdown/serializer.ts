@@ -12,6 +12,7 @@ import type {
   TableNode,
 } from '@/src/document/model';
 import { validateDocumentData } from '@/src/document/validation';
+import { isTableCellBorders } from '@/src/document/table';
 import { isSafeResourceUrl } from '@/src/security/resource-url';
 
 import {
@@ -155,7 +156,7 @@ function protectParagraphLine(line: string): string {
       : `&#32;${line.slice(1)}`;
   }
 
-  if (/^\s*:::\s+(?:pagebreak|slidebreak)\s*$/.test(line))
+  if (/^\s*:::\s+(?:pagebreak|slidebreak|kumi-table)\s*$/.test(line))
     return line.replace(':', '\\:');
 
   const match = /^( {0,3})(.*)$/.exec(line);
@@ -231,47 +232,61 @@ function tableAlignment(cell: TableHeaderNode): string {
   }
 }
 
-function serializeTable(table: TableNode): string {
+function canUsePipeTable(table: TableNode): boolean {
   const firstRow = table.content[0];
-  if (!firstRow || firstRow.content.length === 0) {
-    throw new MarkdownSerializationError(
-      'markdown.table-empty',
-      '空の表はMarkdownとして保存できません',
-    );
-  }
-  if (firstRow.content.some((cell) => cell.type !== 'tableHeader')) {
-    throw new MarkdownSerializationError(
-      'markdown.table-header-required',
-      'Markdown表の先頭行にはヘッダーセルが必要です',
-    );
-  }
+  const firstCells = firstRow?.content;
+  if (!firstCells || firstCells.length === 0) return false;
 
-  const columnCount = firstRow.content.length;
+  const columnCount = firstCells.length;
   for (const [rowIndex, row] of table.content.entries()) {
-    if (row.content.length !== columnCount) {
-      throw new MarkdownSerializationError(
-        'markdown.table-column-mismatch',
-        `Markdown表の${rowIndex + 1}行目の列数が一致しません`,
-      );
-    }
-    if (rowIndex > 0 && row.content.some((cell) => cell.type !== 'tableCell')) {
-      throw new MarkdownSerializationError(
-        'markdown.table-body-cell-required',
-        'Markdown表の2行目以降には通常セルが必要です',
-      );
+    const cells = row.content ?? [];
+    if (
+      cells.length !== columnCount ||
+      cells.some(
+        (cell) =>
+          cell.type !== (rowIndex === 0 ? 'tableHeader' : 'tableCell') ||
+          (cell.attrs.colspan ?? 1) !== 1 ||
+          (cell.attrs.rowspan ?? 1) !== 1 ||
+          (cell.attrs.colwidth !== undefined && cell.attrs.colwidth !== null) ||
+          (cell.attrs.borders !== undefined &&
+            cell.attrs.borders !== null &&
+            isTableCellBorders(cell.attrs.borders)) ||
+          cell.content.length !== 1 ||
+          cell.content[0].content?.some(
+            (inline) => inline.type === 'hardBreak',
+          ),
+      )
+    ) {
+      return false;
     }
   }
+  return true;
+}
 
-  const headers = firstRow.content.map((cell) =>
+function serializeAdvancedTable(table: TableNode): string {
+  const serialized = JSON.stringify(
+    table,
+    (key, value) => (key === 'nodeId' ? undefined : value),
+    2,
+  );
+  return ['::: kumi-table', serialized, ':::'].join('\n');
+}
+
+function serializeTable(table: TableNode): string {
+  if (!canUsePipeTable(table)) return serializeAdvancedTable(table);
+  const firstRow = table.content[0]!;
+  const firstCells = firstRow.content ?? [];
+
+  const headers = firstCells.map((cell) =>
     tableCellText(cell as TableHeaderNode),
   );
-  const alignments = firstRow.content.map((cell) =>
+  const alignments = firstCells.map((cell) =>
     tableAlignment(cell as TableHeaderNode),
   );
   const rows = table.content
     .slice(1)
     .map((row) =>
-      row.content.map((cell) => tableCellText(cell as TableCellNode)),
+      (row.content ?? []).map((cell) => tableCellText(cell as TableCellNode)),
     );
 
   return [
@@ -340,7 +355,9 @@ function serializeNode(node: DocumentNode): string {
     case 'table':
       return serializeTable(node);
     case 'tableRow':
-      return node.content.map((cell) => tableCellText(cell)).join(' | ');
+      return (node.content ?? [])
+        .map((cell) => tableCellText(cell))
+        .join(' | ');
     case 'tableHeader':
     case 'tableCell':
       return tableCellText(node);
@@ -349,7 +366,13 @@ function serializeNode(node: DocumentNode): string {
 
 function serializeBlocks(nodes: DocumentNode[]): string {
   return nodes
-    .map((node) => serializeNode(node) + serializeBlockAttributes(node))
+    .map((node) => {
+      const attributes =
+        node.type === 'table' && !canUsePipeTable(node)
+          ? ''
+          : serializeBlockAttributes(node);
+      return serializeNode(node) + attributes;
+    })
     .join('\n\n');
 }
 

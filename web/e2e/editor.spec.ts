@@ -75,6 +75,26 @@ test('数式と表を挿入してDocumentを編集できる', async ({ page }) =
   await expect(page.getByLabel('未保存')).toBeVisible();
 });
 
+test('表セルから高度表ツールを開き、行と罫線を編集できる', async ({ page }) => {
+  await page.goto('/');
+  await waitForEditor(page);
+
+  await page.getByRole('button', { name: '表を挿入' }).click();
+  const table = page.locator('.kumi-editor-content table').last();
+  await table.locator('th').first().click();
+
+  const toolbar = page.getByRole('toolbar', { name: '表の編集' });
+  await expect(toolbar).toBeVisible();
+  await toolbar.getByRole('button', { name: '下に行を追加' }).click();
+  await expect(table.locator('tr')).toHaveCount(4);
+
+  await toolbar.getByRole('button', { name: 'すべての罫線' }).click();
+  await expect(table.locator('th').first()).toHaveAttribute(
+    'data-kumi-borders',
+    /"top"/,
+  );
+});
+
 test('Markdown下書きをタブ間で保持し保存時に現在文書へ適用する', async ({
   page,
 }) => {

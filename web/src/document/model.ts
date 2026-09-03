@@ -1,4 +1,5 @@
 import { resolveDocumentTheme } from './metadata';
+import type { TableCellBorders } from './table';
 
 export type DocumentType = 'report' | 'slide';
 
@@ -157,16 +158,18 @@ export interface TableNode extends IdentifiedNode {
 
 export interface TableRowNode extends IdentifiedNode {
   type: 'tableRow';
-  content: Array<TableHeaderNode | TableCellNode>;
+  /** ProseMirror omits this property when a row is entirely covered by row-spanning cells. */
+  content?: Array<TableHeaderNode | TableCellNode>;
 }
 
 export interface TableHeaderNode extends IdentifiedNode {
   type: 'tableHeader';
   attrs: IdentifiedNode['attrs'] & {
     align: 'left' | 'center' | 'right' | null;
-    colspan?: 1;
-    rowspan?: 1;
-    colwidth?: null;
+    borders?: TableCellBorders | null;
+    colspan?: number;
+    rowspan?: number;
+    colwidth?: number[] | null;
   };
   content: ParagraphNode[];
 }
@@ -175,9 +178,10 @@ export interface TableCellNode extends IdentifiedNode {
   type: 'tableCell';
   attrs: IdentifiedNode['attrs'] & {
     align: 'left' | 'center' | 'right' | null;
-    colspan?: 1;
-    rowspan?: 1;
-    colwidth?: null;
+    borders?: TableCellBorders | null;
+    colspan?: number;
+    rowspan?: number;
+    colwidth?: number[] | null;
   };
   content: ParagraphNode[];
 }
