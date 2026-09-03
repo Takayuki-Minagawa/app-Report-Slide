@@ -51,7 +51,6 @@ export interface ProjectMessages {
     tooManyFiles: string;
     missingFile: (filename: string) => string;
     missingImage: (filename: string) => string;
-    duplicateNodeId: (nodeId: string) => string;
     unsupportedFile: (filename: string) => string;
     lastChapter: string;
   };
@@ -115,8 +114,6 @@ export const projectMessages: Record<'ja' | 'en', ProjectMessages> = {
       tooManyFiles: 'プロジェクト内のファイル数が多すぎます',
       missingFile: (filename) => `必要なファイルがありません: ${filename}`,
       missingImage: (filename) => `画像が読み込まれていません: ${filename}`,
-      duplicateNodeId: (nodeId) =>
-        `章をまたいで要素IDが重複しています: ${nodeId}`,
       unsupportedFile: (filename) =>
         `プロジェクト内に未対応のファイルがあります: ${filename}`,
       lastChapter: '最後の章は削除できません',
@@ -179,8 +176,6 @@ export const projectMessages: Record<'ja' | 'en', ProjectMessages> = {
       tooManyFiles: 'The project contains too many files',
       missingFile: (filename) => `A required file is missing: ${filename}`,
       missingImage: (filename) => `An image has not been loaded: ${filename}`,
-      duplicateNodeId: (nodeId) =>
-        `An element ID is duplicated across chapters: ${nodeId}`,
       unsupportedFile: (filename) =>
         `The project contains an unsupported file: ${filename}`,
       lastChapter: 'The final chapter cannot be deleted',

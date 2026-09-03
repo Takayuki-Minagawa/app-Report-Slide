@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
+import {
+  Zip,
+  ZipDeflate,
+  ZipPassThrough,
+  strFromU8,
+  strToU8,
+  unzipSync,
+  zipSync,
+} from 'fflate';
 import { parseMarkdown } from '@/src/markdown/parser';
 import {
   createBlankChapter,
@@ -34,6 +42,62 @@ function fixtureEntries() {
       [project.chapters[0].file]: strToU8('# First\n{#sec:first}'),
     },
   };
+}
+
+function editZipHeaders(
+  bytes: Uint8Array,
+  name: string,
+  edit: (view: DataView, localOffset: number, centralOffset: number) => void,
+): Uint8Array {
+  const result = new Uint8Array(bytes);
+  const view = new DataView(result.buffer);
+  let offset = view.getUint32(result.length - 6, true);
+  while (view.getUint32(offset, true) === 0x02014b50) {
+    const nameLength = view.getUint16(offset + 28, true);
+    if (
+      strFromU8(result.subarray(offset + 46, offset + 46 + nameLength)) === name
+    ) {
+      edit(view, view.getUint32(offset + 42, true), offset);
+      return result;
+    }
+    offset +=
+      46 +
+      nameLength +
+      view.getUint16(offset + 30, true) +
+      view.getUint16(offset + 32, true);
+  }
+  throw new Error(`Missing ZIP fixture entry: ${name}`);
+}
+
+function streamingZip(
+  entries: Record<string, Uint8Array>,
+  compression: 'store' | 'deflate-store' | 'deflate' = 'deflate',
+): Uint8Array {
+  const chunks: Uint8Array[] = [];
+  const archive = new Zip((error, chunk) => {
+    if (error) throw error;
+    chunks.push(chunk);
+  });
+  for (const [name, bytes] of Object.entries(entries)) {
+    const entry =
+      compression === 'store'
+        ? new ZipPassThrough(name)
+        : new ZipDeflate(name, {
+            level: compression === 'deflate-store' ? 0 : 6,
+          });
+    archive.add(entry);
+    entry.push(bytes, true);
+  }
+  archive.end();
+  const result = new Uint8Array(
+    chunks.reduce((total, chunk) => total + chunk.length, 0),
+  );
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result;
 }
 
 beforeEach(() => {
@@ -126,6 +190,241 @@ describe('report project ZIP', () => {
     expect(loaded.assets.size).toBe(1);
     expect([...loaded.assets.keys()]).toEqual([...prepared.assets.keys()]);
     expect(loaded.project.chapters[0].enabled).toBe(false);
+  });
+
+  it.each([
+    ['A.md', 'a.json'],
+    ['same.md', 'same.markdown'],
+    ['caf\u00e9.md', 'cafe\u0301.json'],
+  ])(
+    'chooses distinct JSON fallback names for %s and %s',
+    async (first, second) => {
+      const project = createReportProject(parseMarkdown('# JSON').document);
+      project.chapters[0].file = `chapters/${first}`;
+      project.chapters[0].document.children = [
+        {
+          type: 'paragraph',
+          attrs: { nodeId: 'local-id' },
+          content: [{ type: 'inlineMath', attrs: { latex: 'a$b' } }],
+        },
+      ];
+      project.chapters.push({
+        ...createBlankChapter(2),
+        file: `chapters/${second}`,
+        document: structuredClone(project.chapters[0].document),
+      });
+      const before = structuredClone(project);
+      const bytes = await writeReportProject(project, new Map());
+      const loaded = await readReportProject(archiveFile(bytes));
+      const names = loaded.project.chapters.map((chapter) =>
+        chapter.file.normalize('NFC').toLowerCase(),
+      );
+      expect(new Set(names).size).toBe(2);
+      expect(
+        names.every(
+          (name) => name.startsWith('chapters/') && name.endsWith('.json'),
+        ),
+      ).toBe(true);
+      expect(
+        loaded.project.chapters.map((chapter) => chapter.document),
+      ).toEqual(project.chapters.map((chapter) => chapter.document));
+      expect(project).toEqual(before);
+    },
+  );
+
+  it('does not overwrite the manifest when project.md needs a JSON fallback', async () => {
+    const project = createReportProject(parseMarkdown('# JSON').document);
+    project.chapters[0].file = 'project.md';
+    project.chapters[0].document.children[0] = {
+      type: 'paragraph',
+      attrs: { nodeId: 'math' },
+      content: [{ type: 'inlineMath', attrs: { latex: 'a$b' } }],
+    };
+    const loaded = await readReportProject(
+      archiveFile(await writeReportProject(project, new Map())),
+    );
+    expect(loaded.project.chapters[0].file).toBe('project-2.json');
+  });
+
+  it.each([false, true])(
+    'rejects understated expanded size (local header also forged: %s)',
+    async (forgeLocal) => {
+      const { entries, project } = fixtureEntries();
+      entries[project.chapters[0].file] = strToU8(
+        '# Keep\n\n' + 'x'.repeat(4000),
+      );
+      const bytes = editZipHeaders(
+        zipSync(entries),
+        project.chapters[0].file,
+        (view, local, central) => {
+          view.setUint32(central + 24, 8, true);
+          if (forgeLocal) view.setUint32(local + 22, 8, true);
+        },
+      );
+      await expect(readReportProject(archiveFile(bytes))).rejects.toThrow(
+        'invalidArchive',
+      );
+      expect(vi.mocked(URL).createObjectURL).not.toHaveBeenCalled();
+    },
+  );
+
+  it('stops oversized real output even when both headers claim a tiny source', async () => {
+    const { entries, project } = fixtureEntries();
+    entries[project.chapters[0].file] = strToU8(
+      '# Keep\n\n' + 'x'.repeat(projectLimits.fileBytes + 1),
+    );
+    const bytes = editZipHeaders(
+      zipSync(entries),
+      project.chapters[0].file,
+      (view, local, central) => {
+        view.setUint32(central + 24, 8, true);
+        view.setUint32(local + 22, 8, true);
+      },
+    );
+    await expect(readReportProject(archiveFile(bytes))).rejects.toThrow(
+      'invalidArchive',
+    );
+    expect(vi.mocked(URL).createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('requires final output to match the declared size and all local entries to match the directory', async () => {
+    const { entries, project } = fixtureEntries();
+    const bytes = zipSync(entries);
+    const mutations = [
+      (view: DataView, local: number, central: number) => {
+        const size = view.getUint32(central + 24, true) + 1;
+        view.setUint32(central + 24, size, true);
+        view.setUint32(local + 22, size, true);
+      },
+      (view: DataView, local: number) => {
+        view.setUint8(local + 30, 'x'.charCodeAt(0));
+      },
+      (view: DataView, local: number) => {
+        view.setUint32(local, 0, true);
+      },
+      (view: DataView, _local: number, central: number) => {
+        view.setUint32(
+          central + 20,
+          view.getUint32(central + 20, true) - 1,
+          true,
+        );
+      },
+    ];
+    for (const mutation of mutations) {
+      const damaged = editZipHeaders(bytes, project.chapters[0].file, mutation);
+      await expect(readReportProject(archiveFile(damaged))).rejects.toThrow(
+        'invalidArchive',
+      );
+    }
+  });
+
+  it('reads streaming ZIP data descriptors and validates the actual output size', async () => {
+    const { entries, project } = fixtureEntries();
+    const bytes = streamingZip(entries);
+    const loaded = await readReportProject(archiveFile(bytes));
+    expect(loaded.project.chapters[0].document.children[0]).toMatchObject({
+      content: [{ text: 'First' }],
+    });
+    const damaged = editZipHeaders(
+      bytes,
+      project.chapters[0].file,
+      (view, _local, central) => {
+        view.setUint32(central + 24, 1, true);
+      },
+    );
+    await expect(readReportProject(archiveFile(damaged))).rejects.toThrow(
+      'invalidArchive',
+    );
+  });
+
+  it.each(['store', 'deflate-store', 'deflate'] as const)(
+    'reads %s streaming entries whose image bytes contain ZIP header signatures',
+    async (compression) => {
+      const project = createReportProject(
+        parseMarkdown('![Binary](payload.png)').document,
+      );
+      project.chapters[0].file = 'chapters/source.md';
+      for (const signature of [
+        [0x50, 0x4b, 0x07, 0x08],
+        [0x50, 0x4b, 0x03, 0x04],
+      ]) {
+        const payload = Uint8Array.from(
+          { length: 4096 },
+          (_, index) => (index * 73 + 29) % 256,
+        );
+        payload.set(signature, 20);
+        const bytes = streamingZip(
+          {
+            'project.json': strToU8(
+              JSON.stringify(manifestFromProject(project)),
+            ),
+            'chapters/source.md': strToU8('![Binary](payload.png)'),
+            'chapters/payload.png': payload,
+          },
+          compression,
+        );
+        expect(unzipSync(bytes)['chapters/payload.png']).toEqual(payload);
+        const loaded = await readReportProject(archiveFile(bytes));
+        expect([...loaded.assets.keys()]).toEqual(['chapters/payload.png']);
+        const blob = vi.mocked(URL).createObjectURL.mock.calls.at(-1)![0];
+        expect(blob).toBeInstanceOf(Blob);
+        expect((blob as Blob).size).toBe(payload.length);
+      }
+    },
+  );
+
+  it('rejects CRC mismatches even when entry names and sizes are unchanged', async () => {
+    const { entries, project } = fixtureEntries();
+    const bytes = editZipHeaders(
+      zipSync(entries, { level: 0 }),
+      project.chapters[0].file,
+      (view, local) => {
+        const bodyOffset =
+          local +
+          30 +
+          view.getUint16(local + 26, true) +
+          view.getUint16(local + 28, true);
+        view.setUint8(bodyOffset + 2, 'X'.charCodeAt(0));
+      },
+    );
+    await expect(readReportProject(archiveFile(bytes))).rejects.toThrow(
+      'invalidArchive',
+    );
+    expect(vi.mocked(URL).createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('accepts empty directory entries and rejects symlinks or encrypted entries', async () => {
+    const { entries, project } = fixtureEntries();
+    const bytes = zipSync({ ...entries, 'chapters/': new Uint8Array() });
+    expect(
+      (await readReportProject(archiveFile(bytes))).project.chapters,
+    ).toHaveLength(1);
+    const symlink = editZipHeaders(
+      bytes,
+      project.chapters[0].file,
+      (view, _local, central) => {
+        view.setUint8(central + 5, 3);
+        view.setUint32(central + 38, 0o120777 << 16, true);
+      },
+    );
+    await expect(readReportProject(archiveFile(symlink))).rejects.toThrow(
+      'invalidArchive',
+    );
+    const encrypted = editZipHeaders(
+      bytes,
+      project.chapters[0].file,
+      (view, local, central) => {
+        view.setUint16(local + 6, view.getUint16(local + 6, true) | 1, true);
+        view.setUint16(
+          central + 8,
+          view.getUint16(central + 8, true) | 1,
+          true,
+        );
+      },
+    );
+    await expect(readReportProject(archiveFile(encrypted))).rejects.toThrow(
+      'invalidArchive',
+    );
   });
 
   it('rejects missing images on save and on import before creating object URLs', async () => {

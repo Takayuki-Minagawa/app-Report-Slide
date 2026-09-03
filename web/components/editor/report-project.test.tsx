@@ -110,6 +110,135 @@ describe('chapter workspace lifecycle', () => {
     expect(result.current.project!.chapters).toHaveLength(2);
   });
 
+  it('keeps chapter-local IDs after real clipboard paste and still saves and exports the project', async () => {
+    vi.stubGlobal('ClipboardEvent', class extends Event {});
+    const { result } = await workspace('# Shared heading\n\nCopied body');
+    const firstId = result.current.document.children[0].attrs.nodeId;
+    act(() => {
+      result.current.editor!.commands.selectAll();
+    });
+    const editor = result.current.editor!;
+    const copied = editor.view.serializeForClipboard(
+      editor.state.selection.content(),
+    ).dom.innerHTML;
+    await act(async () => {
+      await result.current.projectActions.addChapter();
+    });
+    act(() => {
+      result.current.editor!.commands.selectAll();
+      expect(result.current.editor!.view.pasteHTML(copied)).toBe(true);
+    });
+    expect(result.current.document.children[0].attrs.nodeId).toBe(firstId);
+    expect(
+      result.current.project!.chapters[0].document.children[0].attrs.nodeId,
+    ).toBe(firstId);
+    expect(
+      result.current.analysis.outline.map((entry) => entry.nodeId),
+    ).toEqual(
+      result.current.project!.chapters.map(
+        (chapter) => `${chapter.id}:${firstId}`,
+      ),
+    );
+    expect(result.current.analysis.targets.size).toBe(2);
+    act(() => {
+      result.current.projectActions.exportProject('json');
+    });
+    expect(files.downloadDocument).toHaveBeenCalledWith(
+      result.current.previewDocument,
+      'json',
+    );
+    await act(async () => {
+      await result.current.projectActions.saveProject();
+    });
+    expect(result.current.displayedStatus.kind).toBe('success');
+    expect(files.downloadFile).toHaveBeenCalledTimes(1);
+    expect(result.current.dirty).toBe(false);
+  });
+
+  it('retains trimmed image aliases through project creation and chapter import, then releases them once', async () => {
+    let sequence = 0;
+    const revoke = vi.fn();
+    vi.stubGlobal(
+      'URL',
+      Object.assign(class extends URL {}, {
+        createObjectURL: vi.fn(() => `blob:asset-${++sequence}`),
+        revokeObjectURL: revoke,
+      }),
+    );
+    const bytes = new TextEncoder().encode(
+      '<svg xmlns="http://www.w3.org/2000/svg"/>',
+    );
+    const fetchAsset = vi.fn(async () => ({
+      ok: true,
+      arrayBuffer: async () => bytes.buffer,
+    }));
+    vi.stubGlobal('fetch', fetchAsset);
+    const document = parseMarkdown(
+      '![Local](image.svg)\n\n![Remote](https://example.com/image.png)',
+    ).document;
+    document.children[0].attrs.src = ' image.svg ';
+    document.children[1].attrs.src = ' https://example.com/image.png ';
+    const importedFiles = () => [
+      sourceFile(JSON.stringify(document), 'chapter.json'),
+      new File([bytes], 'image.svg', { type: 'image/svg+xml' }),
+    ];
+    const { result, unmount } = renderHook(useDocumentWorkspace, { wrapper });
+    await waitFor(() => expect(result.current.editor).not.toBeNull());
+    await act(async () => {
+      await result.current.importFiles(importedFiles());
+    });
+    act(() => {
+      result.current.projectActions.createProject();
+    });
+    expect(result.current.resolveImageUrl('assets/image-1.svg')).toBe(
+      'blob:asset-1',
+    );
+    expect(revoke).not.toHaveBeenCalled();
+    await act(async () => {
+      await result.current.projectActions.addChapter(importedFiles());
+    });
+    expect(result.current.resolveImageUrl('assets/image-1.svg')).toBe(
+      'blob:asset-2',
+    );
+    expect(result.current.document.children[1].attrs.src).toBe(
+      ' https://example.com/image.png ',
+    );
+    expect(revoke).not.toHaveBeenCalled();
+    await act(async () => {
+      await result.current.projectActions.saveProject();
+    });
+    expect(result.current.displayedStatus.kind).toBe('success');
+    expect(result.current.dirty).toBe(false);
+    expect(fetchAsset).toHaveBeenCalledTimes(2);
+    expect(fetchAsset).toHaveBeenCalledWith('blob:asset-1');
+    expect(fetchAsset).toHaveBeenCalledWith('blob:asset-2');
+    unmount();
+    expect(revoke.mock.calls).toEqual([['blob:asset-1'], ['blob:asset-2']]);
+  });
+
+  it('releases imported URLs that are not adopted by the added chapter', async () => {
+    const { result } = await workspace();
+    const revoke = vi.fn();
+    vi.stubGlobal(
+      'URL',
+      Object.assign(class extends URL {}, { revokeObjectURL: revoke }),
+    );
+    vi.spyOn(files, 'readWorkspaceFiles').mockResolvedValue({
+      document: parseMarkdown('# New chapter').document,
+      assets: new Map([['unused.png', 'blob:unused']]),
+      sourceName: 'new.md',
+      diagnostics: [],
+      unresolved: [],
+    });
+    await act(async () => {
+      await result.current.projectActions.addChapter([
+        sourceFile('# New chapter'),
+      ]);
+    });
+    expect(result.current.project!.chapters).toHaveLength(2);
+    expect(revoke).toHaveBeenCalledExactlyOnceWith('blob:unused');
+  });
+
   it('distinguishes source saves, combined export and saving the entire project', async () => {
     const { result } = await workspace();
     const save = vi

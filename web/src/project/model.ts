@@ -8,7 +8,6 @@ import {
   type InlineNode,
 } from '@/src/document/model';
 import { migrateDocumentData } from '@/src/document/validation';
-import { walkDocumentTree } from '@/src/document/traversal';
 
 export const projectFileName = 'project.json';
 export const maximumProjectChapters = 100;
@@ -55,7 +54,6 @@ export class ReportProjectError extends Error {
       | 'tooManyFiles'
       | 'missingFile'
       | 'missingImage'
-      | 'duplicateNodeId'
       | 'unsupportedFile'
       | 'reportOnly'
       | 'lastChapter',
@@ -102,7 +100,7 @@ export function safeProjectPath(value: string): string {
 export function resolveProjectPath(file: string, source: string): string {
   let cleanSource: string;
   try {
-    cleanSource = decodeURIComponent(source.split(/[?#]/, 1)[0]).replace(
+    cleanSource = decodeURIComponent(source.trim().split(/[?#]/, 1)[0]).replace(
       /\\/g,
       '/',
     );
@@ -125,56 +123,55 @@ export function resolveProjectPath(file: string, source: string): string {
 }
 
 export function isLocalProjectImage(source: string): boolean {
-  return !/^[a-z][a-z\d+.-]*:/i.test(source) && !source.startsWith('/');
+  const value = source.trim();
+  return !/^[a-z][a-z\d+.-]*:/i.test(value) && !value.startsWith('/');
 }
 
-function mapNodeImages(
+function assembleChapterNode(
   node: DocumentNode | InlineNode,
-  mapSource: (source: string) => string,
+  chapter: ReportChapter,
 ): DocumentNode | InlineNode {
   let result = node;
-  if (node.type === 'figure' || node.type === 'inlineImage') {
+  // IDs are chapter-local in source files, including pasted and reused JSON.
+  // Only the assembled document needs a project-wide namespace.
+  if ('attrs' in node && 'nodeId' in node.attrs) {
     result = {
       ...node,
-      attrs: { ...node.attrs, src: mapSource(node.attrs.src) },
+      attrs: { ...node.attrs, nodeId: `${chapter.id}:${node.attrs.nodeId}` },
+    } as typeof node;
+  }
+  if (node.type === 'figure' || node.type === 'inlineImage') {
+    let source = node.attrs.src;
+    if (isLocalProjectImage(source)) {
+      try {
+        source = resolveProjectPath(chapter.file, source);
+      } catch {
+        // Preserve invalid draft input for the renderer's safe URL handling.
+      }
+    }
+    result = {
+      ...result,
+      attrs: { ...('attrs' in result ? result.attrs : {}), src: source },
     } as typeof node;
   }
   if ('content' in result && result.content) {
     result = {
       ...result,
-      content: result.content.map((child) => mapNodeImages(child, mapSource)),
+      content: result.content.map((child) =>
+        assembleChapterNode(child, chapter),
+      ),
     } as DocumentNode | InlineNode;
   }
   return result;
 }
 
-export function rebaseChapterDocument(chapter: ReportChapter): DocumentData {
+function assembleChapterDocument(chapter: ReportChapter): DocumentData {
   return {
     ...chapter.document,
     children: chapter.document.children.map((node) =>
-      mapNodeImages(node, (source) => {
-        if (!isLocalProjectImage(source)) return source;
-        try {
-          return resolveProjectPath(chapter.file, source);
-        } catch {
-          return source;
-        }
-      }),
+      assembleChapterNode(node, chapter),
     ) as DocumentNode[],
   };
-}
-
-export function assertProjectNodeIds(project: ReportProject): void {
-  const ids = new Set<string>();
-  for (const chapter of project.chapters) {
-    for (const node of walkDocumentTree(chapter.document.children)) {
-      if (!('attrs' in node) || !('nodeId' in node.attrs)) continue;
-      const nodeId = String(node.attrs.nodeId);
-      if (ids.has(nodeId))
-        throw new ReportProjectError('duplicateNodeId', nodeId);
-      ids.add(nodeId);
-    }
-  }
 }
 
 export function validateReportProject(project: ReportProject): ReportProject {
@@ -217,7 +214,6 @@ export function validateReportProject(project: ReportProject): ReportProject {
     return chapter;
   });
   const result = { ...project, chapters };
-  assertProjectNodeIds(result);
   // Reuse document validation for project-level metadata as well.
   migrateDocumentData({
     schemaVersion: 2,
@@ -288,26 +284,14 @@ export function createBlankChapter(
 export function assembleReportProject(project: ReportProject): DocumentData {
   const chapters = project.chapters.filter((chapter) => chapter.enabled);
   const children: DocumentNode[] = [];
-  const ids = new Set(
-    project.chapters.flatMap((chapter) =>
-      [...walkDocumentTree(chapter.document.children)].flatMap((node) =>
-        'attrs' in node && 'nodeId' in node.attrs
-          ? [String(node.attrs.nodeId)]
-          : [],
-      ),
-    ),
-  );
   chapters.forEach((chapter, index) => {
     if (index > 0 && chapter.pageBreakBefore) {
-      let nodeId = `${chapter.id}-break`;
-      while (ids.has(nodeId)) nodeId += '-break';
-      ids.add(nodeId);
       children.push({
         type: 'pageBreak',
-        attrs: { nodeId },
+        attrs: { nodeId: `project-break-${chapter.id}` },
       });
     }
-    children.push(...rebaseChapterDocument(chapter).children);
+    children.push(...assembleChapterDocument(chapter).children);
   });
   if (children.length === 0)
     children.push({ type: 'paragraph', attrs: { nodeId: 'project-empty' } });

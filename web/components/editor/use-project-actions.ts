@@ -225,7 +225,7 @@ export function useProjectActions(bridge: ProjectWorkspaceBridge) {
         };
         if (/\.json$/i.test(imported.sourceName))
           chapter.file = chapter.file.replace(/\.md$/, '.json');
-        const prepared = prepareChapter(chapter, imported.assets, project);
+        const prepared = prepareChapter(chapter, imported.assets);
         chapter = prepared.chapter;
         nextAssets = new Map([...assets, ...prepared.assets]);
         description = [
@@ -246,6 +246,12 @@ export function useProjectActions(bridge: ProjectWorkspaceBridge) {
         { assets: nextAssets, description },
       );
       setSession({ project: next, activeChapterId: chapter.id, dirty: true });
+      if (pendingAssets) {
+        const retained = new Set(nextAssets.values());
+        revokeAssetUrls(
+          new Map([...pendingAssets].filter(([, url]) => !retained.has(url))),
+        );
+      }
       pendingAssets = undefined;
       showEditor();
     } catch (error) {

@@ -2,7 +2,7 @@
 
 [日本語](./report-projects.ja.md)
 
-Split a Report into source files and assemble them in a manifest-defined order. This feature is not a slide project manager or a TeX `\\input` / `\\include` implementation.
+Split a Report into source files and assemble them in a manifest-defined order. This feature is not a slide project manager or a TeX `\input` / `\include` implementation.
 
 ## Editing and saving
 
@@ -66,7 +66,9 @@ Example manifest; the `chapters` array determines order:
 }
 ```
 
-You may extract, edit and re-compress the project. Keep `project.json` at the ZIP root. Each chapter must be a Report Markdown or Document JSON file. If Markdown cannot represent a chapter, saving uses a `.json` file in the same directory. Markdown element IDs are regenerated on import; use labels for references. JSON element IDs must be unique across all chapters.
+You may extract, edit and re-compress the project. Keep `project.json` at the ZIP root. Each chapter must be a Report Markdown or Document JSON file. If Markdown cannot represent a chapter, saving uses a non-conflicting `.json` filename in the same directory.
+
+Markdown element IDs are regenerated on import; use labels for references. JSON element IDs must be unique within each chapter. Different chapters may reuse the same IDs, including through copy and paste. Only the combined view and export prefix IDs with a chapter namespace; chapter source IDs remain unchanged. Labels are shared across all chapters, so resolve duplicate labels separately.
 
 Local image paths are relative to each chapter source. Paths such as `../images/a.png` may share an image within the ZIP but cannot escape it. Newly added chapters receive their own `assets` directory to prevent same-name images in different chapters from colliding.
 
@@ -75,6 +77,7 @@ Image paths in a combined Markdown/JSON export are relative to the ZIP root. To 
 ## Limits and safeguards
 
 - Up to 100 chapters and 300 ZIP entries including directories.
+- Stored and Deflate ZIP entries are supported. Encrypted entries and symbolic links are not supported. Size, header and CRC mismatches block loading.
 - A ZIP may be up to 60MiB; total expanded content is limited to 50MiB. Each source or manifest is limited to 5MiB and each image to 20MiB.
 - Absolute or escaping paths, duplicate filenames including case-only collisions, Windows reserved names, unsafe paths and unrelated attachments are rejected.
 - Apply or discard Markdown drafts before switching chapters. Edits during a ZIP operation invalidate its result; save again after editing.

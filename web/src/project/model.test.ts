@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { parseMarkdown } from '@/src/markdown/parser';
 import { analyzeDocument, splitDocumentPages } from '@/src/document/semantics';
+import { walkDocumentTree } from '@/src/document/traversal';
+import { DocumentValidationError } from '@/src/document/validation';
 import { prepareChapter } from './assets';
 import {
   assembleReportProject,
   createBlankChapter,
   createReportProject,
+  isLocalProjectImage,
   resolveProjectPath,
   safeProjectPath,
   validateReportProject,
@@ -70,7 +73,7 @@ describe('report projects', () => {
     expect(JSON.stringify(source)).toBe(before);
   });
 
-  it('keeps repeated image filenames separate and resolves duplicate imported editor IDs', () => {
+  it('keeps repeated image filenames separate without rewriting chapter-local editor IDs', () => {
     const doc = parseMarkdown('# Image\n\n![A](same.png)').document;
     const source = createReportProject(doc);
     const first = prepareChapter(
@@ -82,7 +85,6 @@ describe('report projects', () => {
     const second = prepareChapter(
       chapter,
       new Map([['same.png', 'blob:second']]),
-      source,
     );
     source.chapters.push(second.chapter);
     expect(() => validateReportProject(source)).not.toThrow();
@@ -95,17 +97,85 @@ describe('report projects', () => {
       [...second.assets.keys()][0],
     ]);
     expect(doc.children[1].attrs.src).toBe('same.png');
+    expect(second.chapter.document.children[0].attrs.nodeId).toBe(
+      first.chapter.document.children[0].attrs.nodeId,
+    );
   });
 
-  it('rejects slides, duplicate manifest paths and duplicate IDs', () => {
+  it('namespaces all nested IDs only in assembled output and permits IDs shared by chapters', () => {
+    const document = parseMarkdown(
+      '# Same\n\n- item with ![inline](image.png)\n\n> quoted\n\n| A | B |\n| --- | --- |\n| C | D |',
+    ).document;
+    const source = createReportProject(document);
+    source.chapters.push({
+      ...createBlankChapter(2),
+      document: structuredClone(document),
+    });
+    const before = structuredClone(source);
+    const nodeIds = (nodes: typeof document.children) =>
+      [...walkDocumentTree(nodes)].flatMap((node) =>
+        'attrs' in node && 'nodeId' in node.attrs
+          ? [String(node.attrs.nodeId)]
+          : [],
+      );
+    expect(() => validateReportProject(source)).not.toThrow();
+    const assembled = assembleReportProject(source);
+    const ids = nodeIds(assembled.children);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const chapter of source.chapters) {
+      for (const id of nodeIds(chapter.document.children)) {
+        expect(ids).toContain(`${chapter.id}:${id}`);
+      }
+    }
+    expect(assembleReportProject(source)).toEqual(assembled);
+    expect(source).toEqual(before);
+    expect(
+      analyzeDocument(assembled).outline.map((entry) => entry.nodeId),
+    ).toEqual(
+      source.chapters.map(
+        (chapter) => `${chapter.id}:${document.children[0].attrs.nodeId}`,
+      ),
+    );
+  });
+
+  it('normalizes image lookup and classification without rewriting external URLs', () => {
+    const source = createReportProject(
+      parseMarkdown(
+        '![Local](image.png)\n\n![Remote](https://example.com/image.png)',
+      ).document,
+    );
+    source.chapters[0].document.children[0].attrs.src = ' image.png ';
+    source.chapters[0].document.children[1].attrs.src =
+      ' https://example.com/image.png ';
+    const prepared = prepareChapter(
+      source.chapters[0],
+      new Map([['image.png', 'blob:local']]),
+    );
+    expect([...prepared.assets.values()]).toEqual(['blob:local']);
+    expect(prepared.chapter.document.children[1].attrs.src).toBe(
+      ' https://example.com/image.png ',
+    );
+    expect(isLocalProjectImage(' https://example.com/image.png ')).toBe(false);
+    expect(isLocalProjectImage(' /image.png ')).toBe(false);
+    expect(resolveProjectPath('chapters/one.md', ' ../images/image.png ')).toBe(
+      'images/image.png',
+    );
+  });
+
+  it('rejects slides, duplicate manifest paths and duplicate IDs within one chapter', () => {
     expect(() =>
       createReportProject(
         parseMarkdown('---\ntype: slide\n---\n# Slide').document,
       ),
     ).toThrow('reportOnly');
     const source = project();
-    source.chapters[1].document = source.chapters[0].document;
-    expect(() => validateReportProject(source)).toThrow('duplicateNodeId');
+    const duplicate = structuredClone(source);
+    duplicate.chapters[0].document.children.push(
+      duplicate.chapters[0].document.children[0],
+    );
+    expect(() => validateReportProject(duplicate)).toThrow(
+      DocumentValidationError,
+    );
     source.chapters[1].file = source.chapters[0].file.toUpperCase();
     expect(() => validateReportProject(source)).toThrow('invalidArchive');
   });

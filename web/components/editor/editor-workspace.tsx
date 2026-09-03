@@ -61,7 +61,9 @@ export function EditorWorkspace() {
         <WorkspaceProperties
           document={workspace.previewDocument}
           editor={workspace.editor}
-          documentWriteLocked={workspace.documentWriteLocked}
+          documentWriteLocked={
+            workspace.documentWriteLocked || workspace.projectActions.busy
+          }
           analysis={workspace.analysis}
           selectedNode={workspace.selectedNode}
           selectedSemantic={workspace.selectedSemantic}

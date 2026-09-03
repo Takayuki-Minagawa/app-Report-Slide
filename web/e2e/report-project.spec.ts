@@ -166,7 +166,9 @@ test('章別レポートを画像・除外設定ごとZIP保存し再開でき�
   await expect(page.getByLabel('未保存')).toBeVisible();
 });
 
-test('大きな原稿でもZIPのWorker入出力と英語UIが動作する', async ({ page }) => {
+test('大きな原稿でもZIPの分割読込・非同期保存と英語UIが動作する', async ({
+  page,
+}) => {
   test.setTimeout(60_000);
   const manifest = {
     schemaVersion: 1,
