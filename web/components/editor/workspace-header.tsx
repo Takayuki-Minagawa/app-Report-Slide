@@ -2,6 +2,7 @@
 
 import type { Editor } from '@tiptap/react';
 import {
+  FileCode2,
   FileJson,
   FileText,
   Languages,
@@ -25,6 +26,8 @@ interface WorkspaceHeaderProps {
   dirty: boolean;
   documentWriteLocked: boolean;
   saveDocument: (format: DocumentFileFormat) => void;
+  exportHtml: () => Promise<void>;
+  htmlExporting: boolean;
 }
 
 export function WorkspaceHeader({
@@ -33,6 +36,8 @@ export function WorkspaceHeader({
   dirty,
   documentWriteLocked,
   saveDocument,
+  exportHtml,
+  htmlExporting,
 }: WorkspaceHeaderProps) {
   const {
     copy,
@@ -137,6 +142,23 @@ export function WorkspaceHeader({
         >
           <FileJson data-icon="inline-start" /> JSON
         </Button>
+        {document.type === 'slide' && (
+          <Button
+            size="sm"
+            variant="outline"
+            aria-label={
+              htmlExporting
+                ? copy.workspace.exportingHtml
+                : copy.workspace.exportHtml
+            }
+            title={copy.workspace.exportHtml}
+            aria-busy={htmlExporting}
+            disabled={htmlExporting}
+            onClick={() => void exportHtml()}
+          >
+            <FileCode2 data-icon="inline-start" /> HTML
+          </Button>
+        )}
         <Button size="sm" onClick={() => saveDocument('markdown')}>
           <Save data-icon="inline-start" /> Markdown
         </Button>

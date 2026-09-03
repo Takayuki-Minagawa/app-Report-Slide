@@ -172,10 +172,19 @@ export function downloadDocument(
   const type = json
     ? 'application/json;charset=utf-8'
     : 'text/markdown;charset=utf-8';
+  downloadFile(document, json ? 'json' : 'md', content, type);
+}
+
+export function downloadFile(
+  document: DocumentData,
+  extension: string,
+  content: string,
+  type: string,
+): void {
   const url = URL.createObjectURL(new Blob([content], { type }));
   const anchor = window.document.createElement('a');
   anchor.href = url;
-  anchor.download = filenameFor(document, json ? 'json' : 'md');
+  anchor.download = filenameFor(document, extension);
   try {
     window.document.body.appendChild(anchor);
     anchor.click();

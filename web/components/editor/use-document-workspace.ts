@@ -33,6 +33,7 @@ import {
   readWorkspaceFiles,
   revokeAssetUrls,
   downloadDocument,
+  downloadFile,
   type AssetUrls,
   type DocumentFileFormat,
 } from '@/src/workspace/files';
@@ -43,6 +44,7 @@ import {
   statusDescriptionText,
   combinedStatusDescription,
   describeWorkspaceError,
+  WorkspaceStatusError,
   type StatusMessage,
   type StatusDescription,
   type WorkspaceStatus,
@@ -90,12 +92,20 @@ export function useDocumentWorkspace() {
   const [markdownDirty, setMarkdownDirty] = useState(false);
   const [assets, setAssets] = useState<AssetUrls>(() => new Map());
   const ownedAssets = useRef(assets);
+  const [htmlExporting, setHtmlExporting] = useState(false);
+  const activeHtmlExport = useRef<number | null>(null);
   const importRevision = useRef(0);
   const invalidatePendingImport = useCallback(() => {
     importRevision.current++;
   }, []);
   useEffect(() => invalidatePendingImport, [invalidatePendingImport]);
   useEffect(() => () => revokeAssetUrls(ownedAssets.current), []);
+  useEffect(
+    () => () => {
+      activeHtmlExport.current = null;
+    },
+    [],
+  );
 
   const replaceAssets = useCallback((next: AssetUrls) => {
     const previous = ownedAssets.current;
@@ -161,7 +171,8 @@ export function useDocumentWorkspace() {
   );
 
   useEffect(() => {
-    editor?.view.dom.setAttribute('aria-label', copy.workspace.documentBody);
+    if (editor && !editor.isDestroyed)
+      editor.view.dom.setAttribute('aria-label', copy.workspace.documentBody);
   }, [copy.workspace.documentBody, editor]);
 
   const outline = useMemo(
@@ -389,6 +400,65 @@ export function useDocumentWorkspace() {
     }
   };
 
+  const exportHtml = async () => {
+    if (activeHtmlExport.current !== null) return;
+    const revision = ++importRevision.current;
+    activeHtmlExport.current = revision;
+    setHtmlExporting(true);
+    try {
+      const snapshot = markdownDirty
+        ? parseMarkdown(markdownDraft, { fallbackType: document.type })
+        : { document: currentDocument(editor, document), diagnostics: [] };
+      if (snapshot.document.type !== 'slide')
+        throw new WorkspaceStatusError(statusMessage('htmlSlidesOnly'));
+      setStatus({ kind: 'idle', title: statusMessage('exportingHtml') });
+      // Load the static renderer and embedded fonts only when export is requested.
+      const { exportSlideHtml } = await import('@/src/export/slide-html');
+      if (revision !== importRevision.current) return;
+      const result = await exportSlideHtml(snapshot.document, assets, locale);
+      if (revision !== importRevision.current) return;
+      downloadFile(
+        snapshot.document,
+        'html',
+        result.html,
+        'text/html;charset=utf-8',
+      );
+      setStatus({
+        kind: 'success',
+        title: statusMessage('exportedHtml'),
+        description: [
+          ...snapshot.diagnostics.map(diagnosticStatusMessage),
+          statusMessage('htmlExportDescription'),
+          ...(result.externalImages.length > 0
+            ? [statusMessage('htmlExternalImages')]
+            : []),
+        ],
+      });
+      // Viewing output is not an editable-source save: preserve drafts, Undo and dirty flags.
+    } catch (error) {
+      if (revision === importRevision.current)
+        setStatus({
+          kind: 'error',
+          title: statusMessage('unableToExportHtml'),
+          description: describeWorkspaceError(error, 'unableToExportHtml'),
+        });
+    } finally {
+      if (activeHtmlExport.current === revision) {
+        activeHtmlExport.current = null;
+        setHtmlExporting(false);
+        if (revision !== importRevision.current) {
+          setStatus((current) =>
+            typeof current.title === 'object' &&
+            'key' in current.title &&
+            current.title.key === 'exportingHtml'
+              ? { kind: 'idle', title: statusMessage('htmlExportCancelled') }
+              : current,
+          );
+        }
+      }
+    }
+  };
+
   const updateTheme = (theme: string) => {
     if (documentWriteLocked) return;
     invalidatePendingImport();
@@ -435,6 +505,8 @@ export function useDocumentWorkspace() {
     changeView,
     discardMarkdown,
     saveDocument,
+    exportHtml,
+    htmlExporting,
     updateTheme,
     updateDocumentFlag,
   };

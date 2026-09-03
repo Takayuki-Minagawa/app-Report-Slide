@@ -1,0 +1,212 @@
+/* Standalone reset: the exported file does not depend on Tailwind or app assets. */
+:root {
+  color-scheme: dark;
+  line-height: 1.5;
+  --font-ui: Inter, 'Noto Sans JP', 'Yu Gothic UI', Meiryo, sans-serif;
+  --font-code: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  --border: #bdc8d1;
+  --muted-foreground: #596b7b;
+}
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: #101b28;
+  color: #edf3fa;
+  font-family: var(--font-ui);
+}
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+figure,
+blockquote,
+pre,
+ol,
+ul {
+  margin: 0;
+}
+ol,
+ul {
+  padding: 0;
+}
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-size: inherit;
+  font-weight: inherit;
+}
+pre,
+code {
+  font-size: 1em;
+}
+hr {
+  height: 0;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid currentColor;
+}
+a {
+  color: inherit;
+  text-decoration: inherit;
+}
+img {
+  max-width: 100%;
+}
+table {
+  border-collapse: collapse;
+}
+button {
+  font: inherit;
+}
+[hidden] {
+  display: none !important;
+}
+.deck-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 12px 20px;
+}
+.deck-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  font-weight: 600;
+}
+.deck-help {
+  font-size: 12px;
+  color: #bac9d9;
+}
+#deck-stage {
+  margin: 0 auto;
+}
+.deck-slide {
+  margin: 20px auto;
+  color-scheme: light;
+}
+.deck-slide a:focus-visible {
+  outline: 3px solid #d48700;
+  outline-offset: 3px;
+}
+.deck-ready #deck-viewport {
+  display: grid;
+  place-items: center;
+  height: calc(100dvh - 112px);
+  min-height: 90px;
+}
+.deck-ready #deck-stage {
+  width: calc(920px * var(--deck-scale));
+  height: calc(517.5px * var(--deck-scale));
+}
+.deck-ready .deck-slide {
+  width: 920px;
+  height: 517.5px;
+  margin: 0;
+  transform: scale(var(--deck-scale));
+  transform-origin: top left;
+  overflow: hidden;
+}
+.deck-ready .deck-slide > .document-renderer {
+  max-height: 100%;
+  overflow: auto;
+}
+.deck-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+}
+.deck-controls button {
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 1px solid #8098b0;
+  border-radius: 6px;
+  background: #20364d;
+  color: #fff;
+  cursor: pointer;
+}
+.deck-controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.deck-controls button:focus-visible {
+  outline: 3px solid #ffcf66;
+  outline-offset: 3px;
+}
+#deck-counter {
+  min-width: 72px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+#deck-status {
+  position: fixed;
+  bottom: 60px;
+  left: 16px;
+  right: 16px;
+  text-align: center;
+  font-size: 12px;
+}
+@media (max-width: 620px) {
+  .deck-help {
+    display: none;
+  }
+  .deck-controls {
+    gap: 6px;
+  }
+  .deck-controls button {
+    padding-inline: 10px;
+    font-size: 13px;
+  }
+}
+@media print {
+  @page {
+    size: 320mm 180mm;
+    margin: 0;
+  }
+  body {
+    background: white;
+  }
+  .deck-heading,
+  .deck-controls,
+  #deck-status {
+    display: none !important;
+  }
+  .deck-ready #deck-viewport,
+  .deck-ready #deck-stage {
+    display: block;
+    width: auto;
+    height: auto;
+  }
+  .deck-ready .deck-slide,
+  .deck-slide[hidden] {
+    display: block !important;
+    width: 320mm;
+    height: auto;
+    min-height: 180mm;
+    margin: 0;
+    transform: none;
+    overflow: visible;
+    box-shadow: none;
+    break-after: page;
+  }
+  .deck-slide:last-child {
+    break-after: auto;
+  }
+  .deck-ready .deck-slide > .document-renderer {
+    max-height: none;
+    overflow: visible;
+  }
+}

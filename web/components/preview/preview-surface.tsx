@@ -4,13 +4,12 @@ import { useMemo } from 'react';
 import { useAppPreferences } from '@/components/app-preferences';
 import { localizeDiagnosticMessage } from '@/src/i18n/diagnostics';
 import type { DocumentData } from '@/src/document/model';
-import { resolveDocumentTheme } from '@/src/document/metadata';
 import {
   analyzeDocument,
   splitDocumentPages,
   type DocumentAnalysis,
 } from '@/src/document/semantics';
-import { DocumentRenderer } from './document-renderer';
+import { DocumentPage } from './document-page';
 
 export function PreviewSurface({
   document,
@@ -23,7 +22,6 @@ export function PreviewSurface({
 }) {
   const { copy, locale } = useAppPreferences();
   const slide = document.type === 'slide';
-  const theme = resolveDocumentTheme(document.type, document.metadata.theme);
   const analysis = useMemo(
     () => providedAnalysis ?? analyzeDocument(document),
     [document, providedAnalysis],
@@ -53,32 +51,16 @@ export function PreviewSurface({
         </output>
       )}
       {pages.map((nodes, index) => (
-        <article
+        <DocumentPage
           key={index}
-          className={slide ? 'slide-preview' : 'report-preview'}
-          data-theme={theme}
-          aria-label={
-            slide ? copy.preview.slidePreview : copy.preview.reportPreview
-          }
-          data-page={index + 1}
-        >
-          <DocumentRenderer
-            document={document}
-            nodes={nodes}
-            analysis={analysis}
-            showToc={index === 0}
-            resolveImageUrl={resolveImageUrl}
-          />
-          <footer>
-            {slide && <span>{document.metadata.author ?? ''}</span>}
-            {(!slide || document.metadata.slide_number !== false) && (
-              <span>
-                {index + 1}
-                {slide ? ` / ${pages.length}` : ''}
-              </span>
-            )}
-          </footer>
-        </article>
+          document={document}
+          nodes={nodes}
+          analysis={analysis}
+          locale={locale}
+          index={index}
+          count={pages.length}
+          resolveImageUrl={resolveImageUrl}
+        />
       ))}
     </div>
   );

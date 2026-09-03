@@ -62,6 +62,12 @@ export default defineConfig(async () => {
 
   return {
     css: { postcss: { plugins: [tailwindcss()] } },
+    environments: {
+      client: {
+        // Avoid a first-export dependency discovery reload that would discard edits.
+        optimizeDeps: { include: ['react-dom/server.browser'] },
+      },
+    },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,

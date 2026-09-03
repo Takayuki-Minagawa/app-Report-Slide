@@ -11,13 +11,25 @@ KUMI is a browser application for editing and reviewing technical reports and sl
 ## 2. Edit
 
 - Edit text directly in the **Visual editor**. The formatting toolbar adds headings, lists, quotes, tables, equations, and page or slide breaks.
-- Use the **Markdown** tab to edit source. Choose **Apply Markdown**, or use a header save action when you finish. While a Markdown draft is unapplied, KUMI prevents a return to the visual editor to avoid conflicting changes.
+- Use the **Markdown** tab to edit source. Choose **Apply Markdown**, or save **Markdown/JSON** from the header when you finish. While a Markdown draft is unapplied, KUMI prevents a return to the visual editor to avoid conflicting changes.
 - Select an element to configure its theme, table of contents, numbering, reference label, caption, and an image's width, alignment, or alternative text in **Properties**.
 
 ## 3. Review and save
 
 - Use **Preview** to review Reports as A4 pages and Slides as 16:9 slides. Explicit page and slide breaks start a new preview page.
 - Save a file with **Markdown** or **JSON** in the header. Document JSON retains structures that Markdown cannot represent.
+
+### Take HTML slides with you
+
+1. Create or import a **Slide** document and insert slide breaks where needed.
+2. Select **HTML** in the header to download a single `.html` file.
+3. Open the file in a browser. Use **Previous/Next**, ←/→, or Space to navigate, and Home/End to jump to the first/last slide. F or **Fullscreen** works in supported browsers. Table-of-contents and cross-reference links open the target slide.
+
+The slide frame scales to fit the screen. Overflowing content can be scrolled within the slide; add more slide breaks before presenting if needed.
+
+Math fonts and imported images are embedded in the HTML. External image URLs still need a network connection. If an image has not been imported, save your source as Markdown/JSON first, then import the source and images together before exporting again.
+
+HTML is for viewing and presenting; it cannot be re-imported into KUMI. Unapplied Markdown drafts are included in the export, but are not applied to the editable document or marked as saved. **Save Markdown/JSON separately to keep an editable source.**
 
 ## 4. Change display and language
 

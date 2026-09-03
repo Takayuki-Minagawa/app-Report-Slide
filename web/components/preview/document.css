@@ -1,0 +1,273 @@
+.preview-inline-image,
+.kumi-inline-image {
+  display: inline-block;
+  width: auto;
+  max-width: min(100%, 18rem);
+  max-height: 5em;
+  margin-inline: 0.2em;
+  vertical-align: middle;
+}
+
+.preview-inline-image-fallback {
+  display: inline-block;
+  margin-inline: 0.2em;
+  padding: 0.08em 0.35em;
+  border: 1px dashed var(--border);
+  border-radius: 0.2rem;
+  color: var(--muted-foreground);
+  font-size: 0.82em;
+  vertical-align: middle;
+}
+
+.report-preview,
+.slide-preview {
+  position: relative;
+  background: #fffefd;
+  color: #1f2f3e;
+  box-shadow:
+    0 12px 36px rgb(24 39 58 / 16%),
+    0 0 0 1px rgb(83 101 124 / 12%);
+}
+
+.report-preview {
+  width: min(760px, 100%);
+  min-height: 980px;
+  padding: 68px 76px 58px;
+  font-family: 'Noto Serif JP', 'Yu Mincho', 'Hiragino Mincho ProN', serif;
+}
+
+.slide-preview {
+  width: min(920px, 100%);
+  aspect-ratio: 16 / 9;
+  padding: 52px 66px;
+  overflow: auto;
+  font-family: var(--font-ui);
+}
+
+.preview-reference {
+  color: #246089;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.preview-reference-unresolved {
+  color: #a94519;
+  background: #fff1d8;
+}
+.document-toc {
+  padding: 18px 0 24px;
+  border-bottom: 1px solid #bdc8d1;
+  margin-bottom: 28px;
+}
+.document-toc ol {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.document-toc a {
+  color: inherit;
+}
+.document-renderer figcaption,
+.document-renderer caption,
+.equation-caption {
+  font-size: 12px;
+  text-align: center;
+  margin-top: 8px;
+  white-space: pre-wrap;
+}
+.document-renderer caption {
+  caption-side: top;
+  margin-bottom: 8px;
+}
+.equation-body {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.equation-body .preview-equation {
+  flex: 1;
+  min-width: 0;
+}
+.equation-number {
+  flex-shrink: 0;
+}
+
+.document-renderer {
+  font-size: 14px;
+  line-height: 1.85;
+}
+
+.slide-preview .document-renderer {
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.document-renderer > * + * {
+  margin-top: 1rem;
+}
+
+.document-renderer h1 {
+  margin-bottom: 2rem;
+  border-bottom: 2px solid #173b5e;
+  padding-bottom: 0.7rem;
+  color: #102b46;
+  font-family: var(--font-ui);
+  font-size: 1.9rem;
+  font-weight: 750;
+}
+
+.document-renderer h2 {
+  margin-top: 2rem;
+  border-bottom: 1px solid #d5dde6;
+  padding-bottom: 0.35rem;
+  color: #173b5e;
+  font-family: var(--font-ui);
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.document-renderer h3 {
+  margin-top: 1.5rem;
+  color: #234e70;
+  font-family: var(--font-ui);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.document-renderer ul,
+.document-renderer ol {
+  margin-left: 1.5rem;
+}
+
+.document-renderer ul {
+  list-style: disc;
+}
+
+.document-renderer ol {
+  list-style: decimal;
+}
+
+.document-renderer blockquote {
+  border-left: 3px solid #3b82b8;
+  background: #edf5fa;
+  padding: 0.75rem 1rem;
+}
+
+.document-renderer pre {
+  overflow: auto;
+  border-radius: 0.35rem;
+  background: #111d29;
+  padding: 1rem;
+  color: #e6edf3;
+}
+
+.document-renderer code {
+  font-family: var(--font-code);
+}
+
+.preview-equation {
+  margin: 1.5rem 0;
+  overflow-x: auto;
+  border: 1px solid #dbe8f3;
+  background: #f4f8fb;
+  padding: 1.2rem;
+  text-align: center;
+}
+
+.preview-table-wrap {
+  overflow-x: auto;
+}
+
+.preview-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+}
+
+.preview-table-wrap th {
+  background: #173b5e;
+  color: white;
+}
+
+.preview-table-wrap th,
+.preview-table-wrap td {
+  border: 1px solid #cad4df;
+  padding: 0.45rem 0.6rem;
+}
+
+.preview-figure {
+  margin-block: 1.5rem;
+}
+
+.preview-figure[data-align='center'] {
+  margin-inline: auto;
+}
+
+.preview-figure[data-align='right'] {
+  margin-left: auto;
+}
+
+.preview-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.preview-image-fallback {
+  display: grid;
+  min-height: 120px;
+  place-items: center;
+  border: 1px dashed #9caabc;
+  background: #f3f6f9;
+  padding: 1rem;
+  color: #596b7b;
+  text-align: center;
+}
+
+.preview-image-fallback small {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.report-preview > footer {
+  position: absolute;
+  right: 0;
+  bottom: 26px;
+  left: 0;
+  text-align: center;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  color: #6a7783;
+}
+
+.slide-preview > footer {
+  position: absolute;
+  right: 24px;
+  bottom: 16px;
+  left: 24px;
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid #d6dee7;
+  padding-top: 7px;
+  font-size: 10px;
+  color: #617182;
+}
+
+.slide-preview[data-theme='technical'] {
+  border-top: 8px solid #0e7590;
+}
+
+.slide-preview[data-theme='beamer-simple'] {
+  border-top: 8px solid #214d7a;
+}
+
+.report-preview[data-theme='calculation'] .document-renderer h2 {
+  border-left: 4px solid #1d7c8d;
+  border-bottom-color: #b8d7dc;
+  padding-left: 0.65rem;
+}
+
+.preview-table-wrap p + p {
+  margin-top: 0.5rem;
+}
