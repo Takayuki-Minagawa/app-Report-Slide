@@ -5,6 +5,7 @@ import { WorkspaceHeader } from './workspace-header';
 import { WorkspaceNavigator } from './workspace-navigator';
 import { WorkspaceEditor } from './workspace-editor';
 import { WorkspaceProperties } from './workspace-properties';
+import { ProjectPanel } from './project-panel';
 
 export function EditorWorkspace() {
   const workspace = useDocumentWorkspace();
@@ -12,7 +13,8 @@ export function EditorWorkspace() {
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-background">
       <WorkspaceHeader
-        document={workspace.document}
+        document={workspace.previewDocument}
+        project={Boolean(workspace.project)}
         editor={workspace.editor}
         dirty={workspace.dirty}
         documentWriteLocked={workspace.documentWriteLocked}
@@ -22,15 +24,29 @@ export function EditorWorkspace() {
       />
       <section className="workspace-grid">
         <WorkspaceNavigator
+          projectPanel={
+            <ProjectPanel
+              project={workspace.project}
+              activeChapterId={workspace.projectSession?.activeChapterId}
+              documentType={workspace.document.type}
+              locked={workspace.documentWriteLocked}
+              actions={workspace.projectActions}
+            />
+          }
           outline={workspace.outline}
           selectedNodeId={workspace.selectedNode?.nodeId}
-          documentWriteLocked={workspace.documentWriteLocked}
+          documentWriteLocked={
+            workspace.documentWriteLocked || workspace.projectActions.busy
+          }
           focusNode={workspace.focusNode}
           importFiles={workspace.importFiles}
           createDocument={workspace.createDocument}
         />
         <WorkspaceEditor
           document={workspace.document}
+          previewDocument={workspace.previewDocument}
+          project={Boolean(workspace.project)}
+          resolvePreviewImageUrl={workspace.resolvePreviewImageUrl}
           editor={workspace.editor}
           view={workspace.view}
           markdownDraft={workspace.markdownDraft}
@@ -43,7 +59,7 @@ export function EditorWorkspace() {
           discardMarkdown={workspace.discardMarkdown}
         />
         <WorkspaceProperties
-          document={workspace.document}
+          document={workspace.previewDocument}
           editor={workspace.editor}
           documentWriteLocked={workspace.documentWriteLocked}
           analysis={workspace.analysis}

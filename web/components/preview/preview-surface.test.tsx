@@ -1,10 +1,76 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { parseMarkdown } from '@/src/markdown/parser';
 import { AppPreferencesProvider } from '@/components/app-preferences';
 import { PreviewSurface } from './preview-surface';
 
 describe('semantic preview', () => {
+  it('renders only one project page and follows cross-page references with keyboard focus', async () => {
+    const document = parseMarkdown(
+      '---\ntype: report\ntoc: true\nnumber_sections: true\n---\n\n# Intro\n{#sec:intro}\n\n[@fig:result]\n\n::: pagebreak\n:::\n\n# Results\n{#sec:results}\n\n![Result](result.svg)\n{#fig:result caption="Outcome"}',
+    ).document;
+    const { container } = render(
+      <AppPreferencesProvider>
+        <PreviewSurface document={document} paginated />
+      </AppPreferencesProvider>,
+    );
+    expect(container.querySelectorAll('.report-preview')).toHaveLength(1);
+    expect(screen.getByLabelText('A4レポートプレビュー')).toHaveAttribute(
+      'data-page',
+      '1',
+    );
+    fireEvent.click(screen.getByRole('link', { name: '図 1' }));
+    expect(screen.getByLabelText('A4レポートプレビュー')).toHaveAttribute(
+      'data-page',
+      '2',
+    );
+    expect(container.querySelectorAll('.report-preview')).toHaveLength(1);
+    await waitFor(() =>
+      expect(window.document.activeElement).toHaveTextContent('Outcome'),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '前のページ' }));
+    fireEvent.click(screen.getByRole('link', { name: '2 Results' }));
+    expect(screen.getByLabelText('A4レポートプレビュー')).toHaveAttribute(
+      'data-page',
+      '2',
+    );
+    expect(screen.getByRole('heading', { name: '2 Results' })).toHaveFocus();
+  });
+
+  it('keeps a large project preview bounded and clamps the selected page after exclusion', () => {
+    const document = parseMarkdown(
+      Array.from(
+        { length: 40 },
+        (_, index) => `# Page ${index + 1}\n\nBody ${index + 1}`,
+      ).join('\n\n::: pagebreak\n:::\n\n'),
+    ).document;
+    const { container, rerender } = render(
+      <AppPreferencesProvider>
+        <PreviewSurface document={document} paginated />
+      </AppPreferencesProvider>,
+    );
+    fireEvent.change(screen.getByRole('combobox', { name: '表示ページ' }), {
+      target: { value: '39' },
+    });
+    expect(container.querySelectorAll('.report-preview')).toHaveLength(1);
+    expect(
+      screen.getByRole('heading', { name: 'Page 40' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Page 1' }),
+    ).not.toBeInTheDocument();
+    const smaller = parseMarkdown('# Only page').document;
+    rerender(
+      <AppPreferencesProvider>
+        <PreviewSurface document={smaller} paginated />
+      </AppPreferencesProvider>,
+    );
+    expect(
+      screen.getByRole('heading', { name: 'Only page' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '次のページ' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '前のページ' })).toBeDisabled();
+  });
   beforeEach(() => {
     window.localStorage.clear();
     document.documentElement.classList.remove('dark');

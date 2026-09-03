@@ -15,6 +15,9 @@ import type { WorkspaceView } from './use-document-workspace';
 import { FormatToolbar } from './format-toolbar';
 
 interface WorkspaceEditorProps {
+  previewDocument?: DocumentData;
+  project?: boolean;
+  resolvePreviewImageUrl?: (source: string) => string;
   document: DocumentData;
   editor: Editor | null;
   view: WorkspaceView;
@@ -29,6 +32,9 @@ interface WorkspaceEditorProps {
 }
 
 export function WorkspaceEditor({
+  previewDocument,
+  project = false,
+  resolvePreviewImageUrl,
   document,
   editor,
   view,
@@ -109,9 +115,10 @@ export function WorkspaceEditor({
         <ScrollArea className="min-h-0 flex-1">
           <div className="preview-stage">
             <PreviewSurface
-              document={document}
+              document={previewDocument ?? document}
               analysis={analysis}
-              resolveImageUrl={resolveImageUrl}
+              resolveImageUrl={resolvePreviewImageUrl ?? resolveImageUrl}
+              paginated={project}
             />
           </div>
         </ScrollArea>

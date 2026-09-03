@@ -37,6 +37,18 @@ HTML is for viewing and presenting; it cannot be re-imported into KUMI. Unapplie
 - Use **EN** or **日本語** to change the application interface. Your document is never translated automatically.
 - Open **Guide** to view the same essential instructions inside the application.
 
+## 5. Split a long report into chapters
+
+1. Open a Report and select **Turn this report into a project** in the left panel.
+2. Use **Add a blank chapter** or **Add source as chapter**. Select one Markdown/Document JSON source and any local images it needs.
+3. Select a chapter to edit only that chapter. Use Move up/down to reorder it. Uncheck **Include in combined output** to exclude a chapter while keeping its source. Deletion requires confirmation.
+4. Use **Page break before chapter** and in-document page breaks to arrange pages. The combined preview supports Previous/Next, page selection, and TOC/reference links. Numbering and references cover all enabled chapters.
+5. **Save project ZIP** saves the structure, all chapters and images. Resume with **Open project ZIP**.
+
+**Chapter Markdown/JSON** in the header saves only the active chapter. Combined exports produce one document containing the enabled chapters. Neither replaces a project ZIP or clears the project's unsaved indicator.
+
+Apply or discard Markdown and return to the visual editor before changing the chapter structure. Structural changes are outside Undo; switching or deleting chapters resets the body Undo history. **There is no autosave. Save a ZIP before closing the tab.** See [Chapter projects](./report-projects.en.md) for details.
+
 ## Using the published version
 
 GitHub Pages is public. Do not import documents or images containing customer information, personal data, confidential information, or credentials. Handle files stored on your device or exported from KUMI according to your organization's policies.
