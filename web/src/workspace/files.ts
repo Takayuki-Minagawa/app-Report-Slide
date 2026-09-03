@@ -12,6 +12,11 @@ export type AssetUrls = ReadonlyMap<string, string>;
 const maximumAssetBytes = 20 * 1024 * 1024;
 const maximumTotalAssetBytes = 50 * 1024 * 1024;
 
+export const imageFileAccept =
+  'image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.svg';
+
+let insertedAssetSerial = 0;
+
 export type DocumentFileFormat = 'markdown' | 'json';
 
 function sourceFormat(file: File): DocumentFileFormat | undefined {
@@ -30,6 +35,58 @@ function isImageAsset(file: File): boolean {
   );
 }
 
+function extensionForImage(file: File): string {
+  const extension = /\.(png|jpe?g|webp|gif|svg)$/i.exec(file.name)?.[1];
+  if (extension) return extension.toLowerCase();
+  const type = file.type.toLowerCase();
+  if (type === 'image/png') return 'png';
+  if (type === 'image/jpeg') return 'jpg';
+  if (type === 'image/webp') return 'webp';
+  if (type === 'image/gif') return 'gif';
+  return 'svg';
+}
+
+function encodedAssetFilename(file: File): string | undefined {
+  const filename = file.name.trim().replace(/[\\/]/g, '-').replace(/^\.+/, '');
+  if (!filename) return undefined;
+  return encodeURIComponent(filename).replace(
+    /[!'()*]/g,
+    (character) => '%' + character.charCodeAt(0).toString(16).toUpperCase(),
+  );
+}
+
+/**
+ * Creates a locally owned image source for the slide placement picker.
+ * Keeping the original filename makes Markdown/JSON re-import work when the
+ * user selects the same image again. A repeated filename intentionally updates
+ * the shared local asset, just like replacing an image file in a folder.
+ */
+export function createInsertedImageAsset(
+  file: File,
+  assets: AssetUrls,
+): { source: string; url: string } {
+  if (!isImageAsset(file))
+    throw new WorkspaceStatusError(
+      statusMessage('unsupportedAttachments', file.name),
+    );
+  if (file.size > maximumAssetBytes)
+    throw new WorkspaceStatusError(statusMessage('imageTooLarge'));
+
+  const filename = encodedAssetFilename(file);
+  if (filename)
+    return { source: 'assets/' + filename, url: URL.createObjectURL(file) };
+
+  let source: string;
+  do {
+    insertedAssetSerial += 1;
+    source =
+      'assets/placed-image-' +
+      insertedAssetSerial +
+      '.' +
+      extensionForImage(file);
+  } while (assets.has(source));
+  return { source, url: URL.createObjectURL(file) };
+}
 function normalizedAssetPath(value: string): string {
   const path = value.split(/[?#]/, 1)[0].replace(/\\/g, '/');
   let decoded = path;

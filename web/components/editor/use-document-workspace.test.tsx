@@ -243,4 +243,50 @@ describe('asynchronous document import', () => {
     });
     expect(revokeUrl).toHaveBeenCalledExactlyOnceWith('blob:unmounted');
   });
+  describe('slide image insertion', () => {
+    it('adds a selected local image with a default free-placement rectangle', async () => {
+      const revokeUrl = vi.fn();
+      vi.stubGlobal(
+        'URL',
+        Object.assign(class extends URL {}, {
+          createObjectURL: () => 'blob:placed',
+          revokeObjectURL: revokeUrl,
+        }),
+      );
+      const { result, unmount } = await workspace();
+
+      act(() => result.current.createDocument('slide'));
+      await waitFor(() => expect(result.current.document.type).toBe('slide'));
+      act(() =>
+        result.current.insertSlideImage(
+          new File(['image'], 'architecture.png', { type: 'image/png' }),
+          0,
+        ),
+      );
+      await waitFor(() =>
+        expect(
+          result.current.document.children.some(
+            (node) => node.type === 'figure',
+          ),
+        ).toBe(true),
+      );
+
+      const figure = result.current.document.children.find(
+        (node) => node.type === 'figure',
+      );
+      if (!figure || figure.type !== 'figure')
+        throw new Error('figure expected');
+      expect(figure.attrs).toMatchObject({
+        src: 'assets/architecture.png',
+        alt: 'architecture',
+        slidePlacement: { x: 32, y: 22, width: 36, height: 42 },
+      });
+      expect(result.current.resolveImageUrl(figure.attrs.src)).toBe(
+        'blob:placed',
+      );
+
+      unmount();
+      expect(revokeUrl).toHaveBeenCalledExactlyOnceWith('blob:placed');
+    });
+  });
 });

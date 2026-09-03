@@ -12,6 +12,11 @@ import StarterKit from '@tiptap/starter-kit';
 
 import { createNodeId } from '@/src/document/model';
 import {
+  isSlideImagePlacement,
+  parseSlideImagePlacement,
+  serializeSlideImagePlacement,
+} from '@/src/document/slide-layout';
+import {
   isTableCellBorders,
   parseTableCellBorders,
   tableCellBordersToCss,
@@ -230,6 +235,13 @@ function createFigureExtension(resolveImageUrl: (source: string) => string) {
           parseHTML: (element) =>
             element.getAttribute('data-align') ?? 'center',
         },
+        slidePlacement: {
+          default: null,
+          parseHTML: (element) =>
+            parseSlideImagePlacement(
+              element.getAttribute('data-slide-placement'),
+            ) ?? null,
+        },
       };
     },
 
@@ -237,6 +249,7 @@ function createFigureExtension(resolveImageUrl: (source: string) => string) {
       const {
         align,
         nodeId,
+        slidePlacement,
         src,
         style: _discardedStyle,
         width,
@@ -252,6 +265,9 @@ function createFigureExtension(resolveImageUrl: (source: string) => string) {
           ? align
           : 'center';
       const resolvedSource = resolveSafeImageUrl(src, resolveImageUrl);
+      const safePlacement = isSlideImagePlacement(slidePlacement)
+        ? serializeSlideImagePlacement(slidePlacement)
+        : undefined;
 
       return [
         'img',
@@ -260,6 +276,7 @@ function createFigureExtension(resolveImageUrl: (source: string) => string) {
           'data-node-id': typeof nodeId === 'string' ? nodeId : undefined,
           'data-width': safeWidth,
           'data-align': safeAlign,
+          'data-slide-placement': safePlacement,
           class: 'kumi-figure',
           style: `display:block;width:${safeWidth}%;height:auto;margin-left:${
             safeAlign === 'right' || safeAlign === 'center' ? 'auto' : '0'

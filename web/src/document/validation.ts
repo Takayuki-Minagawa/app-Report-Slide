@@ -6,6 +6,7 @@ import type { DocumentData } from './model';
 import { booleanMetadataKeys, stringMetadataKeys } from './metadata';
 import { labelPattern, semanticTypes } from './semantics';
 import { isTableCellBorders, tableBorderSides } from './table';
+import { isSlideImagePlacement } from './slide-layout';
 
 const documentEnvelopeSchema = z
   .object({
@@ -377,6 +378,34 @@ function validateTableCellFormatting(
   }
 }
 
+function validateSlidePlacementScope(
+  value: unknown,
+  path: string,
+  documentType: DocumentData['type'],
+  issues: string[],
+): void {
+  if (!isRecord(value)) return;
+  const attrs = isRecord(value.attrs) ? value.attrs : undefined;
+  if (
+    documentType !== 'slide' &&
+    value.type === 'figure' &&
+    attrs?.slidePlacement !== undefined &&
+    attrs.slidePlacement !== null
+  ) {
+    issues.push(path + '.attrs.slidePlacement: Slide文書だけに指定できます');
+  }
+  if (Array.isArray(value.content)) {
+    value.content.forEach((child, index) =>
+      validateSlidePlacementScope(
+        child,
+        path + '.content.' + index,
+        documentType,
+        issues,
+      ),
+    );
+  }
+}
+
 /** Rejects malformed merged-cell grids before they reach the editor or renderer. */
 function validateTableGrid(
   table: RecordValue,
@@ -621,6 +650,15 @@ function validateBlockNode(
         );
       }
       if (
+        attrs?.slidePlacement !== undefined &&
+        attrs.slidePlacement !== null &&
+        !isSlideImagePlacement(attrs.slidePlacement)
+      ) {
+        issues.push(
+          `${path}.attrs.slidePlacement: スライド内に収まるx、y、width、heightが必要です`,
+        );
+      }
+      if (
         typeof attrs?.src === 'string' &&
         !isSafeResourceUrl(attrs.src, 'image')
       ) {
@@ -738,9 +776,15 @@ export function validateDocumentData(value: unknown): DocumentData {
   if (result.data.children.length === 0) {
     issues.push('children: 1つ以上のblock nodeが必要です');
   }
-  result.data.children.forEach((node, index) =>
-    validateBlockNode(node, `children.${index}`, 'root', issues, nodeIds),
-  );
+  result.data.children.forEach((node, index) => {
+    validateBlockNode(node, `children.${index}`, 'root', issues, nodeIds);
+    validateSlidePlacementScope(
+      node,
+      `children.${index}`,
+      result.data.type,
+      issues,
+    );
+  });
 
   if (issues.length > 0) {
     throw new DocumentValidationError(issues);

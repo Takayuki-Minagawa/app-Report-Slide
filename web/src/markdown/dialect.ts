@@ -36,7 +36,9 @@ export function createMarkdownIt(): MarkdownIt {
           .trim();
       const line = lineAt(startLine);
       const attributes =
-        /^\{(?:#|(?:label|caption|numbered|width|align)=)/.test(line);
+        /^\{(?:#|(?:label|caption|numbered|width|align|slide_layout)=)/.test(
+          line,
+        );
       const pageBreak = /^:::\s+(pagebreak|slidebreak)\s*$/.exec(line);
       const advancedTable = /^:::\s+kumi-table\s*$/.test(line);
       if (!attributes && !pageBreak && !advancedTable) return false;

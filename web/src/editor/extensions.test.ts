@@ -142,4 +142,32 @@ describe('DocumentAttributes extension', () => {
     expect(JSON.stringify(current.getJSON())).not.toContain('javascript:');
     expect(JSON.stringify(current.getJSON())).not.toContain('inlineImage');
   });
+  it('keeps a free-positioned Slide figure in editor JSON and DOM attributes', () => {
+    const current = createEditor();
+    current.commands.setContent({
+      type: 'doc',
+      content: [
+        {
+          type: 'figure',
+          attrs: {
+            nodeId: 'placed-image',
+            src: 'assets/diagram.png',
+            alt: 'Diagram',
+            title: null,
+            width: 100,
+            align: 'center',
+            slidePlacement: { x: 12, y: 18, width: 40, height: 30 },
+          },
+        },
+      ],
+    });
+
+    const figure = current
+      .getJSON()
+      .content?.find((node) => node.type === 'figure');
+    expect(figure?.attrs).toMatchObject({
+      slidePlacement: { x: 12, y: 18, width: 40, height: 30 },
+    });
+    expect(current.getHTML()).toContain('data-slide-placement="12,18,40,30"');
+  });
 });

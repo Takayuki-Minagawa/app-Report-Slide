@@ -19,6 +19,7 @@ import {
 } from '@/src/document/semantics';
 import { walkDocumentTree } from '@/src/document/traversal';
 import { createEditorExtensions } from '@/src/editor/extensions';
+import { defaultSlideImagePlacement } from '@/src/document/slide-layout';
 import { parseMarkdown } from '@/src/markdown/parser';
 import {
   serializeDocument,
@@ -30,6 +31,7 @@ import {
   initialMarkdown,
 } from '@/src/workspace/initial-document';
 import {
+  createInsertedImageAsset,
   readWorkspaceFiles,
   revokeAssetUrls,
   downloadDocument,
@@ -72,7 +74,7 @@ import {
   ReportProjectError,
 } from '@/src/project/model';
 
-export type WorkspaceView = 'visual' | 'markdown' | 'preview';
+export type WorkspaceView = 'visual' | 'layout' | 'markdown' | 'preview';
 
 interface LoadDocumentOptions {
   assets?: AssetUrls;
@@ -90,6 +92,24 @@ function currentDocument(
       ? (content as DocumentNode[])
       : document.children,
   };
+}
+
+function insertionPositionForSlide(editor: Editor, slideIndex: number): number {
+  let currentSlide = 0;
+  let insertion = editor.state.doc.content.size;
+  let found = false;
+  editor.state.doc.descendants((node, position) => {
+    if (found) return false;
+    if (node.type.name !== 'slideBreak') return true;
+    if (currentSlide === slideIndex) {
+      insertion = position;
+      found = true;
+      return false;
+    }
+    currentSlide += 1;
+    return true;
+  });
+  return insertion;
 }
 
 /** Owns document replacement, drafts and imports; selection and rendering stay separate. */
@@ -172,7 +192,11 @@ export function useDocumentWorkspace() {
   }, [enqueueRecoveryTask]);
 
   const documentWriteLocked = view === 'markdown' || markdownDirty;
-  const selection = useDocumentSelection(documentWriteLocked, setStatus);
+  const selection = useDocumentSelection(
+    documentWriteLocked,
+    document.type,
+    setStatus,
+  );
   const {
     handleMathSelect,
     handleSelectionUpdate,
@@ -508,7 +532,12 @@ export function useDocumentWorkspace() {
       setDocumentDirty(true);
       setProjectSession(restoredProject);
       setView(
-        pendingRecovery.markdownDirty ? 'markdown' : pendingRecovery.view,
+        pendingRecovery.markdownDirty
+          ? 'markdown'
+          : pendingRecovery.view === 'layout' &&
+              restoredDocument.type !== 'slide'
+            ? 'visual'
+            : pendingRecovery.view,
       );
       clearSelection();
       setStatus({ kind: 'success', title: statusMessage('recoveredDraft') });
@@ -526,6 +555,56 @@ export function useDocumentWorkspace() {
     }
   };
 
+  const insertSlideImage = useCallback(
+    (file: File, slideIndex: number) => {
+      if (
+        !editor ||
+        document.type !== 'slide' ||
+        documentWriteLocked ||
+        markdownDirty
+      )
+        return;
+      let asset: { source: string; url: string } | undefined;
+      try {
+        asset = createInsertedImageAsset(file, assets);
+        const inserted = editor
+          .chain()
+          .focus()
+          .insertContentAt(insertionPositionForSlide(editor, slideIndex), {
+            type: 'figure',
+            attrs: {
+              src: asset.source,
+              alt: file.name.replace(/\.[^.]+$/, ''),
+              title: null,
+              width: 100,
+              align: 'center',
+              slidePlacement: { ...defaultSlideImagePlacement },
+            },
+          })
+          .run();
+        if (!inserted)
+          throw new WorkspaceStatusError(statusMessage('unableToInsertImage'));
+        replaceAssets(new Map([...assets, [asset.source, asset.url]]));
+        asset = undefined;
+        setStatus({ kind: 'success', title: statusMessage('imageInserted') });
+      } catch (error) {
+        if (asset) revokeAssetUrls(new Map([[asset.source, asset.url]]));
+        setStatus({
+          kind: 'error',
+          title: statusMessage('unableToInsertImage'),
+          description: describeWorkspaceError(error, 'unableToLoad'),
+        });
+      }
+    },
+    [
+      assets,
+      document.type,
+      documentWriteLocked,
+      editor,
+      markdownDirty,
+      replaceAssets,
+    ],
+  );
   const importFiles = useCallback(
     async (files: readonly File[]) => {
       if (files.length === 0 || documentWriteLocked || !confirmReplacement())
@@ -616,6 +695,7 @@ export function useDocumentWorkspace() {
 
   const changeView = (nextView: WorkspaceView) => {
     invalidatePendingImport();
+    if (nextView === 'layout' && document.type !== 'slide') return;
     if (nextView === 'visual' && markdownDirty) {
       setStatus({
         kind: 'error',
@@ -814,6 +894,7 @@ export function useDocumentWorkspace() {
     resolveImageUrl,
     resolvePreviewImageUrl,
     importFiles,
+    insertSlideImage,
     updateMarkdown,
     applyMarkdown,
     createDocument,

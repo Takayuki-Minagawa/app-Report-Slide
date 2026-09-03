@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultDocument, type DocumentData } from '@/src/document/model';
 import {
+  createInsertedImageAsset,
   createLocalAssetUrls,
   readWorkspaceFiles,
   revokeAssetUrls,
@@ -225,4 +226,28 @@ describe('workspace file import', () => {
       expect(createUrl).not.toHaveBeenCalled();
     },
   );
+  describe('slide placement image assets', () => {
+    it('uses an encoded original filename so a saved source can be selected again', () => {
+      const file = new File(['image'], 'cover diagram(1).png', {
+        type: 'image/png',
+      });
+      const first = createInsertedImageAsset(file, new Map());
+
+      expect(first.source).toBe('assets/cover%20diagram%281%29.png');
+      expect(first.url).toBe('blob:local-1');
+
+      const replacement = createInsertedImageAsset(
+        file,
+        new Map([[first.source, first.url]]),
+      );
+      expect(replacement.source).toBe(first.source);
+      revokeAssetUrls(
+        new Map([
+          [first.source, first.url],
+          ['replacement', replacement.url],
+        ]),
+      );
+      expect(revokeUrl).toHaveBeenCalledTimes(2);
+    });
+  });
 });

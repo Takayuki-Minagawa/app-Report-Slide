@@ -82,4 +82,23 @@ describe('document feature editing', () => {
       true,
     );
   });
+  it('validates Slide-specific figure placement against the current document type', () => {
+    const document = setup(
+      '---\ntype: slide\n---\n\n![diagram](assets/diagram.png)',
+    );
+    const target = document.children[0].attrs.nodeId;
+
+    expect(
+      updateDocumentNode(
+        editor,
+        target,
+        { slidePlacement: { x: 12, y: 18, width: 40, height: 30 } },
+        'slide',
+      ),
+    ).toBe(true);
+    expect(
+      editor.getJSON().content?.find((node) => node.attrs?.nodeId === target)
+        ?.attrs?.slidePlacement,
+    ).toEqual({ x: 12, y: 18, width: 40, height: 30 });
+  });
 });

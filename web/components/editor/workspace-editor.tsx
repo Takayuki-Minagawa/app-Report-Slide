@@ -4,6 +4,7 @@ import { EditorContent, type Editor } from '@tiptap/react';
 import { Braces } from 'lucide-react';
 import { useAppPreferences } from '@/components/app-preferences';
 import { PreviewSurface } from '@/components/preview/preview-surface';
+import { SlideLayoutCanvas } from '@/components/preview/slide-layout-canvas';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -26,6 +27,11 @@ interface WorkspaceEditorProps {
   analysis: DocumentAnalysis;
   displayedStatus: DisplayedWorkspaceStatus;
   resolveImageUrl: (source: string) => string;
+  selectedNodeId?: string;
+  documentWriteLocked: boolean;
+  focusNode: (nodeId: string) => void;
+  applyAttributes: (nodeId: string, attrs: Record<string, unknown>) => void;
+  insertSlideImage: (file: File, slideIndex: number) => void;
   changeView: (view: WorkspaceView) => void;
   updateMarkdown: (source: string) => void;
   applyMarkdown: () => void;
@@ -43,23 +49,35 @@ export function WorkspaceEditor({
   analysis,
   displayedStatus,
   resolveImageUrl,
+  selectedNodeId,
+  documentWriteLocked,
+  focusNode,
+  applyAttributes,
+  insertSlideImage,
   changeView,
   updateMarkdown,
   applyMarkdown,
   discardMarkdown,
 }: WorkspaceEditorProps) {
   const { copy } = useAppPreferences();
+  const views =
+    document.type === 'slide'
+      ? ([
+          ['visual', copy.workspace.visual],
+          ['layout', copy.workspace.slideLayout],
+          ['markdown', copy.workspace.markdown],
+          ['preview', copy.workspace.preview],
+        ] as const)
+      : ([
+          ['visual', copy.workspace.visual],
+          ['markdown', copy.workspace.markdown],
+          ['preview', copy.workspace.preview],
+        ] as const);
   return (
     <section className="workspace-center">
       <div className="view-tabs">
         <div className="flex h-full items-end gap-1">
-          {(
-            [
-              ['visual', copy.workspace.visual],
-              ['markdown', copy.workspace.markdown],
-              ['preview', copy.workspace.preview],
-            ] as const
-          ).map(([value, label]) => (
+          {views.map(([value, label]) => (
             <button
               key={value}
               type="button"
@@ -92,6 +110,20 @@ export function WorkspaceEditor({
         </>
       )}
 
+      {view === 'layout' && document.type === 'slide' && (
+        <SlideLayoutCanvas
+          document={document}
+          analysis={analysis}
+          resolveImageUrl={resolveImageUrl}
+          selectedNodeId={selectedNodeId}
+          locked={documentWriteLocked}
+          onSelectFigure={focusNode}
+          onPlacementChange={(nodeId, slidePlacement) =>
+            applyAttributes(nodeId, { slidePlacement })
+          }
+          onInsertImage={insertSlideImage}
+        />
+      )}
       {view === 'markdown' && (
         <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
           <Textarea

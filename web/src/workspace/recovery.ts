@@ -9,7 +9,7 @@ const recoverySchemaVersion = 1;
 
 let lastTimestamp = 0;
 
-export type RecoveryView = 'visual' | 'markdown' | 'preview';
+export type RecoveryView = 'visual' | 'layout' | 'markdown' | 'preview';
 
 export interface RecoveryAsset {
   path: string;
@@ -45,7 +45,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isRecoveryView(value: unknown): value is RecoveryView {
-  return value === 'visual' || value === 'markdown' || value === 'preview';
+  return (
+    value === 'visual' ||
+    value === 'layout' ||
+    value === 'markdown' ||
+    value === 'preview'
+  );
 }
 
 function isRecoveryAsset(value: unknown): value is RecoveryAsset {

@@ -15,6 +15,13 @@ KUMI is a browser application for editing and reviewing technical reports and sl
 - Unfinished content, chapter structure, unapplied Markdown, and imported images are temporarily kept as a recovery copy in this browser. When you return, choose whether to restore or remove it. This is device-local help only, so keep Markdown, JSON, or a project ZIP as the source of record.
 - Select an element to configure its theme, table of contents, numbering, reference label, caption, and an image's width, alignment, or alternative text in **Properties**.
 
+### Freely place images on a Slide
+
+1. Open **Place images** in a Slide and choose **Insert image** to select a PNG, JPEG, WebP, GIF, or SVG (up to 20 MB each). The image starts in the center of the current slide. Click an existing document-flow figure to move it into free placement.
+2. Drag an image to move it and use the eight handles on its selection outline to resize it. Arrow keys move it by 1%; Shift+Arrow moves it by 5%.
+3. The rectangle stays within the Slide and is preserved in Preview and the HTML slide export. Ordinary figures keep their existing document-flow layout.
+4. Markdown saves the rectangle as `slide_layout="x,y,width,height"`; Document JSON saves the same placement data. Neither stores the image binary, so select the saved source and the original image file together when you resume editing.
+
 ## 3. Edit tables in detail
 
 - Place the cursor in a table cell to reveal the table toolbar. You can add or remove rows and columns, toggle the selected row as a header, and merge or split adjacent cells. If the same perimeter edge has different border settings across the selected cells, make them consistent before merging.
@@ -35,7 +42,7 @@ KUMI is a browser application for editing and reviewing technical reports and sl
 
 The slide frame scales to fit the screen. Overflowing content can be scrolled within the slide; add more slide breaks before presenting if needed.
 
-Math fonts and imported images are embedded in the HTML. External image URLs still need a network connection. If an image has not been imported, save your source as Markdown/JSON first, then import the source and images together before exporting again.
+Math fonts and imported images, including local images added through **Place images**, are embedded in the HTML. External image URLs still need a network connection. If an image has not been imported, save your source as Markdown/JSON first, then import the source and images together before exporting again.
 
 HTML is for viewing and presenting; it cannot be re-imported into KUMI. Unapplied Markdown drafts are included in the export, but are not applied to the editable document or marked as saved. **Save Markdown/JSON separately to keep an editable source.**
 

@@ -125,6 +125,14 @@ export interface CodeBlockNode extends IdentifiedNode {
   content?: TextNode[];
 }
 
+/** A percentage-based rectangle on a 16:9 Slide canvas. */
+export interface SlideImagePlacement {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface FigureNode extends IdentifiedNode {
   type: 'figure';
   attrs: IdentifiedNode['attrs'] & {
@@ -133,6 +141,8 @@ export interface FigureNode extends IdentifiedNode {
     title: string | null;
     width: number;
     align: 'left' | 'center' | 'right';
+    /** Optional PowerPoint-style position used only when the document is a Slide. */
+    slidePlacement?: SlideImagePlacement | null;
   };
 }
 

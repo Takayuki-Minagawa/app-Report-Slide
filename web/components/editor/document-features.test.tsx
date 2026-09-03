@@ -179,4 +179,46 @@ describe('document feature workspace', () => {
       ),
     );
   });
+  it('shows the image placement canvas only for Slide documents', async () => {
+    renderWorkspace();
+    await screen.findByText('REPORT');
+    expect(
+      screen.queryByRole('button', { name: '図を配置へ切り替え' }),
+    ).not.toBeInTheDocument();
+
+    await applySource(
+      '---\ntype: slide\ntitle: 配置するスライド\n---\n\n# 配置するスライド',
+    );
+    expect(await screen.findByText('SLIDE')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '図を配置へ切り替え' }));
+
+    expect(await screen.findByLabelText('画像を選択')).toHaveAttribute(
+      'accept',
+      'image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.svg',
+    );
+    expect(
+      screen.getByText(
+        '画像を挿入するか本文の図をクリックして配置を開始します。ドラッグで移動し、選択枠のハンドルで大きさを変えます。矢印キーでも移動できます。',
+      ),
+    ).toBeInTheDocument();
+  });
+  it('converts a document-flow Slide figure into a free-positioned figure', async () => {
+    renderWorkspace();
+    await applySource(
+      '---\ntype: slide\ntitle: 既存図\n---\n\n# 既存図\n\n![既存図](diagram.png)',
+    );
+    fireEvent.click(screen.getByRole('button', { name: '図を配置へ切り替え' }));
+    fireEvent.click(await screen.findByRole('button', { name: '既存図' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Markdownへ切り替え' }));
+
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole('textbox', {
+            name: 'Markdown原稿',
+          }) as HTMLTextAreaElement
+        ).value,
+      ).toContain('slide_layout="32,22,36,42"'),
+    );
+  });
 });

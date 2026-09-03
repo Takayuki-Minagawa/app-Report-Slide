@@ -1,4 +1,5 @@
 import type { Editor } from '@tiptap/core';
+import type { DocumentType } from '@/src/document/model';
 import { validateDocumentData } from '@/src/document/validation';
 
 /** Resolve by stable ID at commit time; a stale position must never edit another node. */
@@ -6,6 +7,7 @@ export function updateDocumentNode(
   editor: Editor,
   nodeId: string,
   attrs: Record<string, unknown>,
+  documentType: DocumentType = 'report',
 ): boolean {
   let position: number | undefined;
   editor.state.doc.descendants((node, pos) => {
@@ -19,7 +21,7 @@ export function updateDocumentNode(
   });
   validateDocumentData({
     schemaVersion: 2,
-    type: 'report',
+    type: documentType,
     metadata: {},
     children: transaction.doc.toJSON().content,
   });

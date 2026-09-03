@@ -3,8 +3,12 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
+  type KeyboardEvent,
+  type PointerEvent,
   type ReactNode,
 } from 'react';
 import katex from 'katex';
@@ -15,6 +19,7 @@ import type {
   DocumentData,
   DocumentNode,
   InlineNode,
+  SlideImagePlacement,
   Mark,
   TableCellNode,
   TableHeaderNode,
@@ -29,9 +34,25 @@ import {
   analyzeDocument,
   type DocumentAnalysis,
 } from '@/src/document/semantics';
+import {
+  defaultSlideImagePlacement,
+  isSlideImagePlacement,
+  moveOrResizeSlideImage,
+  type SlideImagePlacementAction,
+} from '@/src/document/slide-layout';
+
+export interface FigureInteraction {
+  selectedNodeId?: string;
+  onSelect?: (nodeId: string) => void;
+  onPlacementChange?: (nodeId: string, placement: SlideImagePlacement) => void;
+}
 
 const AnalysisContext = createContext<DocumentAnalysis | null>(null);
 const LocaleContext = createContext<AppLocale>('ja');
+const SlideContext = createContext(false);
+const FigureInteractionContext = createContext<FigureInteraction | undefined>(
+  undefined,
+);
 const anchorId = (nodeId: string) => `kumi-${nodeId}`;
 
 function useDocumentCopy() {
@@ -80,6 +101,7 @@ interface DocumentRendererProps {
   nodes?: DocumentNode[];
   analysis?: DocumentAnalysis;
   showToc?: boolean;
+  figureInteraction?: FigureInteraction;
 }
 
 function MathContent({ display, latex }: { display: boolean; latex: string }) {
@@ -205,6 +227,176 @@ function renderInline(
   });
 }
 
+const resizeActions: readonly SlideImagePlacementAction[] = [
+  'north-west',
+  'north-east',
+  'south-west',
+  'south-east',
+  'north',
+  'east',
+  'south',
+  'west',
+];
+
+function SlidePlacedFigure({
+  node,
+  resolveImageUrl,
+  placement,
+  interaction,
+}: {
+  node: Extract<DocumentNode, { type: 'figure' }>;
+  resolveImageUrl: ImageUrlResolver;
+  placement: NonNullable<
+    Extract<DocumentNode, { type: 'figure' }>['attrs']['slidePlacement']
+  >;
+  interaction?: FigureInteraction;
+}) {
+  const { copy } = useDocumentCopy();
+  const [failed, setFailed] = useState(false);
+  const [draft, setDraft] = useState<SlideImagePlacement | null>(null);
+  const currentPlacement = draft ?? placement;
+  const activeCleanup = useRef<(() => void) | null>(null);
+  const src = resolvedImageUrl(node.attrs.src, resolveImageUrl);
+  const interactive = Boolean(interaction?.onPlacementChange);
+  const selected = interaction?.selectedNodeId === node.attrs.nodeId;
+
+  useEffect(
+    () => () => {
+      activeCleanup.current?.();
+    },
+    [],
+  );
+
+  const beginPointer = (
+    event: PointerEvent<HTMLElement>,
+    action: SlideImagePlacementAction,
+  ) => {
+    if (!interaction?.onPlacementChange) return;
+    const canvas = event.currentTarget.closest<HTMLElement>(
+      '[data-slide-layout-canvas]',
+    );
+    if (!canvas) return;
+    const bounds = canvas.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    interaction.onSelect?.(node.attrs.nodeId);
+    activeCleanup.current?.();
+
+    const initial = currentPlacement;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    let next = initial;
+    const onMove = (moveEvent: globalThis.PointerEvent) => {
+      next = moveOrResizeSlideImage(
+        initial,
+        ((moveEvent.clientX - startX) / bounds.width) * 100,
+        ((moveEvent.clientY - startY) / bounds.height) * 100,
+        action,
+      );
+      setDraft(next);
+    };
+    const cleanup = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onEnd);
+      window.removeEventListener('pointercancel', onEnd);
+      if (activeCleanup.current === cleanup) activeCleanup.current = null;
+    };
+    const onEnd = () => {
+      cleanup();
+      interaction.onPlacementChange?.(node.attrs.nodeId, next);
+      setDraft(null);
+    };
+    activeCleanup.current = cleanup;
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onEnd);
+    window.addEventListener('pointercancel', onEnd);
+  };
+
+  const adjustWithKeyboard = (
+    event: KeyboardEvent<HTMLElement>,
+    action: SlideImagePlacementAction,
+  ) => {
+    if (!interaction?.onPlacementChange) return;
+    const step = event.shiftKey ? 5 : 1;
+    const delta: Record<string, readonly [number, number]> = {
+      ArrowUp: [0, -step],
+      ArrowDown: [0, step],
+      ArrowLeft: [-step, 0],
+      ArrowRight: [step, 0],
+    };
+    const offset = delta[event.key];
+    if (!offset) return;
+    event.preventDefault();
+    const next = moveOrResizeSlideImage(
+      currentPlacement,
+      offset[0],
+      offset[1],
+      action,
+    );
+    interaction.onSelect?.(node.attrs.nodeId);
+    interaction.onPlacementChange(node.attrs.nodeId, next);
+  };
+
+  return (
+    <figure
+      className="preview-figure slide-positioned-figure"
+      data-selected={selected || undefined}
+      data-align={node.attrs.align}
+      style={{
+        left: `${currentPlacement.x}%`,
+        top: `${currentPlacement.y}%`,
+        width: `${currentPlacement.width}%`,
+        height: `${currentPlacement.height}%`,
+      }}
+    >
+      {interactive && (
+        <button
+          type="button"
+          className="slide-image-move-target"
+          aria-label={node.attrs.alt || node.attrs.src}
+          onClick={() => interaction?.onSelect?.(node.attrs.nodeId)}
+          onPointerDown={(event) => beginPointer(event, 'move')}
+          onKeyDown={(event) => adjustWithKeyboard(event, 'move')}
+        />
+      )}
+      {src && !failed ? (
+        <img
+          src={src}
+          alt={node.attrs.alt}
+          title={node.attrs.title ?? undefined}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          draggable={false}
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <div className="preview-image-fallback">
+          <span>{copy.preview.imageUnavailable}</span>
+          <small>{node.attrs.alt || node.attrs.src}</small>
+        </div>
+      )}
+      <figcaption>
+        <Caption node={node} />
+      </figcaption>
+      {interactive && selected && (
+        <span className="slide-image-handles">
+          {resizeActions.map((action) => (
+            <button
+              key={action}
+              type="button"
+              className={'slide-image-handle slide-image-handle-' + action}
+              aria-label={copy.workspace.resizeImage}
+              onClick={() => interaction.onSelect?.(node.attrs.nodeId)}
+              onPointerDown={(event) => beginPointer(event, action)}
+              onKeyDown={(event) => adjustWithKeyboard(event, action)}
+            />
+          ))}
+        </span>
+      )}
+    </figure>
+  );
+}
 function FigureBlock({
   node,
   resolveImageUrl,
@@ -213,13 +405,59 @@ function FigureBlock({
   resolveImageUrl: ImageUrlResolver;
 }) {
   const { copy } = useDocumentCopy();
+  const slide = useContext(SlideContext);
+  const figureInteraction = useContext(FigureInteractionContext);
   const [failed, setFailed] = useState(false);
   const src = resolvedImageUrl(node.attrs.src, resolveImageUrl);
+  const beginFreePlacement = () => {
+    if (!slide || !figureInteraction?.onPlacementChange) return;
+    figureInteraction.onSelect?.(node.attrs.nodeId);
+    figureInteraction.onPlacementChange(node.attrs.nodeId, {
+      ...defaultSlideImagePlacement,
+    });
+  };
+  const beginFreePlacementWithKeyboard = (
+    event: KeyboardEvent<HTMLElement>,
+  ) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    beginFreePlacement();
+  };
+  const layoutStarter =
+    slide && figureInteraction?.onPlacementChange
+      ? {
+          tabIndex: 0,
+          role: 'button' as const,
+          'aria-label': node.attrs.alt || node.attrs.src,
+          'aria-description': copy.workspace.slideLayoutHelp,
+          onClick: beginFreePlacement,
+          onKeyDown: beginFreePlacementWithKeyboard,
+        }
+      : undefined;
+  const placement =
+    slide && isSlideImagePlacement(node.attrs.slidePlacement)
+      ? node.attrs.slidePlacement
+      : undefined;
+  if (placement)
+    return (
+      <SlidePlacedFigure
+        node={node}
+        resolveImageUrl={resolveImageUrl}
+        placement={placement}
+        interaction={figureInteraction}
+      />
+    );
   const width = Math.min(100, Math.max(10, Number(node.attrs.width) || 100));
 
   if (!src || failed) {
     return (
-      <figure className="preview-figure" data-align={node.attrs.align}>
+      <figure
+        className={
+          layoutStarter ? 'preview-figure slide-flow-figure' : 'preview-figure'
+        }
+        data-align={node.attrs.align}
+        {...layoutStarter}
+      >
         <div className="preview-image-fallback">
           <span>{copy.preview.imageUnavailable}</span>
           <small>{node.attrs.alt || node.attrs.src}</small>
@@ -233,9 +471,12 @@ function FigureBlock({
 
   return (
     <figure
-      className="preview-figure"
+      className={
+        layoutStarter ? 'preview-figure slide-flow-figure' : 'preview-figure'
+      }
       data-align={node.attrs.align}
       style={{ width: `${width}%` }}
+      {...layoutStarter}
     >
       <img
         src={src}
@@ -429,6 +670,7 @@ export function DocumentRenderer({
   nodes,
   analysis,
   showToc = true,
+  figureInteraction,
 }: DocumentRendererProps) {
   const copy = messages[locale];
   const computed = useMemo(
@@ -438,39 +680,43 @@ export function DocumentRenderer({
   return (
     <LocaleContext.Provider value={locale}>
       <AnalysisContext.Provider value={computed}>
-        <div className="document-renderer">
-          {showToc &&
-            document.metadata.toc === true &&
-            computed.outline.length > 0 && (
-              <nav className="document-toc" aria-label={copy.preview.toc}>
-                <h2>{copy.preview.toc}</h2>
-                <ol>
-                  {computed.outline.map((entry) => (
-                    <li
-                      key={entry.nodeId}
-                      style={{
-                        paddingLeft: `${((entry.level ?? 1) - 1) * 16}px`,
-                      }}
-                    >
-                      <a
-                        href={`#${encodeURIComponent(anchorId(entry.nodeId))}`}
-                      >
-                        {entry.number ? `${entry.number} ` : ''}
-                        {entry.title}
-                      </a>
-                    </li>
-                  ))}
-                </ol>
-              </nav>
-            )}
-          {(nodes ?? document.children).map((node) => (
-            <BlockNode
-              key={node.attrs.nodeId}
-              node={node}
-              resolveImageUrl={resolveImageUrl}
-            />
-          ))}
-        </div>
+        <SlideContext.Provider value={document.type === 'slide'}>
+          <FigureInteractionContext.Provider value={figureInteraction}>
+            <div className="document-renderer">
+              {showToc &&
+                document.metadata.toc === true &&
+                computed.outline.length > 0 && (
+                  <nav className="document-toc" aria-label={copy.preview.toc}>
+                    <h2>{copy.preview.toc}</h2>
+                    <ol>
+                      {computed.outline.map((entry) => (
+                        <li
+                          key={entry.nodeId}
+                          style={{
+                            paddingLeft: `${((entry.level ?? 1) - 1) * 16}px`,
+                          }}
+                        >
+                          <a
+                            href={`#${encodeURIComponent(anchorId(entry.nodeId))}`}
+                          >
+                            {entry.number ? `${entry.number} ` : ''}
+                            {entry.title}
+                          </a>
+                        </li>
+                      ))}
+                    </ol>
+                  </nav>
+                )}
+              {(nodes ?? document.children).map((node) => (
+                <BlockNode
+                  key={node.attrs.nodeId}
+                  node={node}
+                  resolveImageUrl={resolveImageUrl}
+                />
+              ))}
+            </div>
+          </FigureInteractionContext.Provider>
+        </SlideContext.Provider>
       </AnalysisContext.Provider>
     </LocaleContext.Provider>
   );
