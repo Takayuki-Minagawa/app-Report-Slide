@@ -139,7 +139,7 @@ describe('document feature workspace', () => {
     expect(saved).not.toContain('y=2');
   });
 
-  it('imports valid JSON that cannot be represented as Markdown, without losing cells', async () => {
+  it('exports an advanced JSON table as lossless KUMI Markdown without losing cells', async () => {
     const { container } = renderWorkspace();
     await screen.findByText('REPORT');
     const document = parseMarkdown('| a |\n|---|\n| b |').document;
@@ -165,12 +165,18 @@ describe('document feature workspace', () => {
       ),
     );
     fireEvent.click(screen.getByRole('button', { name: 'Markdownへ切り替え' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Markdown');
-    expect(container.querySelector('.kumi-editor-content')).toHaveTextContent(
-      '複数段落セルの本文',
+    const source = (await screen.findByRole('textbox', {
+      name: 'Markdown原稿',
+    })) as HTMLTextAreaElement;
+    expect(source.value).toContain('::: kumi-table');
+    expect(source.value).toContain('複数段落セルの本文');
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Markdownを適用' }));
+    await waitFor(() =>
+      expect(container.querySelector('.kumi-editor-content')).toHaveTextContent(
+        '複数段落セルの本文',
+      ),
     );
-    expect(
-      screen.queryByRole('textbox', { name: 'Markdown原稿' }),
-    ).not.toBeInTheDocument();
   });
 });

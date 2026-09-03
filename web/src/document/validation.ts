@@ -5,6 +5,7 @@ import { isSafeResourceUrl } from '@/src/security/resource-url';
 import type { DocumentData } from './model';
 import { booleanMetadataKeys, stringMetadataKeys } from './metadata';
 import { labelPattern, semanticTypes } from './semantics';
+import { isTableCellBorders, tableBorderSides } from './table';
 
 const documentEnvelopeSchema = z
   .object({
@@ -301,6 +302,144 @@ function requireNonEmptyContent(
   }
 }
 
+const maximumTableSpan = 100;
+
+function validTableSpan(value: unknown): number {
+  return typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= maximumTableSpan
+    ? value
+    : 1;
+}
+
+function validateTableSpan(
+  value: unknown,
+  path: string,
+  issues: string[],
+): void {
+  if (value === undefined) return;
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    value < 1 ||
+    value > maximumTableSpan
+  ) {
+    issues.push(`${path}: 1から${maximumTableSpan}の整数が必要です`);
+  }
+}
+
+function validateTableCellFormatting(
+  attrs: RecordValue | undefined,
+  path: string,
+  issues: string[],
+): void {
+  validateTableSpan(attrs?.colspan, `${path}.attrs.colspan`, issues);
+  validateTableSpan(attrs?.rowspan, `${path}.attrs.rowspan`, issues);
+
+  const colspan = validTableSpan(attrs?.colspan);
+  const colwidth = attrs?.colwidth;
+  if (colwidth !== undefined && colwidth !== null) {
+    if (!Array.isArray(colwidth) || colwidth.length !== colspan) {
+      issues.push(
+        `${path}.attrs.colwidth: colspanと同じ数の列幅、またはnullが必要です`,
+      );
+    } else {
+      colwidth.forEach((width, index) => {
+        if (
+          typeof width !== 'number' ||
+          !Number.isInteger(width) ||
+          width < 20 ||
+          width > 4_000
+        ) {
+          issues.push(
+            `${path}.attrs.colwidth.${index}: 20から4000の整数が必要です`,
+          );
+        }
+      });
+    }
+  }
+
+  const borders = attrs?.borders;
+  if (borders === undefined || borders === null) return;
+  if (!isTableCellBorders(borders)) {
+    issues.push(
+      `${path}.attrs.borders: top/right/bottom/leftの安全な罫線設定が必要です`,
+    );
+    return;
+  }
+  for (const side of tableBorderSides) {
+    const border = borders[side];
+    if (border === undefined || border === null) continue;
+    if (!/^#[0-9a-fA-F]{6}$/.test(border.color)) {
+      issues.push(`${path}.attrs.borders.${side}.color: #RRGGBBが必要です`);
+    }
+  }
+}
+
+/** Rejects malformed merged-cell grids before they reach the editor or renderer. */
+function validateTableGrid(
+  table: RecordValue,
+  path: string,
+  issues: string[],
+): void {
+  if (!Array.isArray(table.content)) return;
+  const rows = table.content;
+  const occupied = rows.map(() => new Set<number>());
+  let width = 0;
+
+  for (const [rowIndex, rowValue] of rows.entries()) {
+    const row = isRecord(rowValue) ? rowValue : undefined;
+    const cells = Array.isArray(row?.content) ? row.content : [];
+    let column = 0;
+    for (const [cellIndex, cellValue] of cells.entries()) {
+      const cell = isRecord(cellValue) ? cellValue : undefined;
+      const attrs = isRecord(cell?.attrs) ? cell.attrs : undefined;
+      const colspan = validTableSpan(attrs?.colspan);
+      const rowspan = validTableSpan(attrs?.rowspan);
+      while (occupied[rowIndex].has(column)) column += 1;
+      if (rowIndex + rowspan > rows.length) {
+        issues.push(
+          `${path}.content.${rowIndex}.content.${cellIndex}.attrs.rowspan: 表の最終行を超えています`,
+        );
+      }
+      for (let nextRow = rowIndex; nextRow < rowIndex + rowspan; nextRow += 1) {
+        if (!occupied[nextRow]) break;
+        for (
+          let nextColumn = column;
+          nextColumn < column + colspan;
+          nextColumn += 1
+        ) {
+          if (occupied[nextRow].has(nextColumn)) {
+            issues.push(
+              `${path}.content.${rowIndex}.content.${cellIndex}: 結合セルが他のセルと重なっています`,
+            );
+            continue;
+          }
+          occupied[nextRow].add(nextColumn);
+        }
+      }
+      column += colspan;
+    }
+    width = Math.max(
+      width,
+      ...[...occupied[rowIndex]].map((columnIndex) => columnIndex + 1),
+    );
+  }
+
+  if (width === 0) return;
+  for (const [rowIndex, columns] of occupied.entries()) {
+    for (let column = 0; column < width; column += 1) {
+      if (!columns.has(column)) {
+        issues.push(
+          `${path}.content.${rowIndex}: 結合セルを含む表の列数が一致していません`,
+        );
+        break;
+      }
+    }
+  }
+}
+
 function validateBlockNode(
   value: unknown,
   path: string,
@@ -517,6 +656,7 @@ function validateBlockNode(
         issues,
         nodeIds,
       );
+      validateTableGrid(node, path, issues);
       break;
     case 'tableRow':
       requireNonEmptyContent(node.content, `${path}.content`, issues);
@@ -530,21 +670,7 @@ function validateBlockNode(
       break;
     case 'tableHeader':
     case 'tableCell':
-      if (attrs?.colspan !== undefined && attrs.colspan !== 1) {
-        issues.push(
-          `${path}.attrs.colspan: Markdownでは結合セルを保存できないため1が必要です`,
-        );
-      }
-      if (attrs?.rowspan !== undefined && attrs.rowspan !== 1) {
-        issues.push(
-          `${path}.attrs.rowspan: Markdownでは結合セルを保存できないため1が必要です`,
-        );
-      }
-      if (attrs?.colwidth !== undefined && attrs.colwidth !== null) {
-        issues.push(
-          `${path}.attrs.colwidth: Markdownでは列幅を保存できないためnullが必要です`,
-        );
-      }
+      validateTableCellFormatting(attrs, path, issues);
       if (
         attrs?.align !== null &&
         attrs?.align !== 'left' &&

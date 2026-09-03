@@ -20,7 +20,10 @@ import type {
   TableRowNode,
 } from '@/src/document/model';
 import { createNodeId } from '@/src/document/model';
-import { validateDocumentData } from '@/src/document/validation';
+import {
+  DocumentValidationError,
+  validateDocumentData,
+} from '@/src/document/validation';
 import { isSafeResourceUrl } from '@/src/security/resource-url';
 
 import { createMarkdownIt } from './dialect';
@@ -324,6 +327,83 @@ function parseTable(cursor: ParseCursor): TableNode {
   };
 }
 
+function parseAdvancedTable(
+  token: MarkdownToken,
+  cursor: ParseCursor,
+): TableNode | undefined {
+  try {
+    const parsed: unknown = JSON.parse(token.content);
+    assignAdvancedTableNodeIds(parsed, cursor.idFactory);
+    const document = validateDocumentData({
+      schemaVersion: 2,
+      type: 'report',
+      metadata: {},
+      children: [parsed],
+    });
+    const table = document.children[0];
+    if (!table || table.type !== 'table') {
+      throw new Error('表nodeだけを指定してください');
+    }
+    return table;
+  } catch (error) {
+    const detail =
+      error instanceof DocumentValidationError
+        ? error.issues[0]
+        : error instanceof Error
+          ? error.message
+          : 'JSONが不正です';
+    cursor.diagnostics.push({
+      severity: 'error',
+      code: 'markdown.advanced-table-invalid',
+      message: 'KUMI表ブロックを読み込めません: ' + detail,
+      line: (token.map?.[0] ?? 0) + 1 + cursor.lineOffset,
+    });
+    return undefined;
+  }
+}
+
+const advancedTableIdentifiedTypes = new Set([
+  'paragraph',
+  'heading',
+  'bulletList',
+  'orderedList',
+  'listItem',
+  'blockquote',
+  'codeBlock',
+  'horizontalRule',
+  'inlineImage',
+  'figure',
+  'blockMath',
+  'table',
+  'tableRow',
+  'tableHeader',
+  'tableCell',
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Node IDs are editor-local, so restore fresh IDs rather than trusting Markdown. */
+function assignAdvancedTableNodeIds(
+  value: unknown,
+  idFactory: IdFactory,
+): void {
+  if (!isRecord(value)) return;
+  if (
+    typeof value.type === 'string' &&
+    advancedTableIdentifiedTypes.has(value.type) &&
+    isRecord(value.attrs)
+  ) {
+    value.attrs.nodeId = idFactory();
+  }
+  if (Array.isArray(value.content)) {
+    value.content.forEach((child) =>
+      assignAdvancedTableNodeIds(child, idFactory),
+    );
+  }
+}
+
 function parseList(
   cursor: ParseCursor,
   ordered: boolean,
@@ -421,6 +501,22 @@ function parseBlocks(
             type: token.content === 'pagebreak' ? 'pageBreak' : 'slideBreak',
             attrs: { nodeId: cursor.idFactory() },
           });
+        cursor.index++;
+        break;
+      case 'kumi_advanced_table': {
+        const table = parseAdvancedTable(token, cursor);
+        if (table) nodes.push(table);
+        cursor.index++;
+        break;
+      }
+      case 'kumi_invalid_advanced_table':
+        cursor.diagnostics.push({
+          severity: 'error',
+          code: 'markdown.advanced-table-invalid',
+          message:
+            'KUMI表ブロックは ::: kumi-table と終了行の ::: で囲んでください',
+          line: (token.map?.[0] ?? 0) + 1 + cursor.lineOffset,
+        });
         cursor.index++;
         break;
       case 'heading_open': {

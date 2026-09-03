@@ -18,6 +18,7 @@ describe('UserManualDialog', () => {
       'KUMI かんたんガイド',
     );
     expect(screen.getByText('1. はじめる')).toBeInTheDocument();
+    expect(screen.getByText('3. 表を高度に編集する')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '閉じる' })).toBeInTheDocument();
   });
 });

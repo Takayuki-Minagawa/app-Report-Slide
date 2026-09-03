@@ -15,10 +15,17 @@ KUMI is a browser application for editing and reviewing technical reports and sl
 - Unfinished content, chapter structure, unapplied Markdown, and imported images are temporarily kept as a recovery copy in this browser. When you return, choose whether to restore or remove it. This is device-local help only, so keep Markdown, JSON, or a project ZIP as the source of record.
 - Select an element to configure its theme, table of contents, numbering, reference label, caption, and an image's width, alignment, or alternative text in **Properties**.
 
-## 3. Review and save
+## 3. Edit tables in detail
+
+- Place the cursor in a table cell to reveal the table toolbar. You can add or remove rows and columns, toggle the first row as a header, and merge or split adjacent cells.
+- Choose all, outer, inner, or one edge to draw borders with a color, solid/dashed/dotted/double style, and width. Switch to **Erase borders** to remove only the selected edges.
+- Simple tables save as standard Markdown tables. Tables with merged cells, per-edge borders, or multiple paragraphs save as a lossless KUMI table block in Markdown. Do not alter that block in an external Markdown editor; also keep JSON or a project ZIP as the source of record.
+- Preview and Slide HTML exports preserve merged cells and per-edge borders.
+
+## 4. Review and save
 
 - Use **Preview** to review Reports as A4 pages and Slides as 16:9 slides. Explicit page and slide breaks start a new preview page.
-- Save a file with **Markdown** or **JSON** in the header. Document JSON retains structures that Markdown cannot represent.
+- Save a file with **Markdown** or **JSON** in the header. Document JSON retains every editing structure.
 
 ### Take HTML slides with you
 
@@ -32,14 +39,14 @@ Math fonts and imported images are embedded in the HTML. External image URLs sti
 
 HTML is for viewing and presenting; it cannot be re-imported into KUMI. Unapplied Markdown drafts are included in the export, but are not applied to the editable document or marked as saved. **Save Markdown/JSON separately to keep an editable source.**
 
-## 4. Change display and language
+## 5. Change display and language
 
 - Use the moon/sun button to switch light and dark mode. The workspace changes appearance, while the document canvas stays white for readability.
 - Use **EN** or **日本語** to change the application interface. Your document is never translated automatically.
 - Open **Guide** to view the same essential instructions inside the application.
 - On a narrower screen, use the header's Document panel and Properties buttons to open the document/chapter list and settings that normally appear at the sides.
 
-## 5. Split a long report into chapters
+## 6. Split a long report into chapters
 
 1. Open a Report and select **Turn this report into a project** in the left panel.
 2. Use **Add a blank chapter** or **Add source as chapter**. Select one Markdown/Document JSON source and any local images it needs.

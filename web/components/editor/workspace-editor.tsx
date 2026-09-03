@@ -13,6 +13,7 @@ import type { DocumentAnalysis } from '@/src/document/semantics';
 import type { DisplayedWorkspaceStatus } from '@/src/workspace/status';
 import type { WorkspaceView } from './use-document-workspace';
 import { FormatToolbar } from './format-toolbar';
+import { TableToolbar } from './table-toolbar';
 
 interface WorkspaceEditorProps {
   previewDocument?: DocumentData;
@@ -80,6 +81,7 @@ export function WorkspaceEditor({
       {view === 'visual' && (
         <>
           <FormatToolbar editor={editor} documentType={document.type} />
+          <TableToolbar editor={editor} />
           <ScrollArea className="min-h-0 flex-1">
             <div className="editor-stage">
               <div className={`editor-paper editor-paper-${document.type}`}>

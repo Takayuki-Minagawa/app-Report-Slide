@@ -120,6 +120,20 @@ describe('parseMarkdown', () => {
     ).toThrow(MarkdownImportError);
   });
 
+  it('壊れたKUMI表ブロックをtyped errorで拒否する', () => {
+    expect(() =>
+      parseMarkdown(
+        '---\ntype: report\n---\n\n::: kumi-table\n{"type":"paragraph"}\n:::',
+        { idFactory: idFactory() },
+      ),
+    ).toThrow(MarkdownImportError);
+    expect(() =>
+      parseMarkdown('---\ntype: report\n---\n\n::: kumi-table\n{}', {
+        idFactory: idFactory(),
+      }),
+    ).toThrow(MarkdownImportError);
+  });
+
   it('本文中の---をFront Matterとして再解釈しない', () => {
     const result = parseMarkdown(
       '---\ntype: report\n---\n\nBefore\n\n---\n\nAfter',
@@ -204,6 +218,40 @@ describe('Markdown round-trip', () => {
       idFactory: idFactory(),
     }).document;
     expect(JSON.parse(JSON.stringify(document))).toEqual(document);
+  });
+
+  it('結合・罫線・複数段落を含む表を可逆KUMI表として往復保持する', () => {
+    const first = parseMarkdown(reportFixture, {
+      idFactory: idFactory(),
+    }).document;
+    const table = first.children.find((node) => node.type === 'table');
+    if (!table || table.type !== 'table') throw new Error('table expected');
+
+    table.attrs.label = 'table:advanced';
+    table.attrs.caption = '可逆表';
+    const header = table.content[0];
+    const merged = header.content[0];
+    header.content.splice(1, 1);
+    merged.attrs.colspan = 2;
+    merged.attrs.colwidth = [120, 120];
+    merged.attrs.borders = {
+      top: { color: '#0f766e', style: 'double', width: 2 },
+      left: null,
+    };
+    const bodyCell = table.content[1].content[0];
+    bodyCell.content.push({
+      type: 'paragraph',
+      attrs: { nodeId: 'advanced-table-paragraph' },
+      content: [{ type: 'text', text: '追記' }],
+    });
+
+    const markdown = serializeDocument(first);
+    const second = parseMarkdown(markdown, { idFactory: idFactory() }).document;
+
+    expect(markdown).toContain('::: kumi-table');
+    expect(markdown).not.toContain('{#table:advanced');
+    expect(withoutNodeIds(second)).toEqual(withoutNodeIds(first));
+    expect(serializeDocument(second)).toBe(markdown);
   });
 
   it.each([
@@ -483,7 +531,7 @@ describe('Markdown round-trip', () => {
     expect(() => serializeDocument(document)).toThrow(DocumentValidationError);
   });
 
-  it('headerなしの表を黙ってheader化しない', () => {
+  it('headerなしの表を可逆KUMI表として保持する', () => {
     const document = parseMarkdown(reportFixture, {
       idFactory: idFactory(),
     }).document;
@@ -494,12 +542,15 @@ describe('Markdown round-trip', () => {
       type: 'tableCell',
     }));
 
-    expect(() => serializeDocument(document)).toThrow(
-      MarkdownSerializationError,
-    );
+    const source = serializeDocument(document);
+    const recovered = parseMarkdown(source, {
+      idFactory: idFactory(),
+    }).document;
+    expect(source).toContain('::: kumi-table');
+    expect(withoutNodeIds(recovered)).toEqual(withoutNodeIds(document));
   });
 
-  it('複数段落を持つ表セルを黙って切り捨てない', () => {
+  it('複数段落を持つ表セルを可逆KUMI表として保持する', () => {
     const document = parseMarkdown(reportFixture, {
       idFactory: idFactory(),
     }).document;
@@ -513,8 +564,11 @@ describe('Markdown round-trip', () => {
       content: [{ type: 'text', text: '消してはいけない' }],
     });
 
-    expect(() => serializeDocument(document)).toThrow(
-      MarkdownSerializationError,
-    );
+    const source = serializeDocument(document);
+    const recovered = parseMarkdown(source, {
+      idFactory: idFactory(),
+    }).document;
+    expect(source).toContain('::: kumi-table');
+    expect(withoutNodeIds(recovered)).toEqual(withoutNodeIds(document));
   });
 });

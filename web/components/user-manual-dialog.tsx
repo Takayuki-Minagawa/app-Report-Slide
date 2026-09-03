@@ -65,6 +65,10 @@ export function UserManualDialog() {
             />
             <ManualSection title={manual.editTitle} items={manual.editSteps} />
             <ManualSection
+              title={manual.tableTitle}
+              items={manual.tableSteps}
+            />
+            <ManualSection
               title={manual.exportTitle}
               items={manual.exportSteps}
             />

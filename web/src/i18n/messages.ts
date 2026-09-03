@@ -43,6 +43,39 @@ export interface UiMessages {
     inlineMath: string;
     blockMath: string;
     insertTable: string;
+    tableTools: string;
+    tableRows: string;
+    tableColumns: string;
+    addRowAbove: string;
+    addRowBelow: string;
+    deleteRow: string;
+    addColumnBefore: string;
+    addColumnAfter: string;
+    deleteColumn: string;
+    mergeCells: string;
+    splitCell: string;
+    toggleHeaderRow: string;
+    deleteTable: string;
+    tableBorders: string;
+    drawBorders: string;
+    eraseBorders: string;
+    borderAll: string;
+    borderOuter: string;
+    borderInner: string;
+    borderTop: string;
+    borderRight: string;
+    borderBottom: string;
+    borderLeft: string;
+    borderColor: string;
+    borderStyle: string;
+    borderWidth: string;
+    borderSolid: string;
+    borderDashed: string;
+    borderDotted: string;
+    borderDouble: string;
+    borderThin: string;
+    borderMedium: string;
+    borderThick: string;
     insertSlideBreak: string;
     insertPageBreak: string;
     markdownDraft: string;
@@ -176,6 +209,8 @@ export interface UiMessages {
     startSteps: readonly string[];
     editTitle: string;
     editSteps: readonly string[];
+    tableTitle: string;
+    tableSteps: readonly string[];
     exportTitle: string;
     exportSteps: readonly string[];
     preferencesTitle: string;
@@ -229,6 +264,39 @@ export const messages: Record<AppLocale, UiMessages> = {
       inlineMath: 'インライン数式',
       blockMath: 'ブロック数式',
       insertTable: '表を挿入',
+      tableTools: '表の編集',
+      tableRows: '行',
+      tableColumns: '列',
+      addRowAbove: '上に行を追加',
+      addRowBelow: '下に行を追加',
+      deleteRow: '行を削除',
+      addColumnBefore: '左に列を追加',
+      addColumnAfter: '右に列を追加',
+      deleteColumn: '列を削除',
+      mergeCells: 'セルを結合',
+      splitCell: 'セルを分割',
+      toggleHeaderRow: 'ヘッダー行を切り替え',
+      deleteTable: '表を削除',
+      tableBorders: '罫線',
+      drawBorders: '罫線を引く',
+      eraseBorders: '罫線を消す',
+      borderAll: 'すべての罫線',
+      borderOuter: '外側の罫線',
+      borderInner: '内側の罫線',
+      borderTop: '上罫線',
+      borderRight: '右罫線',
+      borderBottom: '下罫線',
+      borderLeft: '左罫線',
+      borderColor: '罫線の色',
+      borderStyle: '罫線の種類',
+      borderWidth: '罫線の太さ',
+      borderSolid: '実線',
+      borderDashed: '破線',
+      borderDotted: '点線',
+      borderDouble: '二重線',
+      borderThin: '細い',
+      borderMedium: '標準',
+      borderThick: '太い',
       insertSlideBreak: 'スライドを区切る',
       insertPageBreak: '改ページ',
       markdownDraft: 'Markdown原稿',
@@ -371,7 +439,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       restoring: '復元中…',
     },
     manual: {
-      projectTitle: '5. 長いレポートを章に分ける',
+      projectTitle: '6. 長いレポートを章に分ける',
       projectSteps: [
         'Reportを開き、左側の「現在のReportをプロジェクト化」を選びます。「空の章を追加」または「原稿を章として追加」（原稿1件＋画像）で章を増やします。',
         '章名を選んで編集し、上へ／下へで順序を変えます。「全体出力に含める」を外すと原稿を残したまま除外します。削除には確認が必要です。',
@@ -399,14 +467,21 @@ export const messages: Record<AppLocale, UiMessages> = {
         '「Markdown」では原稿を直接編集します。変更後は「Markdownを適用」またはMarkdown／JSON保存を選んでください。',
         '要素を選ぶと右側のPropertiesでテーマ、目次、番号、参照ラベル、図の代替テキストなどを設定できます。',
       ],
-      exportTitle: '3. 確認・保存する',
+      tableTitle: '3. 表を高度に編集する',
+      tableSteps: [
+        '表のセル内にカーソルを置くと、表専用ツールバーが現れます。上／下の行、左／右の列を追加・削除し、先頭行をヘッダー行へ切り替えられます。',
+        '隣接する複数セルを選択して「セルを結合」を押します。結合済みセル内で「セルを分割」を押すと元のグリッドへ戻せます。',
+        '罫線では、全体・外側・内側・各辺を選び、色・実線／破線／点線／二重線・太さを指定して適用します。「罫線を消す」に切り替えると、同じ対象の線だけを消去できます。',
+        '通常の表は標準Markdown表として保存されます。結合セル、個別罫線、複数段落を含む表は、KUMIの可逆表ブロックとしてMarkdownに保存されます。外部のMarkdown編集器でそのブロックを変更せず、JSONまたはプロジェクトZIPも原本として保存してください。',
+      ],
+      exportTitle: '4. 確認・保存する',
       exportSteps: [
         '「完成プレビュー」でReportはA4ページ、Slideは16:9スライドとして確認できます。',
         'ヘッダーのMarkdownまたはJSONでファイルを保存します。Document JSONはMarkdownで表せない構造も保持できます。',
         'Slide文書では「HTML」で閲覧・発表用の単一HTMLファイルを出力できます。ブラウザで開き、前へ／次へボタンや矢印キーで移動します。Fキーで全画面表示に切り替えられます（対応ブラウザのみ）。',
         '数式用フォントと取り込んだ画像はHTMLに含まれます。外部URLの画像には通信が必要です。HTML出力だけでは編集用原稿は保存されないため、MarkdownまたはJSONも保存してください。',
       ],
-      preferencesTitle: '4. 表示を切り替える',
+      preferencesTitle: '5. 表示を切り替える',
       preferencesSteps: [
         'ヘッダーの月／太陽ボタンでライト・ダークモードを切り替えます。文書の紙面プレビューは読みやすさのため白い紙面として保たれます。',
         '「EN」または「日本語」ボタンでアプリ操作画面を切り替えます。編集中の文書本文は自動翻訳されません。',
@@ -455,6 +530,39 @@ export const messages: Record<AppLocale, UiMessages> = {
       inlineMath: 'Inline math',
       blockMath: 'Block math',
       insertTable: 'Insert table',
+      tableTools: 'Table tools',
+      tableRows: 'Rows',
+      tableColumns: 'Columns',
+      addRowAbove: 'Add row above',
+      addRowBelow: 'Add row below',
+      deleteRow: 'Delete row',
+      addColumnBefore: 'Add column before',
+      addColumnAfter: 'Add column after',
+      deleteColumn: 'Delete column',
+      mergeCells: 'Merge cells',
+      splitCell: 'Split cell',
+      toggleHeaderRow: 'Toggle header row',
+      deleteTable: 'Delete table',
+      tableBorders: 'Borders',
+      drawBorders: 'Draw borders',
+      eraseBorders: 'Erase borders',
+      borderAll: 'All borders',
+      borderOuter: 'Outer borders',
+      borderInner: 'Inner borders',
+      borderTop: 'Top border',
+      borderRight: 'Right border',
+      borderBottom: 'Bottom border',
+      borderLeft: 'Left border',
+      borderColor: 'Border color',
+      borderStyle: 'Border style',
+      borderWidth: 'Border width',
+      borderSolid: 'Solid',
+      borderDashed: 'Dashed',
+      borderDotted: 'Dotted',
+      borderDouble: 'Double',
+      borderThin: 'Thin',
+      borderMedium: 'Medium',
+      borderThick: 'Thick',
       insertSlideBreak: 'Insert slide break',
       insertPageBreak: 'Insert page break',
       markdownDraft: 'Markdown draft',
@@ -598,7 +706,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       restoring: 'Restoring…',
     },
     manual: {
-      projectTitle: '5. Split a long report into chapters',
+      projectTitle: '6. Split a long report into chapters',
       projectSteps: [
         'Open a Report and choose “Turn this report into a project”. Add a blank chapter or one source file with its images using “Add source as chapter”.',
         'Select a chapter to edit it; use Move up/down to reorder it. Uncheck “Include in combined output” to exclude a chapter without removing its source. Deletion requires confirmation.',
@@ -626,14 +734,21 @@ export const messages: Record<AppLocale, UiMessages> = {
         'Use the Markdown tab to edit source directly. Choose “Apply Markdown” or save Markdown/JSON after making changes.',
         'Select an element to configure its theme, table of contents, numbering, reference label, or image alternative text in Properties.',
       ],
-      exportTitle: '3. Review and save',
+      tableTitle: '3. Edit tables in detail',
+      tableSteps: [
+        'Place the cursor in a table cell to reveal the table toolbar. Add or remove rows above/below and columns before/after, and toggle the first row as a header row.',
+        'Select adjacent cells and choose “Merge cells”. In a merged cell, choose “Split cell” to restore its grid.',
+        'For borders, choose all, outer, inner, or a single edge; then set the color, solid/dashed/dotted/double style, and width. Switch to “Erase borders” to remove only the same targeted edges.',
+        'Simple tables save as standard Markdown tables. Tables with merged cells, per-edge borders, or multiple paragraphs save as a lossless KUMI table block in Markdown. Do not alter that block in an external Markdown editor; also keep JSON or a project ZIP as the source of record.',
+      ],
+      exportTitle: '4. Review and save',
       exportSteps: [
         'Use Preview to review Reports as A4 pages and Slides as 16:9 slides.',
         'Save Markdown or JSON from the header. Document JSON preserves structures that Markdown cannot express.',
         'For Slide documents, use HTML to export a standalone file for viewing and presenting. Open it in a browser and use Previous/Next or the arrow keys. Press F for fullscreen where supported.',
         'Math fonts and imported images are embedded. External image URLs require a network connection. HTML export does not save your editable source, so also save Markdown or JSON.',
       ],
-      preferencesTitle: '4. Change the display',
+      preferencesTitle: '5. Change the display',
       preferencesSteps: [
         'Use the moon/sun button in the header to switch between light and dark mode. The document canvas stays paper-white for readability.',
         'Use the EN or 日本語 button to change the application interface. It does not translate the document you are editing.',

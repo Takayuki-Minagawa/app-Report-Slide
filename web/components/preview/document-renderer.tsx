@@ -19,6 +19,7 @@ import type {
   TableCellNode,
   TableHeaderNode,
 } from '@/src/document/model';
+import { tableCellBorderStyle } from '@/src/document/table';
 import {
   safeResourceUrl,
   resolveSafeImageUrl as resolvedImageUrl,
@@ -394,7 +395,12 @@ function BlockNode({
                     return (
                       <Cell
                         key={cell.attrs.nodeId}
-                        style={{ textAlign: cell.attrs.align ?? undefined }}
+                        colSpan={cell.attrs.colspan ?? 1}
+                        rowSpan={cell.attrs.rowspan ?? 1}
+                        style={{
+                          textAlign: cell.attrs.align ?? undefined,
+                          ...tableCellBorderStyle(cell.attrs.borders),
+                        }}
                       >
                         <TableCellContent
                           cell={cell}

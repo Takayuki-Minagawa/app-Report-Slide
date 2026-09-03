@@ -88,6 +88,40 @@ describe('DocumentAttributes extension', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it('表セルの個別罫線をDOMとDocument JSONに保持する', () => {
+    const current = createEditor();
+    current.commands.insertTable({ rows: 2, cols: 2, withHeaderRow: true });
+    current.commands.setCellAttribute('align', 'center');
+    current.commands.setCellAttribute('borders', {
+      top: { color: '#0f766e', style: 'double', width: 2 },
+      left: null,
+    });
+
+    const table = current
+      .getJSON()
+      .content?.find((node) => node.type === 'table') as unknown as
+      | {
+          content: Array<{
+            content: Array<{ attrs: Record<string, unknown> }>;
+          }>;
+        }
+      | undefined;
+    if (!table) throw new Error('table expected');
+    const cell = table.content[0]?.content?.[0];
+    expect(cell?.attrs).toMatchObject({
+      align: 'center',
+      borders: {
+        top: { color: '#0f766e', style: 'double', width: 2 },
+        left: null,
+      },
+    });
+    expect(current.getHTML()).toContain('data-kumi-borders');
+    expect(current.getHTML()).toContain(
+      'border-top: 2px double rgb(15, 118, 110)',
+    );
+    expect(current.getHTML()).toContain('text-align: center');
+  });
+
   it('貼り付け画像のaltを空文字へ正規化し危険なsrcを取り込まない', () => {
     const current = createEditor();
     current.commands.setContent(

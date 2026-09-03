@@ -38,8 +38,30 @@ export function createMarkdownIt(): MarkdownIt {
       const attributes =
         /^\{(?:#|(?:label|caption|numbered|width|align)=)/.test(line);
       const pageBreak = /^:::\s+(pagebreak|slidebreak)\s*$/.exec(line);
-      if (!attributes && !pageBreak) return false;
+      const advancedTable = /^:::\s+kumi-table\s*$/.test(line);
+      if (!attributes && !pageBreak && !advancedTable) return false;
       if (silent) return true;
+      if (advancedTable) {
+        let closingLine = startLine + 1;
+        while (closingLine < endLine && lineAt(closingLine) !== ':::') {
+          closingLine += 1;
+        }
+        const closed = closingLine < endLine;
+        const token = state.push(
+          closed ? 'kumi_advanced_table' : 'kumi_invalid_advanced_table',
+          '',
+          0,
+        );
+        token.content = closed
+          ? state
+              .getLines(startLine + 1, closingLine, state.blkIndent, false)
+              .replace(/\n$/, '')
+          : '';
+        token.map = [startLine, closed ? closingLine + 1 : endLine];
+        token.block = true;
+        state.line = token.map[1];
+        return true;
+      }
       const closed =
         pageBreak && startLine + 1 < endLine && lineAt(startLine + 1) === ':::';
       const token = state.push(

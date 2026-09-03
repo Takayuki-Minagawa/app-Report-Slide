@@ -167,6 +167,40 @@ describe('report project ZIP', () => {
     expect(project.chapters[0].file).toMatch(/\.md$/);
   });
 
+  it('stores advanced tables as lossless KUMI Markdown chapters', async () => {
+    const document = parseMarkdown(
+      '| A | B |\n| --- | --- |\n| 1 | 2 |',
+    ).document;
+    const table = document.children[0];
+    if (table.type !== 'table') throw new Error('table expected');
+    const merged = table.content[0].content[0];
+    table.content[0].content.splice(1, 1);
+    merged.attrs.colspan = 2;
+    merged.attrs.borders = {
+      top: { color: '#0f766e', style: 'double', width: 2 },
+      bottom: null,
+    };
+    const project = createReportProject(document);
+
+    const bytes = await writeReportProject(project, new Map());
+    const files = unzipSync(bytes);
+    const source = files[project.chapters[0].file];
+    if (!source) throw new Error('chapter source expected');
+    expect(strFromU8(source)).toContain('::: kumi-table');
+
+    const loaded = await readReportProject(archiveFile(bytes));
+    const loadedTable = loaded.project.chapters[0].document.children[0];
+    if (loadedTable.type !== 'table') throw new Error('loaded table expected');
+    expect(loaded.project.chapters[0].file).toMatch(/\.md$/);
+    expect(loadedTable.content[0].content[0].attrs).toMatchObject({
+      colspan: 2,
+      borders: {
+        top: { color: '#0f766e', style: 'double', width: 2 },
+        bottom: null,
+      },
+    });
+  });
+
   it('packs referenced images for excluded chapters and never fetches external images', async () => {
     const project = createReportProject(
       parseMarkdown(
