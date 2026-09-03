@@ -19,7 +19,11 @@ import type {
   TableCellNode,
   TableHeaderNode,
 } from '@/src/document/model';
-import { safeResourceUrl } from '@/src/security/resource-url';
+import {
+  safeResourceUrl,
+  resolveSafeImageUrl as resolvedImageUrl,
+  type ImageUrlResolver,
+} from '@/src/security/resource-url';
 import {
   analyzeDocument,
   type DocumentAnalysis,
@@ -68,20 +72,6 @@ interface DocumentRendererProps {
   nodes?: DocumentNode[];
   analysis?: DocumentAnalysis;
   showToc?: boolean;
-}
-
-type ImageUrlResolver = (source: string) => string;
-
-function resolvedImageUrl(
-  source: string,
-  resolveImageUrl: ImageUrlResolver,
-): string | undefined {
-  const safeSource = safeResourceUrl(source, 'image');
-  if (!safeSource) return undefined;
-  const resolved = resolveImageUrl(safeSource);
-  return resolved.startsWith('blob:')
-    ? resolved
-    : safeResourceUrl(resolved, 'image');
 }
 
 function MathContent({ display, latex }: { display: boolean; latex: string }) {

@@ -1,4 +1,20 @@
 export type ResourceKind = 'image' | 'link';
+export type ImageUrlResolver = (source: string) => string;
+
+/** Only the local-asset resolver may introduce blob URLs, never document content. */
+export function resolveSafeImageUrl(
+  source: unknown,
+  resolveImageUrl: ImageUrlResolver = (value) => value,
+): string | undefined {
+  if (typeof source !== 'string') return undefined;
+  const safeSource = safeResourceUrl(source, 'image');
+  if (!safeSource) return undefined;
+  const resolved = resolveImageUrl(safeSource);
+  if (typeof resolved !== 'string') return undefined;
+  return resolved.startsWith('blob:')
+    ? resolved
+    : safeResourceUrl(resolved, 'image');
+}
 
 function hasControlCharacter(value: string): boolean {
   for (const character of value) {

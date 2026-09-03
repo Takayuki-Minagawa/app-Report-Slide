@@ -14,7 +14,12 @@ import type {
 import { validateDocumentData } from '@/src/document/validation';
 import { isSafeResourceUrl } from '@/src/security/resource-url';
 
-import { canonicalHardBreakMarker } from './dialect';
+import {
+  canonicalHardBreakMarker,
+  inlineImageMarker,
+  emptyParagraphMarker,
+  isEscaped,
+} from './syntax';
 
 export class MarkdownSerializationError extends Error {
   readonly code: string;
@@ -26,27 +31,12 @@ export class MarkdownSerializationError extends Error {
   }
 }
 
-const inlineImageMarker = '{.kumi-inline}';
-const emptyParagraphMarker = '{.kumi-empty}';
-
 function escapeText(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/([\\`*_[\]$~{}():])/g, '\\$1');
-}
-
-function isEscaped(value: string, position: number): boolean {
-  let slashes = 0;
-  for (
-    let index = position - 1;
-    index >= 0 && value[index] === '\\';
-    index -= 1
-  ) {
-    slashes += 1;
-  }
-  return slashes % 2 === 1;
 }
 
 function serializeInlineMath(latex: string): string {

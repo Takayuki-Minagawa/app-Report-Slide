@@ -1,4 +1,5 @@
 import { inlineText, type DocumentData, type DocumentNode } from './model';
+import { walkDocumentTree, type DocumentTreeNode } from './traversal';
 
 export const labelPattern = /^[A-Za-z][A-Za-z0-9:._-]{0,127}$/;
 export const semanticTypes = new Set([
@@ -7,6 +8,15 @@ export const semanticTypes = new Set([
   'table',
   'blockMath',
 ]);
+
+export type SemanticNode = Extract<
+  DocumentNode,
+  { type: 'heading' | 'figure' | 'table' | 'blockMath' }
+>;
+
+export function isSemanticNode(node: DocumentTreeNode): node is SemanticNode {
+  return semanticTypes.has(node.type);
+}
 
 export interface SemanticTarget {
   type: 'heading' | 'figure' | 'table' | 'blockMath';
@@ -37,8 +47,9 @@ export function analyzeDocument(document: DocumentData): DocumentAnalysis {
   const references = new Set<string>();
   const sections = [0, 0, 0, 0, 0, 0];
   const counters = { figure: 0, table: 0, blockMath: 0 };
-  function visit(node: DocumentNode) {
-    if (semanticTypes.has(node.type)) {
+  for (const node of walkDocumentTree(document.children)) {
+    if (node.type === 'reference') references.add(node.attrs.target);
+    if (isSemanticNode(node)) {
       const { label, caption, numbered, nodeId } = node.attrs;
       let number: string | undefined;
       let title = caption || label || '';
@@ -75,7 +86,7 @@ export function analyzeDocument(document: DocumentData): DocumentAnalysis {
         }
       }
       const target: SemanticTarget = {
-        type: node.type as SemanticTarget['type'],
+        type: node.type,
         nodeId,
         label: label || undefined,
         number,
@@ -94,19 +105,7 @@ export function analyzeDocument(document: DocumentData): DocumentAnalysis {
         } else result.labels.set(label, target);
       }
     }
-    if ('content' in node) {
-      for (const child of node.content ?? []) {
-        if (child.type === 'reference') references.add(child.attrs.target);
-        else if (
-          'attrs' in child &&
-          'nodeId' in child.attrs &&
-          child.type !== 'inlineImage'
-        )
-          visit(child as DocumentNode);
-      }
-    }
   }
-  document.children.forEach(visit);
   for (const label of duplicates)
     result.diagnostics.push(`ラベル「${label}」が重複しています。`);
   for (const label of references) {

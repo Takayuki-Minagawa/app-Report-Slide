@@ -1,18 +1,6 @@
 import MarkdownIt from 'markdown-it';
 
-export const canonicalHardBreakMarker = '{.kumi-br}';
-
-function isEscaped(source: string, position: number): boolean {
-  let slashes = 0;
-  for (
-    let index = position - 1;
-    index >= 0 && source[index] === '\\';
-    index -= 1
-  ) {
-    slashes += 1;
-  }
-  return slashes % 2 === 1;
-}
+import { canonicalHardBreakMarker, isEscaped } from './syntax';
 
 export function createMarkdownIt(): MarkdownIt {
   const markdown = new MarkdownIt({

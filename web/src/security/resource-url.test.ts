@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { isSafeResourceUrl } from './resource-url';
+import { isSafeResourceUrl, resolveSafeImageUrl } from './resource-url';
 
 describe('isSafeResourceUrl', () => {
   it.each([
@@ -23,5 +23,32 @@ describe('isSafeResourceUrl', () => {
     ['data:text/html,<script>alert(1)</script>', 'image'],
   ] as const)('%sを拒否する', (url, kind) => {
     expect(isSafeResourceUrl(url, kind)).toBe(false);
+  });
+});
+
+describe('resolveSafeImageUrl', () => {
+  it('allows blob URLs only when a safe document path was resolved by the app', () => {
+    const resolver = vi.fn(() => 'blob:local-image');
+    expect(resolveSafeImageUrl(' chart.png ', resolver)).toBe(
+      'blob:local-image',
+    );
+    expect(resolver).toHaveBeenCalledWith('chart.png');
+    resolver.mockClear();
+    expect(resolveSafeImageUrl('blob:untrusted', resolver)).toBeUndefined();
+    expect(
+      resolveSafeImageUrl('javascript:alert(1)', resolver),
+    ).toBeUndefined();
+    expect(resolver).not.toHaveBeenCalled();
+  });
+
+  it('checks the resolved URL too and handles non-string attributes safely', () => {
+    expect(
+      resolveSafeImageUrl('image.png', () => 'javascript:alert(1)'),
+    ).toBeUndefined();
+    expect(resolveSafeImageUrl(undefined)).toBeUndefined();
+    expect(resolveSafeImageUrl('constructor')).toBe('constructor');
+    expect(resolveSafeImageUrl('https://example.com/image.png')).toBe(
+      'https://example.com/image.png',
+    );
   });
 });

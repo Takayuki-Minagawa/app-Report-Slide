@@ -13,6 +13,50 @@ function renderWorkspace() {
 }
 
 describe('EditorWorkspace', () => {
+  it('previews a relative image named constructor without treating it as an object property', async () => {
+    renderWorkspace();
+    await screen.findByText('REPORT');
+    fireEvent.click(screen.getByRole('button', { name: 'Markdownへ切り替え' }));
+    fireEvent.change(
+      await screen.findByRole('textbox', { name: 'Markdown原稿' }),
+      {
+        target: { value: '![Prototype filename](constructor)' },
+      },
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Markdownを適用' }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('textbox', { name: 'Markdown原稿' }),
+      ).not.toBeInTheDocument(),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: '完成プレビューへ切り替え' }),
+    );
+    expect(
+      await screen.findByRole('img', { name: 'Prototype filename' }),
+    ).toHaveAttribute('src', 'constructor');
+  });
+
+  it('shows the actual parse error when saving an invalid Markdown draft', async () => {
+    window.localStorage.setItem('kumi.locale', 'en');
+    renderWorkspace();
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Switch to Markdown' }),
+    );
+    const draft = await screen.findByRole('textbox', {
+      name: 'Markdown draft',
+    });
+    fireEvent.change(draft, {
+      target: { value: '---\ntype: book\n---\n\n# Invalid' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Markdown' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The document type must be report or slide.',
+    );
+    expect(screen.getByRole('alert')).not.toHaveTextContent('JSON');
+    expect(draft).toHaveValue('---\ntype: book\n---\n\n# Invalid');
+    expect(screen.getByText('REPORT')).toBeInTheDocument();
+  });
   beforeEach(() => {
     window.localStorage.clear();
     document.documentElement.classList.remove('dark');

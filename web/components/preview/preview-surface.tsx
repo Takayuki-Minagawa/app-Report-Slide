@@ -4,31 +4,30 @@ import { useMemo } from 'react';
 import { useAppPreferences } from '@/components/app-preferences';
 import { localizeDiagnosticMessage } from '@/src/i18n/diagnostics';
 import type { DocumentData } from '@/src/document/model';
-import { analyzeDocument, splitDocumentPages } from '@/src/document/semantics';
+import { resolveDocumentTheme } from '@/src/document/metadata';
+import {
+  analyzeDocument,
+  splitDocumentPages,
+  type DocumentAnalysis,
+} from '@/src/document/semantics';
 import { DocumentRenderer } from './document-renderer';
-
-const reportThemes = new Set(['latex', 'calculation']);
-const slideThemes = new Set(['beamer-simple', 'technical']);
 
 export function PreviewSurface({
   document,
   resolveImageUrl,
+  analysis: providedAnalysis,
 }: {
   document: DocumentData;
   resolveImageUrl?: (source: string) => string;
+  analysis?: DocumentAnalysis;
 }) {
   const { copy, locale } = useAppPreferences();
   const slide = document.type === 'slide';
-  const requested =
-    typeof document.metadata.theme === 'string' ? document.metadata.theme : '';
-  const theme = slide
-    ? slideThemes.has(requested)
-      ? requested
-      : 'beamer-simple'
-    : reportThemes.has(requested)
-      ? requested
-      : 'latex';
-  const analysis = useMemo(() => analyzeDocument(document), [document]);
+  const theme = resolveDocumentTheme(document.type, document.metadata.theme);
+  const analysis = useMemo(
+    () => providedAnalysis ?? analyzeDocument(document),
+    [document, providedAnalysis],
+  );
   const pages = useMemo(() => splitDocumentPages(document), [document]);
 
   return (
