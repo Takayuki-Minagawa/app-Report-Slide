@@ -9,6 +9,21 @@ import {
 } from '@/src/markdown/diagnostics';
 import { MarkdownSerializationError } from '@/src/markdown/serializer';
 import { DocumentValidationError } from '@/src/document/validation';
+import { ReportProjectError } from '@/src/project/model';
+
+type ProjectStatusKey = keyof UiMessages['project']['status'];
+
+interface ProjectStatusMessage {
+  projectKey: ProjectStatusKey;
+  detail?: string;
+}
+
+export function projectStatus(
+  projectKey: ProjectStatusKey,
+  detail?: string,
+): ProjectStatusMessage {
+  return { projectKey, detail };
+}
 
 export type StatusMessageKey = keyof UiMessages['status'];
 
@@ -24,6 +39,7 @@ interface DiagnosticStatusMessage {
 export type StatusMessage =
   | string
   | TranslationStatusMessage
+  | ProjectStatusMessage
   | DiagnosticStatusMessage;
 export type StatusDescription = StatusMessage | readonly StatusMessage[];
 
@@ -67,6 +83,12 @@ export function statusMessageText(
     return localizeDiagnosticMessage(value, locale);
   if ('diagnostic' in value)
     return localizeMarkdownDiagnostic(value.diagnostic, locale);
+  if ('projectKey' in value) {
+    const translation = copy.project.status[value.projectKey];
+    return typeof translation === 'function'
+      ? translation(value.detail ?? '')
+      : translation;
+  }
 
   const translation = copy.status[value.key];
   return typeof translation === 'function'
@@ -103,6 +125,8 @@ export function describeWorkspaceError(
   fallback: StatusMessageKey,
 ): StatusDescription {
   if (error instanceof WorkspaceStatusError) return error.status;
+  if (error instanceof ReportProjectError)
+    return projectStatus(error.code, error.detail);
   if (error instanceof MarkdownImportError)
     return error.diagnostics.map(diagnosticStatusMessage);
   if (error instanceof MarkdownSerializationError)

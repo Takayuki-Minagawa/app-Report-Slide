@@ -65,7 +65,9 @@ export default defineConfig(async () => {
     environments: {
       client: {
         // Avoid a first-export dependency discovery reload that would discard edits.
-        optimizeDeps: { include: ['react-dom/server.browser'] },
+        optimizeDeps: {
+          include: ['react-dom/server.browser', '@zip.js/zip.js'],
+        },
       },
     },
     server: isCodexSeatbeltSandbox

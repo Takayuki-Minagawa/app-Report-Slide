@@ -50,6 +50,18 @@ import {
   type WorkspaceStatus,
 } from '@/src/workspace/status';
 import { useDocumentSelection } from './use-document-selection';
+import {
+  useProjectActions,
+  projectWithDocument,
+  type ProjectSession,
+} from './use-project-actions';
+import {
+  assembleReportProject,
+  isLocalProjectImage,
+  resolveProjectPath,
+  validateReportProject,
+  ReportProjectError,
+} from '@/src/project/model';
 
 export type WorkspaceView = 'visual' | 'markdown' | 'preview';
 
@@ -89,6 +101,14 @@ export function useDocumentWorkspace() {
     description: statusMessage('readyDescription'),
   });
   const [documentDirty, setDocumentDirty] = useState(false);
+  const [projectSession, setProjectSession] = useState<ProjectSession | null>(
+    null,
+  );
+  const markProjectEdited = useCallback(() => {
+    setProjectSession((current) =>
+      current && !current.dirty ? { ...current, dirty: true } : current,
+    );
+  }, []);
   const [markdownDirty, setMarkdownDirty] = useState(false);
   const [assets, setAssets] = useState<AssetUrls>(() => new Map());
   const ownedAssets = useRef(assets);
@@ -114,7 +134,10 @@ export function useDocumentWorkspace() {
     // Track ownership synchronously so even those maps are released.
     ownedAssets.current = next;
     setAssets(next);
-    revokeAssetUrls(previous);
+    const retained = new Set(next.values());
+    revokeAssetUrls(
+      new Map([...previous].filter(([, url]) => !retained.has(url))),
+    );
   }, []);
 
   const documentWriteLocked = view === 'markdown' || markdownDirty;
@@ -125,7 +148,24 @@ export function useDocumentWorkspace() {
     refreshSelection,
     clearSelection,
   } = selection;
+  const chapterFile = projectSession?.project.chapters.find(
+    (chapter) => chapter.id === projectSession.activeChapterId,
+  )?.file;
   const resolveImageUrl = useCallback(
+    (source: string) => {
+      let path = source;
+      if (chapterFile && isLocalProjectImage(source)) {
+        try {
+          path = resolveProjectPath(chapterFile, source);
+        } catch {
+          return source;
+        }
+      }
+      return assets.get(path) ?? source;
+    },
+    [assets, chapterFile],
+  );
+  const resolvePreviewImageUrl = useCallback(
     (source: string) => assets.get(source) ?? source,
     [assets],
   );
@@ -157,6 +197,7 @@ export function useDocumentWorkspace() {
           children: content as DocumentNode[],
         }));
         setDocumentDirty(true);
+        markProjectEdited();
         refreshSelection(updatedEditor);
         setStatus({
           kind: 'idle',
@@ -187,7 +228,19 @@ export function useDocumentWorkspace() {
       ),
     [document.children],
   );
-  const analysis = useMemo(() => analyzeDocument(document), [document]);
+  const project = useMemo(
+    () =>
+      projectSession ? projectWithDocument(projectSession, document) : null,
+    [projectSession, document],
+  );
+  const previewDocument = useMemo(
+    () => (project ? assembleReportProject(project) : document),
+    [project, document],
+  );
+  const analysis = useMemo(
+    () => analyzeDocument(previewDocument),
+    [previewDocument],
+  );
   const selectedSemantic = outline.find(
     (node): node is SemanticNode =>
       isSemanticNode(node) &&
@@ -240,9 +293,46 @@ export function useDocumentWorkspace() {
     [clearSelection, editor, invalidatePendingImport, replaceAssets],
   );
 
+  const confirmReplacement = useCallback(
+    () =>
+      !projectSession?.dirty ||
+      window.confirm(copy.project.replaceConfirmation),
+    [projectSession?.dirty, copy.project.replaceConfirmation],
+  );
+  const projectActions = useProjectActions({
+    session: projectSession,
+    setSession: setProjectSession,
+    getDocument: () => currentDocument(editor, document),
+    loadDocument,
+    assets,
+    getRevision: () => importRevision.current,
+    nextRevision: () => ++importRevision.current,
+    locked: documentWriteLocked,
+    setStatus,
+    showEditor: () => setView('visual'),
+    markDocumentSaved: () => setDocumentDirty(false),
+    confirmReplacement,
+    copy: copy.project,
+  });
+  const validateChapterDraft = (next: DocumentData) => {
+    if (!projectSession) return;
+    if (next.type !== 'report') throw new ReportProjectError('reportOnly');
+    validateReportProject(projectWithDocument(projectSession, next));
+  };
+
+  useEffect(() => {
+    if (!projectSession?.dirty && !markdownDirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [projectSession?.dirty, markdownDirty]);
+
   const importFiles = useCallback(
     async (files: readonly File[]) => {
-      if (files.length === 0 || documentWriteLocked) return;
+      if (files.length === 0 || documentWriteLocked || !confirmReplacement())
+        return;
       const request = ++importRevision.current;
       let pendingAssets: AssetUrls | undefined;
       try {
@@ -265,6 +355,7 @@ export function useDocumentWorkspace() {
           ),
           { assets: result.assets, description },
         );
+        setProjectSession(null);
         pendingAssets = undefined;
       } catch (error) {
         if (request === importRevision.current)
@@ -277,7 +368,7 @@ export function useDocumentWorkspace() {
         if (pendingAssets) revokeAssetUrls(pendingAssets);
       }
     },
-    [documentWriteLocked, loadDocument],
+    [documentWriteLocked, loadDocument, confirmReplacement],
   );
 
   const updateMarkdown = (source: string) => {
@@ -297,6 +388,8 @@ export function useDocumentWorkspace() {
       const result = parseMarkdown(markdownDraft, {
         fallbackType: document.type,
       });
+      validateChapterDraft(result.document);
+      markProjectEdited();
       loadDocument(result.document, statusMessage('appliedMarkdown'), {
         description: result.diagnostics.map(diagnosticStatusMessage),
       });
@@ -311,12 +404,13 @@ export function useDocumentWorkspace() {
   };
 
   const createDocument = (type: DocumentType) => {
-    if (documentWriteLocked) return;
+    if (documentWriteLocked || !confirmReplacement()) return;
     loadDocument(
       createDefaultDocument(type),
       statusMessage(type === 'report' ? 'createdReport' : 'createdSlide'),
       { assets: new Map() },
     );
+    setProjectSession(null);
     setView('visual');
   };
 
@@ -368,8 +462,10 @@ export function useDocumentWorkspace() {
       const result = markdownDirty
         ? parseMarkdown(markdownDraft, { fallbackType: document.type })
         : { document: currentDocument(editor, document), diagnostics: [] };
+      validateChapterDraft(result.document);
       downloadDocument(result.document, format);
       if (markdownDirty) {
+        markProjectEdited();
         loadDocument(
           result.document,
           statusMessage(
@@ -461,6 +557,10 @@ export function useDocumentWorkspace() {
 
   const updateTheme = (theme: string) => {
     if (documentWriteLocked) return;
+    if (projectSession) {
+      projectActions.updateProjectMetadata({ theme });
+      return;
+    }
     invalidatePendingImport();
     setDocument((current) => ({
       ...current,
@@ -471,6 +571,10 @@ export function useDocumentWorkspace() {
 
   const updateDocumentFlag = (key: DocumentFlag, checked: boolean) => {
     if (documentWriteLocked) return;
+    if (projectSession) {
+      projectActions.updateProjectMetadata({ [key]: checked });
+      return;
+    }
     invalidatePendingImport();
     setDocument((current) => ({
       ...current,
@@ -481,12 +585,16 @@ export function useDocumentWorkspace() {
 
   return {
     document,
+    project,
+    projectSession,
+    projectActions,
+    previewDocument,
     editor,
     view,
     markdownDraft,
     documentWriteLocked,
     displayedStatus,
-    dirty: documentDirty || markdownDirty,
+    dirty: documentDirty || markdownDirty || Boolean(projectSession?.dirty),
     outline,
     analysis,
     selectedSemantic,
@@ -498,6 +606,7 @@ export function useDocumentWorkspace() {
     applyAttributes: (nodeId: string, attrs: Record<string, unknown>) =>
       selection.applyAttributes(editor, nodeId, attrs),
     resolveImageUrl,
+    resolvePreviewImageUrl,
     importFiles,
     updateMarkdown,
     applyMarkdown,

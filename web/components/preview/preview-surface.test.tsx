@@ -1,10 +1,112 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { parseMarkdown } from '@/src/markdown/parser';
+import {
+  assembleReportProject,
+  createBlankChapter,
+  createReportProject,
+} from '@/src/project/model';
 import { AppPreferencesProvider } from '@/components/app-preferences';
 import { PreviewSurface } from './preview-surface';
 
 describe('semantic preview', () => {
+  it('navigates to distinct chapters even when their source nodes share IDs', () => {
+    const project = createReportProject(
+      parseMarkdown('# First\n{#sec:first}\n\n[@sec:second]').document,
+    );
+    project.metadata.toc = true;
+    project.metadata.number_sections = true;
+    const second = createBlankChapter(2);
+    second.document = parseMarkdown('# Second\n{#sec:second}').document;
+    second.document.children[0].attrs.nodeId =
+      project.chapters[0].document.children[0].attrs.nodeId;
+    project.chapters.push(second);
+    render(
+      <AppPreferencesProvider>
+        <PreviewSurface document={assembleReportProject(project)} paginated />
+      </AppPreferencesProvider>,
+    );
+    fireEvent.click(screen.getByRole('link', { name: '節 2' }));
+    expect(screen.getByRole('heading', { name: '2 Second' })).toHaveFocus();
+    expect(screen.getByLabelText('A4レポートプレビュー')).toHaveAttribute(
+      'data-page',
+      '2',
+    );
+    fireEvent.click(screen.getByRole('button', { name: '前のページ' }));
+    fireEvent.click(screen.getByRole('link', { name: '1 First' }));
+    expect(screen.getByRole('heading', { name: '1 First' })).toHaveFocus();
+    expect(screen.getByLabelText('A4レポートプレビュー')).toHaveAttribute(
+      'data-page',
+      '1',
+    );
+  });
+
+  it('renders only one project page and follows cross-page references with keyboard focus', async () => {
+    const document = parseMarkdown(
+      '---\ntype: report\ntoc: true\nnumber_sections: true\n---\n\n# Intro\n{#sec:intro}\n\n[@fig:result]\n\n::: pagebreak\n:::\n\n# Results\n{#sec:results}\n\n![Result](result.svg)\n{#fig:result caption="Outcome"}',
+    ).document;
+    const { container } = render(
+      <AppPreferencesProvider>
+        <PreviewSurface document={document} paginated />
+      </AppPreferencesProvider>,
+    );
+    expect(container.querySelectorAll('.report-preview')).toHaveLength(1);
+    expect(screen.getByLabelText('A4レポートプレビュー')).toHaveAttribute(
+      'data-page',
+      '1',
+    );
+    fireEvent.click(screen.getByRole('link', { name: '図 1' }));
+    expect(screen.getByLabelText('A4レポートプレビュー')).toHaveAttribute(
+      'data-page',
+      '2',
+    );
+    expect(container.querySelectorAll('.report-preview')).toHaveLength(1);
+    await waitFor(() =>
+      expect(window.document.activeElement).toHaveTextContent('Outcome'),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '前のページ' }));
+    fireEvent.click(screen.getByRole('link', { name: '2 Results' }));
+    expect(screen.getByLabelText('A4レポートプレビュー')).toHaveAttribute(
+      'data-page',
+      '2',
+    );
+    expect(screen.getByRole('heading', { name: '2 Results' })).toHaveFocus();
+  });
+
+  it('keeps a large project preview bounded and clamps the selected page after exclusion', () => {
+    const document = parseMarkdown(
+      Array.from(
+        { length: 40 },
+        (_, index) => `# Page ${index + 1}\n\nBody ${index + 1}`,
+      ).join('\n\n::: pagebreak\n:::\n\n'),
+    ).document;
+    const { container, rerender } = render(
+      <AppPreferencesProvider>
+        <PreviewSurface document={document} paginated />
+      </AppPreferencesProvider>,
+    );
+    fireEvent.change(screen.getByRole('combobox', { name: '表示ページ' }), {
+      target: { value: '39' },
+    });
+    expect(container.querySelectorAll('.report-preview')).toHaveLength(1);
+    expect(
+      screen.getByRole('heading', { name: 'Page 40' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Page 1' }),
+    ).not.toBeInTheDocument();
+    const smaller = parseMarkdown('# Only page').document;
+    rerender(
+      <AppPreferencesProvider>
+        <PreviewSurface document={smaller} paginated />
+      </AppPreferencesProvider>,
+    );
+    expect(
+      screen.getByRole('heading', { name: 'Only page' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '次のページ' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '前のページ' })).toBeDisabled();
+  });
   beforeEach(() => {
     window.localStorage.clear();
     document.documentElement.classList.remove('dark');

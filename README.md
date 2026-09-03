@@ -12,12 +12,13 @@ GitHub Pagesを有効にすると、[公開版](https://takayuki-minagawa.github
 - 顧客情報、個人情報、社外秘のレポート、アクセストークン、パスワードなどは、リポジトリにも公開サイトにも追加しないでください。
 - GitHub Pages版は静的サイトです。文書や画像をImportしても、このリポジトリやGitHub Pagesへ自動アップロードされることはありません。ただし、端末やエクスポートしたファイルの取り扱いは所属組織の規程に従ってください。
 
-## MVP 1でできること
+## 主な機能
 
 - Report／SlideのYAML Front Matter判定
 - Tiptapによる見出し、段落、リスト、引用、コード、画像、表の編集
 - KaTeXによるインライン／ブロック数式
 - MarkdownファイルのImportと、Markdown／Document JSONの保存
+- Reportの章別プロジェクト（追加・並べ替え・除外・削除、章単位の編集、画像を含むZIP保存・再読込）
 - Slide文書の単一HTML出力（スライド送り、全画面表示、数式フォント・取り込んだ画像の埋め込み）
 - Report／Slide向けの基本テーマと完成プレビュー
 - 3ペイン構成のNavigator、Editor、Properties
@@ -31,8 +32,17 @@ GitHub Pagesを有効にすると、[公開版](https://takayuki-minagawa.github
 - 図の幅（10〜100%）・配置・代替テキストをPropertiesで編集し、Markdownでも保持
 - 明示的な改ページと複数スライドのプレビュー、ページ／スライド番号
 - Document JSON v1／v2のImport、v2への非破壊移行
+- 有効な章を通した目次・番号・相互参照と、ページを切り替える全体プレビュー
 
 使い方・構文・制限は [文書機能ガイド](./web/docs/document-features.md) を参照してください。最初の操作は [かんたんガイド（日本語）](./web/docs/quick-start.ja.md) / [Quick guide (English)](./web/docs/quick-start.en.md) にまとめています。元の全体仕様は [仕様書](./md_report_slide_editor_web_spec.md) にあります。自動ページ割り、厳密なA4組版、PDF出力、ReportのHTML出力、脚注・文献、段組み、Chart、TeXファイル互換はまだ未実装です。
+
+## 長いレポートの章別管理
+
+Reportを開いて左側の「現在のReportをプロジェクト化」を選ぶと、現在の文書を最初の章として管理できます。章ごとに原稿を追加・編集し、出力順序、出力への含有、章の前の改ページを設定できます。除外した章は保存され、削除は確認後にプロジェクト内だけで行います。
+
+「プロジェクトZIPを保存」で `project.json`、章別Markdown（必要に応じてJSON）、取り込んだ画像を保存します。再開時はZIPを読み込みます。全体のMarkdown／JSON出力は有効な章を結合した文書であり、章構成や除外原稿を保存する形式ではありません。ヘッダーの保存は編集中の章だけが対象です。
+
+文書は自動保存されません。タブを閉じる前にZIPを保存してください。編集画面は選択した章だけ、プロジェクトの完成プレビューは選択した明示的なページだけを描画します。用紙サイズに応じた自動改ページは行いません。形式・上限・画像の扱いは [章別プロジェクトガイド（日本語）](./web/docs/report-projects.ja.md) / [Chapter projects (English)](./web/docs/report-projects.en.md) を参照してください。
 
 ## HTMLスライドの出力
 
@@ -88,6 +98,7 @@ Runtime validatorはNode型、必須属性、親子関係、既知metadata型、
 
 - `web/components/editor/`: 画面構成、文書操作フック、選択・属性編集フック、および各ペインの表示
 - `web/src/workspace/`: ファイル入出力、ローカル画像URLの管理、言語切り替えに追従する操作メッセージ
+- `web/src/project/`: 章構成、結合レポート、画像パスの分離、検証付きZIP入出力
 - `web/src/export/`: 共通プレビュー描画を使うHTMLスライド生成、画像・数式フォントの埋め込み、単体プレーヤー
 - `web/src/document/`: 文書モデル、検証、メタデータ定義、文書走査、番号・参照の分析
 - `web/src/markdown/`: 共通の記法定義、読み込み、無損失で保存できる形式への変換

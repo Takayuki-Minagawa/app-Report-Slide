@@ -21,6 +21,7 @@ import { documentTitle, type DocumentData } from '@/src/document/model';
 import type { DocumentFileFormat } from '@/src/workspace/files';
 
 interface WorkspaceHeaderProps {
+  project?: boolean;
   document: DocumentData;
   editor: Editor | null;
   dirty: boolean;
@@ -31,6 +32,7 @@ interface WorkspaceHeaderProps {
 }
 
 export function WorkspaceHeader({
+  project = false,
   document,
   editor,
   dirty,
@@ -78,7 +80,7 @@ export function WorkspaceHeader({
           variant="outline"
           className="document-type-badge border-blue-200 bg-blue-50 text-[10px] text-blue-700"
         >
-          {document.type.toUpperCase()}
+          {project ? copy.project.projectBadge : document.type.toUpperCase()}
         </Badge>
       </div>
 
@@ -140,7 +142,8 @@ export function WorkspaceHeader({
           variant="outline"
           onClick={() => saveDocument('json')}
         >
-          <FileJson data-icon="inline-start" /> JSON
+          <FileJson data-icon="inline-start" />{' '}
+          {project ? copy.project.saveChapterJson : 'JSON'}
         </Button>
         {document.type === 'slide' && (
           <Button
@@ -160,7 +163,8 @@ export function WorkspaceHeader({
           </Button>
         )}
         <Button size="sm" onClick={() => saveDocument('markdown')}>
-          <Save data-icon="inline-start" /> Markdown
+          <Save data-icon="inline-start" />{' '}
+          {project ? copy.project.saveChapterMarkdown : 'Markdown'}
         </Button>
       </div>
     </header>

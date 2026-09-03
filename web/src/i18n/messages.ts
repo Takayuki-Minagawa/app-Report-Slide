@@ -1,8 +1,11 @@
+import { projectMessages, type ProjectMessages } from './project-messages';
+
 export const supportedLocales = ['ja', 'en'] as const;
 
 export type AppLocale = (typeof supportedLocales)[number];
 
 export interface UiMessages {
+  project: ProjectMessages;
   app: {
     darkMode: string;
     englishInterface: string;
@@ -163,6 +166,8 @@ export interface UiMessages {
     exportSteps: readonly string[];
     preferencesTitle: string;
     preferencesSteps: readonly string[];
+    projectTitle: string;
+    projectSteps: readonly string[];
     privacyTitle: string;
     privacyText: string;
   };
@@ -170,6 +175,7 @@ export interface UiMessages {
 
 export const messages: Record<AppLocale, UiMessages> = {
   ja: {
+    project: projectMessages.ja,
     app: {
       darkMode: 'ダークモード',
       englishInterface: '英語表示',
@@ -333,6 +339,15 @@ export const messages: Record<AppLocale, UiMessages> = {
       toc: '目次',
     },
     manual: {
+      projectTitle: '5. 長いレポートを章に分ける',
+      projectSteps: [
+        'Reportを開き、左側の「現在のReportをプロジェクト化」を選びます。「空の章を追加」または「原稿を章として追加」（原稿1件＋画像）で章を増やします。',
+        '章名を選んで編集し、上へ／下へで順序を変えます。「全体出力に含める」を外すと原稿を残したまま除外します。削除には確認が必要です。',
+        '章の先頭と本文の改ページを組み合わせます。全体プレビューは1ページずつ表示し、目次・参照のリンクから別ページへ移動できます。番号と参照は有効な章全体で計算します。',
+        '「プロジェクトZIPを保存」で構成、全章、取り込んだ画像をまとめて保存します。再開時は「プロジェクトZIPを開く」を使います。Markdownで表せない章はZIP内でJSONとして保持します。',
+        '上部の「章 Markdown／章 JSON」は編集中の章だけ、「全体をMarkdown／JSONで出力」は有効な章を結合した文書だけを保存します。プロジェクトの保存にはZIPを使用してください。構成変更はUndoの対象外で、章の切替・削除で本文のUndo履歴をリセットします。',
+        '変更は自動保存されません。タブを閉じる前にZIPを保存してください。外部URL画像はリンクのままです。自動A4組版やスライドの章別管理には対応していません。',
+      ],
       title: 'KUMI かんたんガイド',
       description:
         'Markdownからレポートやスライドを作るための、最初に知っておきたい操作をまとめています。',
@@ -365,6 +380,7 @@ export const messages: Record<AppLocale, UiMessages> = {
     },
   },
   en: {
+    project: projectMessages.en,
     app: {
       darkMode: 'Dark mode',
       englishInterface: 'English interface',
@@ -529,6 +545,15 @@ export const messages: Record<AppLocale, UiMessages> = {
       toc: 'Table of contents',
     },
     manual: {
+      projectTitle: '5. Split a long report into chapters',
+      projectSteps: [
+        'Open a Report and choose “Turn this report into a project”. Add a blank chapter or one source file with its images using “Add source as chapter”.',
+        'Select a chapter to edit it; use Move up/down to reorder it. Uncheck “Include in combined output” to exclude a chapter without removing its source. Deletion requires confirmation.',
+        'Use chapter-start and in-document page breaks together. The project preview renders one page at a time; TOC and reference links navigate to other pages. Numbers and references cover all enabled chapters.',
+        '“Save project ZIP” saves the manifest, every chapter and imported images. Resume with “Open project ZIP”. Chapters that Markdown cannot represent are retained as JSON inside the ZIP.',
+        'The header saves only the active chapter; combined exports save only enabled chapters as one document. Use a project ZIP to save the project. Structural operations are outside Undo; switching or deleting chapters resets the body Undo history.',
+        'Changes are not autosaved. Save a ZIP before closing the tab. External image URLs remain links. Automatic A4 typesetting and chapter-based slide projects are not supported.',
+      ],
       title: 'KUMI quick guide',
       description:
         'A short introduction to the essential controls for creating reports and slides from Markdown.',

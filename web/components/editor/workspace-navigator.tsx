@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, type ReactNode } from 'react';
 import {
   Code2,
   FilePlus2,
@@ -57,6 +57,7 @@ function nodeIcon(type: string) {
 }
 
 interface WorkspaceNavigatorProps {
+  projectPanel?: ReactNode;
   outline: readonly DocumentNode[];
   selectedNodeId?: string;
   documentWriteLocked: boolean;
@@ -66,6 +67,7 @@ interface WorkspaceNavigatorProps {
 }
 
 export function WorkspaceNavigator({
+  projectPanel,
   outline,
   selectedNodeId,
   documentWriteLocked,
@@ -105,6 +107,7 @@ export function WorkspaceNavigator({
       </div>
       <Separator />
       <ScrollArea className="min-h-0 flex-1">
+        {projectPanel}
         <nav
           aria-label={copy.workspace.documentStructure}
           className="space-y-1 p-2"
