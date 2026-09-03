@@ -31,6 +31,8 @@ import type { SelectedNode } from './use-document-selection';
 import { SemanticProperties } from './semantic-properties';
 
 interface WorkspacePropertiesProps {
+  overlay?: boolean;
+  idPrefix?: string;
   document: DocumentData;
   editor: Editor | null;
   documentWriteLocked: boolean;
@@ -48,6 +50,8 @@ interface WorkspacePropertiesProps {
 }
 
 export function WorkspaceProperties({
+  overlay = false,
+  idPrefix = 'workspace',
   document,
   editor,
   documentWriteLocked,
@@ -65,6 +69,8 @@ export function WorkspaceProperties({
 }: WorkspacePropertiesProps) {
   const { copy, locale } = useAppPreferences();
   const [referenceTarget, setReferenceTarget] = useState('');
+  const referenceTargetId = `${idPrefix}-reference-target`;
+  const mathLatexId = `${idPrefix}-math-latex`;
   const themeOptions = documentThemes[document.type];
   const flagLabels: Record<DocumentFlag, string> = {
     toc: copy.workspace.toc,
@@ -77,7 +83,9 @@ export function WorkspaceProperties({
   const [selectElementTitle, selectElementDescription] =
     copy.workspace.selectElementHint.split('\n');
   return (
-    <aside className="workspace-properties">
+    <aside
+      className={`workspace-properties${overlay ? ' workspace-side-sheet' : ''}`}
+    >
       <div className="panel-heading">
         <span>{copy.workspace.propertiesPanel}</span>
       </div>
@@ -140,11 +148,11 @@ export function WorkspaceProperties({
               ))}
             </div>
             <div className="mt-4 space-y-2">
-              <label className="property-field" htmlFor="reference-target">
+              <label className="property-field" htmlFor={referenceTargetId}>
                 {copy.workspace.referenceLabel}
                 <Input
                   aria-label={copy.workspace.referenceLabel}
-                  id="reference-target"
+                  id={referenceTargetId}
                   value={referenceTarget}
                   disabled={documentWriteLocked}
                   onChange={(event) => setReferenceTarget(event.target.value)}
@@ -208,13 +216,13 @@ export function WorkspaceProperties({
                   selectedNode.type === 'blockMath') && (
                   <div className="space-y-2">
                     <label
-                      htmlFor="math-latex"
+                      htmlFor={mathLatexId}
                       className="text-[11px] font-medium text-muted-foreground"
                     >
                       LaTeX
                     </label>
                     <Textarea
-                      id="math-latex"
+                      id={mathLatexId}
                       className="min-h-24 font-mono text-xs"
                       disabled={documentWriteLocked}
                       value={mathDraft}

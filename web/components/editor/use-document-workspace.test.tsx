@@ -38,6 +38,37 @@ beforeEach(() => window.localStorage.clear());
 afterEach(() => vi.unstubAllGlobals());
 
 describe('asynchronous document import', () => {
+  it('confirms before replacing a dirty single document', async () => {
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal('confirm', confirm);
+    const { result } = await workspace();
+
+    act(() => {
+      result.current.editor!.commands.insertContent('Unsaved single document');
+    });
+    await waitFor(() => expect(result.current.dirty).toBe(true));
+    act(() => result.current.createDocument('slide'));
+
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(result.current.document.type).toBe('report');
+  });
+
+  it('keeps an applied Markdown edit unsaved until it is exported', async () => {
+    const { result } = await workspace();
+    const draft = markdown('Applied draft');
+
+    act(() => result.current.changeView('markdown'));
+    await waitFor(() => expect(result.current.view).toBe('markdown'));
+    act(() => result.current.updateMarkdown(draft));
+    await waitFor(() => expect(result.current.markdownDraft).toBe(draft));
+    act(() => result.current.applyMarkdown());
+
+    await waitFor(() =>
+      expect(result.current.document.metadata.title).toBe('Applied draft'),
+    );
+    expect(result.current.dirty).toBe(true);
+  });
+
   it('releases assets even if multiple imports complete in one React batch', async () => {
     let sequence = 0;
     const revokeUrl = vi.fn();

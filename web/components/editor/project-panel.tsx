@@ -15,6 +15,7 @@ interface ProjectPanelProps {
   documentType: DocumentType;
   locked: boolean;
   actions: ReturnType<typeof useProjectActions>;
+  idPrefix?: string;
 }
 
 export function ProjectPanel({
@@ -23,6 +24,7 @@ export function ProjectPanel({
   documentType,
   locked,
   actions,
+  idPrefix = 'workspace',
 }: ProjectPanelProps) {
   const { copy } = useAppPreferences();
   const labels = copy.project;
@@ -76,10 +78,13 @@ export function ProjectPanel({
         </Button>
       ) : (
         <>
-          <label className="grid gap-1 text-[11px]" htmlFor="project-title">
+          <label
+            className="grid gap-1 text-[11px]"
+            htmlFor={`${idPrefix}-project-title`}
+          >
             {labels.projectName}
             <Input
-              id="project-title"
+              id={`${idPrefix}-project-title`}
               value={
                 typeof project.metadata.title === 'string'
                   ? project.metadata.title
@@ -142,11 +147,11 @@ export function ProjectPanel({
               >
                 <label
                   className="grid gap-1 text-[11px]"
-                  htmlFor="chapter-title"
+                  htmlFor={`${idPrefix}-chapter-title`}
                 >
                   {labels.renameChapter}
                   <Input
-                    id="chapter-title"
+                    id={`${idPrefix}-chapter-title`}
                     name="title"
                     required
                     maxLength={120}

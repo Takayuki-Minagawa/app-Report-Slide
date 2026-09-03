@@ -49,6 +49,15 @@ import {
   type StatusDescription,
   type WorkspaceStatus,
 } from '@/src/workspace/status';
+import {
+  captureRecoveryAssets,
+  clearWorkspaceRecovery,
+  nextRecoveryTimestamp,
+  readWorkspaceRecovery,
+  restoreRecoveryAssets,
+  writeWorkspaceRecovery,
+  type WorkspaceRecovery,
+} from '@/src/workspace/recovery';
 import { useDocumentSelection } from './use-document-selection';
 import {
   useProjectActions,
@@ -112,6 +121,13 @@ export function useDocumentWorkspace() {
   const [markdownDirty, setMarkdownDirty] = useState(false);
   const [assets, setAssets] = useState<AssetUrls>(() => new Map());
   const ownedAssets = useRef(assets);
+  const [pendingRecovery, setPendingRecovery] =
+    useState<WorkspaceRecovery | null>(null);
+  const [recoveryReady, setRecoveryReady] = useState(false);
+  const [recoveryRestoring, setRecoveryRestoring] = useState(false);
+  const recoveryQueue = useRef<Promise<void>>(Promise.resolve());
+  const recoveryRevision = useRef(0);
+  const recoveryFailureReported = useRef(false);
   const [htmlExporting, setHtmlExporting] = useState(false);
   const activeHtmlExport = useRef<number | null>(null);
   const importRevision = useRef(0);
@@ -139,6 +155,21 @@ export function useDocumentWorkspace() {
       new Map([...previous].filter(([, url]) => !retained.has(url))),
     );
   }, []);
+
+  const enqueueRecoveryTask = useCallback((task: () => Promise<void>) => {
+    const queued = recoveryQueue.current.then(task, task);
+    recoveryQueue.current = queued.catch(() => undefined);
+    return queued;
+  }, []);
+
+  const clearRecovery = useCallback(async () => {
+    recoveryRevision.current++;
+    try {
+      await enqueueRecoveryTask(clearWorkspaceRecovery);
+    } catch {
+      // A stale recovery copy is never allowed to block editing or exports.
+    }
+  }, [enqueueRecoveryTask]);
 
   const documentWriteLocked = view === 'markdown' || markdownDirty;
   const selection = useDocumentSelection(documentWriteLocked, setStatus);
@@ -293,11 +324,12 @@ export function useDocumentWorkspace() {
     [clearSelection, editor, invalidatePendingImport, replaceAssets],
   );
 
+  const hasUnsavedChanges =
+    documentDirty || markdownDirty || Boolean(projectSession?.dirty);
   const confirmReplacement = useCallback(
     () =>
-      !projectSession?.dirty ||
-      window.confirm(copy.project.replaceConfirmation),
-    [projectSession?.dirty, copy.project.replaceConfirmation],
+      !hasUnsavedChanges || window.confirm(copy.workspace.replaceConfirmation),
+    [copy.workspace.replaceConfirmation, hasUnsavedChanges],
   );
   const projectActions = useProjectActions({
     session: projectSession,
@@ -310,7 +342,11 @@ export function useDocumentWorkspace() {
     locked: documentWriteLocked,
     setStatus,
     showEditor: () => setView('visual'),
-    markDocumentSaved: () => setDocumentDirty(false),
+    markDocumentSaved: () => {
+      setDocumentDirty(false);
+      void clearRecovery();
+    },
+    clearRecovery,
     confirmReplacement,
     copy: copy.project,
   });
@@ -321,13 +357,174 @@ export function useDocumentWorkspace() {
   };
 
   useEffect(() => {
-    if (!projectSession?.dirty && !markdownDirty) return;
+    if (!hasUnsavedChanges) return;
     const warn = (event: BeforeUnloadEvent) => {
       event.preventDefault();
     };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [projectSession?.dirty, markdownDirty]);
+  }, [hasUnsavedChanges]);
+
+  const reportRecoveryFailure = useCallback(() => {
+    if (recoveryFailureReported.current) return;
+    recoveryFailureReported.current = true;
+    setStatus({
+      kind: 'error',
+      title: statusMessage('recoveryUnavailable'),
+    });
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void readWorkspaceRecovery()
+      .then((recovery) => {
+        if (!active) return;
+        if (recovery) setPendingRecovery(recovery);
+        else setRecoveryReady(true);
+      })
+      .catch(() => {
+        if (!active) return;
+        reportRecoveryFailure();
+        setRecoveryReady(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [reportRecoveryFailure]);
+
+  const saveRecovery = useCallback(async () => {
+    const revision = ++recoveryRevision.current;
+    const savedAt = nextRecoveryTimestamp();
+    const current = currentDocument(editor, document);
+    const currentProject = projectSession
+      ? projectWithDocument(projectSession, current)
+      : undefined;
+    let recoveryAssets;
+    try {
+      recoveryAssets = await captureRecoveryAssets(assets);
+    } catch {
+      reportRecoveryFailure();
+      return;
+    }
+    if (revision !== recoveryRevision.current) return;
+
+    const recovery: WorkspaceRecovery = {
+      schemaVersion: 1,
+      savedAt,
+      document: current,
+      markdownDraft,
+      markdownDirty,
+      view,
+      ...(currentProject
+        ? {
+            project: {
+              project: currentProject,
+              activeChapterId: projectSession!.activeChapterId,
+            },
+          }
+        : {}),
+      assets: recoveryAssets,
+    };
+    try {
+      await enqueueRecoveryTask(async () => {
+        if (revision !== recoveryRevision.current) return;
+        await writeWorkspaceRecovery(recovery);
+      });
+    } catch {
+      reportRecoveryFailure();
+    }
+  }, [
+    assets,
+    document,
+    editor,
+    enqueueRecoveryTask,
+    markdownDirty,
+    markdownDraft,
+    projectSession,
+    reportRecoveryFailure,
+    view,
+  ]);
+
+  useEffect(() => {
+    if (!recoveryReady || pendingRecovery || !hasUnsavedChanges) return;
+    const timeout = window.setTimeout(() => {
+      void saveRecovery();
+    }, 800);
+    return () => window.clearTimeout(timeout);
+  }, [hasUnsavedChanges, pendingRecovery, recoveryReady, saveRecovery]);
+
+  useEffect(() => {
+    if (!recoveryReady || pendingRecovery || !hasUnsavedChanges) return;
+    const saveWhenHidden = () => {
+      if (window.document.visibilityState === 'hidden') void saveRecovery();
+    };
+    window.document.addEventListener('visibilitychange', saveWhenHidden);
+    return () =>
+      window.document.removeEventListener('visibilitychange', saveWhenHidden);
+  }, [hasUnsavedChanges, pendingRecovery, recoveryReady, saveRecovery]);
+
+  const discardRecovery = async () => {
+    if (!pendingRecovery || recoveryRestoring) return;
+    setRecoveryRestoring(true);
+    await clearRecovery();
+    setPendingRecovery(null);
+    setRecoveryReady(true);
+    setRecoveryRestoring(false);
+  };
+
+  const restoreRecovery = async () => {
+    if (!pendingRecovery || !editor || recoveryRestoring) return;
+    setRecoveryRestoring(true);
+    let restoredAssets: AssetUrls | undefined;
+    try {
+      let restoredDocument = migrateDocumentData(pendingRecovery.document);
+      let restoredProject: ProjectSession | null = null;
+      if (pendingRecovery.project) {
+        const project = validateReportProject(pendingRecovery.project.project);
+        const chapter = project.chapters.find(
+          (candidate) =>
+            candidate.id === pendingRecovery.project!.activeChapterId,
+        );
+        if (!chapter) throw new ReportProjectError('invalidArchive');
+        restoredDocument = chapter.document;
+        restoredProject = {
+          project,
+          activeChapterId: chapter.id,
+          dirty: true,
+        };
+      }
+      editor.schema.nodeFromJSON(toEditorDocument(restoredDocument));
+      restoredAssets = restoreRecoveryAssets(pendingRecovery.assets);
+      invalidatePendingImport();
+      replaceAssets(restoredAssets);
+      restoredAssets = undefined;
+      setDocument(restoredDocument);
+      setEditorSource((current) => ({
+        revision: current.revision + 1,
+        document: restoredDocument,
+      }));
+      setMarkdownDraft(pendingRecovery.markdownDraft);
+      setMarkdownDirty(pendingRecovery.markdownDirty);
+      setDocumentDirty(true);
+      setProjectSession(restoredProject);
+      setView(
+        pendingRecovery.markdownDirty ? 'markdown' : pendingRecovery.view,
+      );
+      clearSelection();
+      setStatus({ kind: 'success', title: statusMessage('recoveredDraft') });
+      setPendingRecovery(null);
+      setRecoveryReady(true);
+    } catch (error) {
+      if (restoredAssets) revokeAssetUrls(restoredAssets);
+      setStatus({
+        kind: 'error',
+        title: statusMessage('unableToRecover'),
+        description: describeWorkspaceError(error, 'invalidDocumentData'),
+      });
+    } finally {
+      setRecoveryRestoring(false);
+    }
+  };
 
   const importFiles = useCallback(
     async (files: readonly File[]) => {
@@ -356,6 +553,7 @@ export function useDocumentWorkspace() {
           { assets: result.assets, description },
         );
         setProjectSession(null);
+        void clearRecovery();
         pendingAssets = undefined;
       } catch (error) {
         if (request === importRevision.current)
@@ -368,7 +566,7 @@ export function useDocumentWorkspace() {
         if (pendingAssets) revokeAssetUrls(pendingAssets);
       }
     },
-    [documentWriteLocked, loadDocument, confirmReplacement],
+    [clearRecovery, documentWriteLocked, loadDocument, confirmReplacement],
   );
 
   const updateMarkdown = (source: string) => {
@@ -393,6 +591,7 @@ export function useDocumentWorkspace() {
       loadDocument(result.document, statusMessage('appliedMarkdown'), {
         description: result.diagnostics.map(diagnosticStatusMessage),
       });
+      setDocumentDirty(true);
       setView('visual');
     } catch (error) {
       setStatus({
@@ -411,6 +610,7 @@ export function useDocumentWorkspace() {
       { assets: new Map() },
     );
     setProjectSession(null);
+    void clearRecovery();
     setView('visual');
   };
 
@@ -445,6 +645,7 @@ export function useDocumentWorkspace() {
       setMarkdownDraft(serializeDocument(currentDocument(editor, document)));
       setMarkdownDirty(false);
       setView('visual');
+      if (!projectSession?.dirty) void clearRecovery();
       setStatus({ kind: 'idle', title: statusMessage('discardedMarkdown') });
     } catch (error) {
       setStatus({
@@ -482,6 +683,7 @@ export function useDocumentWorkspace() {
           title: statusMessage(json ? 'savedJson' : 'savedMarkdown'),
         });
       }
+      if (!projectSession) void clearRecovery();
     } catch (error) {
       setStatus({
         kind: 'error',
@@ -588,13 +790,17 @@ export function useDocumentWorkspace() {
     project,
     projectSession,
     projectActions,
+    recovery: pendingRecovery,
+    recoveryRestoring,
+    restoreRecovery,
+    discardRecovery,
     previewDocument,
     editor,
     view,
     markdownDraft,
     documentWriteLocked,
     displayedStatus,
-    dirty: documentDirty || markdownDirty || Boolean(projectSession?.dirty),
+    dirty: hasUnsavedChanges,
     outline,
     analysis,
     selectedSemantic,

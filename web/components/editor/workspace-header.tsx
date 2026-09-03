@@ -7,8 +7,10 @@ import {
   FileText,
   Languages,
   Moon,
+  PanelLeftOpen,
   Redo2,
   Save,
+  SlidersHorizontal,
   Sun,
   Undo2,
 } from 'lucide-react';
@@ -29,6 +31,8 @@ interface WorkspaceHeaderProps {
   saveDocument: (format: DocumentFileFormat) => void;
   exportHtml: () => Promise<void>;
   htmlExporting: boolean;
+  openNavigator: () => void;
+  openProperties: () => void;
 }
 
 export function WorkspaceHeader({
@@ -40,6 +44,8 @@ export function WorkspaceHeader({
   saveDocument,
   exportHtml,
   htmlExporting,
+  openNavigator,
+  openProperties,
 }: WorkspaceHeaderProps) {
   const {
     copy,
@@ -51,7 +57,7 @@ export function WorkspaceHeader({
   } = useAppPreferences();
   return (
     <header className="workspace-header">
-      <div className="flex min-w-56 items-center gap-2.5">
+      <div className="workspace-brand flex min-w-56 items-center gap-2.5">
         <div className="grid size-8 place-items-center rounded-md bg-[#0b2742] text-xs font-black text-white">
           K
         </div>
@@ -59,13 +65,13 @@ export function WorkspaceHeader({
           <p className="text-sm font-bold tracking-[0.12em] text-primary">
             KUMI
           </p>
-          <p className="mt-1 text-[9px] font-medium tracking-[0.08em] text-muted-foreground">
+          <p className="workspace-brand-subtitle mt-1 text-[9px] font-medium tracking-[0.08em] text-muted-foreground">
             MARKDOWN STUDIO
           </p>
         </div>
       </div>
 
-      <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
+      <div className="workspace-document-title flex min-w-0 flex-1 items-center justify-center gap-2">
         <FileText className="size-4 text-muted-foreground" />
         <span className="truncate text-sm font-semibold">
           {documentTitle(document)}
@@ -84,7 +90,29 @@ export function WorkspaceHeader({
         </Badge>
       </div>
 
-      <div className="flex min-w-72 justify-end gap-1.5">
+      <div className="workspace-header-actions flex min-w-72 justify-end gap-1.5">
+        <Button
+          aria-label={copy.workspace.showDocumentPanel}
+          title={copy.workspace.showDocumentPanel}
+          className="workspace-header-navigator-toggle"
+          size="icon-sm"
+          variant="ghost"
+          type="button"
+          onClick={openNavigator}
+        >
+          <PanelLeftOpen />
+        </Button>
+        <Button
+          aria-label={copy.workspace.showPropertiesPanel}
+          title={copy.workspace.showPropertiesPanel}
+          className="workspace-header-properties-toggle"
+          size="icon-sm"
+          variant="ghost"
+          type="button"
+          onClick={openProperties}
+        >
+          <SlidersHorizontal />
+        </Button>
         <Button
           aria-label={copy.app.darkMode}
           title={

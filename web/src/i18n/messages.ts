@@ -19,6 +19,8 @@ export interface UiMessages {
   workspace: {
     documentPanel: string;
     propertiesPanel: string;
+    showDocumentPanel: string;
+    showPropertiesPanel: string;
     markdownFile: string;
     documentStructure: string;
     noOutline: string;
@@ -73,6 +75,7 @@ export interface UiMessages {
     code: string;
     exportHtml: string;
     exportingHtml: string;
+    replaceConfirmation: string;
   };
   status: {
     ready: string;
@@ -125,6 +128,9 @@ export interface UiMessages {
     htmlExternalImages: string;
     htmlExportDescription: string;
     htmlExportCancelled: string;
+    recoveredDraft: string;
+    unableToRecover: string;
+    recoveryUnavailable: string;
   };
   semantic: {
     referenceLabel: string;
@@ -155,6 +161,14 @@ export interface UiMessages {
     imageUnavailable: string;
     toc: string;
   };
+  recovery: {
+    foundTitle: string;
+    foundDescription: string;
+    savedAt: (title: string, time: string) => string;
+    restore: string;
+    discard: string;
+    restoring: string;
+  };
   manual: {
     title: string;
     description: string;
@@ -168,6 +182,8 @@ export interface UiMessages {
     preferencesSteps: readonly string[];
     projectTitle: string;
     projectSteps: readonly string[];
+    recoveryTitle: string;
+    recoverySteps: readonly string[];
     privacyTitle: string;
     privacyText: string;
   };
@@ -189,6 +205,8 @@ export const messages: Record<AppLocale, UiMessages> = {
     workspace: {
       documentPanel: 'DOCUMENT',
       propertiesPanel: 'PROPERTIES',
+      showDocumentPanel: '文書パネルを開く',
+      showPropertiesPanel: 'Propertiesを開く',
       markdownFile: 'Markdownファイル',
       documentStructure: '文書構成',
       noOutline: '構成要素はまだありません',
@@ -243,6 +261,8 @@ export const messages: Record<AppLocale, UiMessages> = {
       code: 'コード',
       exportHtml: 'HTMLスライドを出力',
       exportingHtml: 'HTMLスライドを出力中',
+      replaceConfirmation:
+        '未保存の変更があります。別の文書を開いて変更を破棄しますか？',
     },
     status: {
       ready: '準備完了',
@@ -306,6 +326,9 @@ export const messages: Record<AppLocale, UiMessages> = {
         '外部URLの画像はリンクのままです。表示には通信が必要です。',
       htmlExportDescription:
         'HTMLは閲覧・発表用です。編集用の原稿はMarkdownまたはJSONで別途保存してください。',
+      recoveredDraft: '未保存の作業を復元しました',
+      unableToRecover: '未保存の作業を復元できませんでした',
+      recoveryUnavailable: '端末内の復旧用保存を利用できません',
     },
     semantic: {
       referenceLabel: '参照ラベル',
@@ -338,6 +361,15 @@ export const messages: Record<AppLocale, UiMessages> = {
       imageUnavailable: '画像を表示できません',
       toc: '目次',
     },
+    recovery: {
+      foundTitle: '未保存の作業が見つかりました',
+      foundDescription:
+        'このブラウザに一時保存された作業があります。復元して続けるか、削除して新しい文書を開始できます。',
+      savedAt: (title, time) => `「${title}」・${time} に一時保存`,
+      restore: '復元する',
+      discard: '削除する',
+      restoring: '復元中…',
+    },
     manual: {
       projectTitle: '5. 長いレポートを章に分ける',
       projectSteps: [
@@ -346,7 +378,12 @@ export const messages: Record<AppLocale, UiMessages> = {
         '章の先頭と本文の改ページを組み合わせます。全体プレビューは1ページずつ表示し、目次・参照のリンクから別ページへ移動できます。番号と参照は有効な章全体で計算します。',
         '「プロジェクトZIPを保存」で構成、全章、取り込んだ画像をまとめて保存します。再開時は「プロジェクトZIPを開く」を使います。Markdownで表せない章はZIP内でJSONとして保持します。',
         '上部の「章 Markdown／章 JSON」は編集中の章だけ、「全体をMarkdown／JSONで出力」は有効な章を結合した文書だけを保存します。プロジェクトの保存にはZIPを使用してください。構成変更はUndoの対象外で、章の切替・削除で本文のUndo履歴をリセットします。',
-        '変更は自動保存されません。タブを閉じる前にZIPを保存してください。外部URL画像はリンクのままです。自動A4組版やスライドの章別管理には対応していません。',
+        '復旧用コピーは未完了作業の再開を補助しますが、タブを閉じる前にZIPを保存してください。外部URL画像はリンクのままです。自動A4組版やスライドの章別管理には対応していません。',
+      ],
+      recoveryTitle: '端末内の復旧用保存',
+      recoverySteps: [
+        '未保存の本文、章構成、未適用Markdown、取り込んだ画像は、このブラウザ内に一時保存されます。次回開いたときに復元するか選べます。',
+        '復旧用保存は端末内だけで、公開サイトやリポジトリへ送信されません。ブラウザのデータ削除や容量不足で失われる場合があるため、Markdown／JSON／プロジェクトZIPを原本として保存してください。',
       ],
       title: 'KUMI かんたんガイド',
       description:
@@ -394,6 +431,8 @@ export const messages: Record<AppLocale, UiMessages> = {
     workspace: {
       documentPanel: 'DOCUMENT',
       propertiesPanel: 'PROPERTIES',
+      showDocumentPanel: 'Open document panel',
+      showPropertiesPanel: 'Open Properties',
       markdownFile: 'Markdown file',
       documentStructure: 'Document outline',
       noOutline: 'There are no outline items yet',
@@ -448,6 +487,8 @@ export const messages: Record<AppLocale, UiMessages> = {
       code: 'Code',
       exportHtml: 'Export HTML slides',
       exportingHtml: 'Exporting HTML slides',
+      replaceConfirmation:
+        'There are unsaved changes. Open another document and discard them?',
     },
     status: {
       ready: 'Ready',
@@ -511,6 +552,9 @@ export const messages: Record<AppLocale, UiMessages> = {
         'External image URLs remain links and require a network connection.',
       htmlExportDescription:
         'HTML is for viewing and presenting. Save Markdown or JSON separately to keep an editable source.',
+      recoveredDraft: 'Restored unsaved work',
+      unableToRecover: 'Could not restore unsaved work',
+      recoveryUnavailable: 'Device-local recovery is unavailable',
     },
     semantic: {
       referenceLabel: 'Reference label',
@@ -544,6 +588,15 @@ export const messages: Record<AppLocale, UiMessages> = {
       imageUnavailable: 'Image unavailable',
       toc: 'Table of contents',
     },
+    recovery: {
+      foundTitle: 'Unsaved work found',
+      foundDescription:
+        'This browser has a temporary copy of unfinished work. Restore it to continue, or remove it and start with a new document.',
+      savedAt: (title, time) => `Temporary copy of “${title}” saved ${time}`,
+      restore: 'Restore',
+      discard: 'Remove',
+      restoring: 'Restoring…',
+    },
     manual: {
       projectTitle: '5. Split a long report into chapters',
       projectSteps: [
@@ -552,7 +605,12 @@ export const messages: Record<AppLocale, UiMessages> = {
         'Use chapter-start and in-document page breaks together. The project preview renders one page at a time; TOC and reference links navigate to other pages. Numbers and references cover all enabled chapters.',
         '“Save project ZIP” saves the manifest, every chapter and imported images. Resume with “Open project ZIP”. Chapters that Markdown cannot represent are retained as JSON inside the ZIP.',
         'The header saves only the active chapter; combined exports save only enabled chapters as one document. Use a project ZIP to save the project. Structural operations are outside Undo; switching or deleting chapters resets the body Undo history.',
-        'Changes are not autosaved. Save a ZIP before closing the tab. External image URLs remain links. Automatic A4 typesetting and chapter-based slide projects are not supported.',
+        'A recovery copy can help resume unfinished work, but save a ZIP before closing the tab. External image URLs remain links. Automatic A4 typesetting and chapter-based slide projects are not supported.',
+      ],
+      recoveryTitle: 'Device-local recovery copy',
+      recoverySteps: [
+        'Unfinished content, chapter structure, unapplied Markdown, and imported images are temporarily saved in this browser. When you return, choose whether to restore the copy.',
+        'The recovery copy stays on this device and is not sent to the published site or repository. Browser data cleanup or storage limits can remove it, so keep Markdown, JSON, or a project ZIP as the source of record.',
       ],
       title: 'KUMI quick guide',
       description:
