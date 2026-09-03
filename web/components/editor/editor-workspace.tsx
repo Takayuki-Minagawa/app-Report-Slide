@@ -17,6 +17,8 @@ export function EditorWorkspace() {
         dirty={workspace.dirty}
         documentWriteLocked={workspace.documentWriteLocked}
         saveDocument={workspace.saveDocument}
+        exportHtml={workspace.exportHtml}
+        htmlExporting={workspace.htmlExporting}
       />
       <section className="workspace-grid">
         <WorkspaceNavigator

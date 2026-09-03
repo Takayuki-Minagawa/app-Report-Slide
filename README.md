@@ -18,6 +18,7 @@ GitHub Pagesを有効にすると、[公開版](https://takayuki-minagawa.github
 - Tiptapによる見出し、段落、リスト、引用、コード、画像、表の編集
 - KaTeXによるインライン／ブロック数式
 - MarkdownファイルのImportと、Markdown／Document JSONの保存
+- Slide文書の単一HTML出力（スライド送り、全画面表示、数式フォント・取り込んだ画像の埋め込み）
 - Report／Slide向けの基本テーマと完成プレビュー
 - 3ペイン構成のNavigator、Editor、Properties
 - Undo／Redo、Markdown直接編集、破損入力を適用しないエラー処理
@@ -31,7 +32,13 @@ GitHub Pagesを有効にすると、[公開版](https://takayuki-minagawa.github
 - 明示的な改ページと複数スライドのプレビュー、ページ／スライド番号
 - Document JSON v1／v2のImport、v2への非破壊移行
 
-使い方・構文・制限は [文書機能ガイド](./web/docs/document-features.md) を参照してください。最初の操作は [かんたんガイド（日本語）](./web/docs/quick-start.ja.md) / [Quick guide (English)](./web/docs/quick-start.en.md) にまとめています。元の全体仕様は [仕様書](./md_report_slide_editor_web_spec.md) にあります。自動ページ割り、厳密なA4組版、PDF／HTML export、脚注・文献、段組み、Chart、TeXファイル互換はまだ未実装です。
+使い方・構文・制限は [文書機能ガイド](./web/docs/document-features.md) を参照してください。最初の操作は [かんたんガイド（日本語）](./web/docs/quick-start.ja.md) / [Quick guide (English)](./web/docs/quick-start.en.md) にまとめています。元の全体仕様は [仕様書](./md_report_slide_editor_web_spec.md) にあります。自動ページ割り、厳密なA4組版、PDF出力、ReportのHTML出力、脚注・文献、段組み、Chart、TeXファイル互換はまだ未実装です。
+
+## HTMLスライドの出力
+
+Slide文書を開き、ヘッダーの **HTML** を押すと、閲覧・発表用の `.html` ファイルを保存できます。ブラウザで開き、前へ／次へボタン、矢印キー、Spaceでスライドを送ります。Fキーで全画面表示に切り替えられます（対応ブラウザのみ）。操作表示は出力時の日本語／英語設定に従います。
+
+数式用フォントと取り込んだ画像をファイルに含めるため、これらはオフラインでも表示できます。外部URLの画像はリンクのままで、表示には通信が必要です。未取り込みのローカル画像があれば出力を止めて案内します。HTMLは編集用の保存形式ではなく、未保存状態やMarkdown下書きは変えません。編集を再開するために **Markdown／JSONも別途保存** してください。
 
 ## 開発
 
@@ -81,6 +88,7 @@ Runtime validatorはNode型、必須属性、親子関係、既知metadata型、
 
 - `web/components/editor/`: 画面構成、文書操作フック、選択・属性編集フック、および各ペインの表示
 - `web/src/workspace/`: ファイル入出力、ローカル画像URLの管理、言語切り替えに追従する操作メッセージ
+- `web/src/export/`: 共通プレビュー描画を使うHTMLスライド生成、画像・数式フォントの埋め込み、単体プレーヤー
 - `web/src/document/`: 文書モデル、検証、メタデータ定義、文書走査、番号・参照の分析
 - `web/src/markdown/`: 共通の記法定義、読み込み、無損失で保存できる形式への変換
 - `web/src/security/` / `web/src/preferences/`: 編集画面とプレビューで共通のURL検証、表示設定

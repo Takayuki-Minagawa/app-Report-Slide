@@ -68,6 +68,8 @@ export interface UiMessages {
     image: string;
     table: string;
     code: string;
+    exportHtml: string;
+    exportingHtml: string;
   };
   status: {
     ready: string;
@@ -111,6 +113,15 @@ export interface UiMessages {
     checkAttributes: string;
     editingMarkdown: string;
     editingMarkdownDescription: string;
+    exportingHtml: string;
+    exportedHtml: string;
+    unableToExportHtml: string;
+    htmlSlidesOnly: string;
+    htmlMissingImages: (sources: string) => string;
+    htmlImageReadFailed: (source: string) => string;
+    htmlExternalImages: string;
+    htmlExportDescription: string;
+    htmlExportCancelled: string;
   };
   semantic: {
     referenceLabel: string;
@@ -224,6 +235,8 @@ export const messages: Record<AppLocale, UiMessages> = {
       image: '画像',
       table: '表',
       code: 'コード',
+      exportHtml: 'HTMLスライドを出力',
+      exportingHtml: 'HTMLスライドを出力中',
     },
     status: {
       ready: '準備完了',
@@ -273,6 +286,20 @@ export const messages: Record<AppLocale, UiMessages> = {
       editingMarkdown: 'Markdownを編集中',
       editingMarkdownDescription:
         '適用または保存するまで下書きとして保持されます',
+      exportingHtml: 'HTMLスライドを生成しています',
+      exportedHtml: 'HTMLスライドを出力しました',
+      htmlExportCancelled:
+        'HTML出力を中止しました。現在の文書でもう一度出力してください。',
+      unableToExportHtml: 'HTMLスライドを出力できませんでした',
+      htmlSlidesOnly: 'HTML出力はSlide文書で利用できます',
+      htmlMissingImages: (sources) =>
+        `画像が未取り込みです: ${sources}。原稿をMarkdownまたはJSONで保存し、原稿と画像を同時に読み込んでから出力してください。`,
+      htmlImageReadFailed: (source) =>
+        `画像を埋め込めません: ${source}。画像を読み込み直してください。`,
+      htmlExternalImages:
+        '外部URLの画像はリンクのままです。表示には通信が必要です。',
+      htmlExportDescription:
+        'HTMLは閲覧・発表用です。編集用の原稿はMarkdownまたはJSONで別途保存してください。',
     },
     semantic: {
       referenceLabel: '参照ラベル',
@@ -317,13 +344,15 @@ export const messages: Record<AppLocale, UiMessages> = {
       editTitle: '2. 編集する',
       editSteps: [
         '「ビジュアル編集」で本文を直接編集し、上部の書式ボタンで見出し、リスト、引用、表、数式を追加します。',
-        '「Markdown」では原稿を直接編集します。変更後は「Markdownを適用」または保存を選んでください。',
+        '「Markdown」では原稿を直接編集します。変更後は「Markdownを適用」またはMarkdown／JSON保存を選んでください。',
         '要素を選ぶと右側のPropertiesでテーマ、目次、番号、参照ラベル、図の代替テキストなどを設定できます。',
       ],
       exportTitle: '3. 確認・保存する',
       exportSteps: [
         '「完成プレビュー」でReportはA4ページ、Slideは16:9スライドとして確認できます。',
         'ヘッダーのMarkdownまたはJSONでファイルを保存します。Document JSONはMarkdownで表せない構造も保持できます。',
+        'Slide文書では「HTML」で閲覧・発表用の単一HTMLファイルを出力できます。ブラウザで開き、前へ／次へボタンや矢印キーで移動します。Fキーで全画面表示に切り替えられます（対応ブラウザのみ）。',
+        '数式用フォントと取り込んだ画像はHTMLに含まれます。外部URLの画像には通信が必要です。HTML出力だけでは編集用原稿は保存されないため、MarkdownまたはJSONも保存してください。',
       ],
       preferencesTitle: '4. 表示を切り替える',
       preferencesSteps: [
@@ -401,6 +430,8 @@ export const messages: Record<AppLocale, UiMessages> = {
       image: 'Image',
       table: 'Table',
       code: 'Code',
+      exportHtml: 'Export HTML slides',
+      exportingHtml: 'Exporting HTML slides',
     },
     status: {
       ready: 'Ready',
@@ -450,6 +481,20 @@ export const messages: Record<AppLocale, UiMessages> = {
       editingMarkdown: 'Editing Markdown',
       editingMarkdownDescription:
         'The draft is kept until you apply or save it',
+      exportingHtml: 'Generating HTML slides',
+      exportedHtml: 'Exported HTML slides',
+      htmlExportCancelled:
+        'HTML export was cancelled. Export the current document again.',
+      unableToExportHtml: 'Could not export HTML slides',
+      htmlSlidesOnly: 'HTML export is available for Slide documents',
+      htmlMissingImages: (sources) =>
+        `Images have not been imported: ${sources}. Save your source as Markdown or JSON, then import it together with the images before exporting.`,
+      htmlImageReadFailed: (source) =>
+        `Could not embed image: ${source}. Import the image again.`,
+      htmlExternalImages:
+        'External image URLs remain links and require a network connection.',
+      htmlExportDescription:
+        'HTML is for viewing and presenting. Save Markdown or JSON separately to keep an editable source.',
     },
     semantic: {
       referenceLabel: 'Reference label',
@@ -495,13 +540,15 @@ export const messages: Record<AppLocale, UiMessages> = {
       editTitle: '2. Edit',
       editSteps: [
         'Edit directly in the Visual editor. The formatting toolbar adds headings, lists, quotes, tables, and equations.',
-        'Use the Markdown tab to edit source directly. Choose “Apply Markdown” or save after making changes.',
+        'Use the Markdown tab to edit source directly. Choose “Apply Markdown” or save Markdown/JSON after making changes.',
         'Select an element to configure its theme, table of contents, numbering, reference label, or image alternative text in Properties.',
       ],
       exportTitle: '3. Review and save',
       exportSteps: [
         'Use Preview to review Reports as A4 pages and Slides as 16:9 slides.',
         'Save Markdown or JSON from the header. Document JSON preserves structures that Markdown cannot express.',
+        'For Slide documents, use HTML to export a standalone file for viewing and presenting. Open it in a browser and use Previous/Next or the arrow keys. Press F for fullscreen where supported.',
+        'Math fonts and imported images are embedded. External image URLs require a network connection. HTML export does not save your editable source, so also save Markdown or JSON.',
       ],
       preferencesTitle: '4. Change the display',
       preferencesSteps: [

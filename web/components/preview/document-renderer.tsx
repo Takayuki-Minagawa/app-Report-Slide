@@ -9,7 +9,7 @@ import {
 } from 'react';
 import katex from 'katex';
 
-import { useAppPreferences } from '@/components/app-preferences';
+import { messages, type AppLocale } from '@/src/i18n/messages';
 import { formatSemanticReference } from '@/src/i18n/diagnostics';
 import type {
   DocumentData,
@@ -30,10 +30,16 @@ import {
 } from '@/src/document/semantics';
 
 const AnalysisContext = createContext<DocumentAnalysis | null>(null);
+const LocaleContext = createContext<AppLocale>('ja');
 const anchorId = (nodeId: string) => `kumi-${nodeId}`;
 
+function useDocumentCopy() {
+  const locale = useContext(LocaleContext);
+  return { locale, copy: messages[locale] };
+}
+
 function Reference({ target }: { target: string }) {
-  const { copy, locale } = useAppPreferences();
+  const { copy, locale } = useDocumentCopy();
   const resolved = useContext(AnalysisContext)?.labels.get(target);
   return resolved ? (
     <a
@@ -53,7 +59,7 @@ function Reference({ target }: { target: string }) {
 }
 
 function Caption({ node }: { node: DocumentNode }) {
-  const { locale } = useAppPreferences();
+  const { locale } = useDocumentCopy();
   const target = useContext(AnalysisContext)?.targets.get(node.attrs.nodeId);
   if (!target?.number && !node.attrs.caption) return null;
   return (
@@ -68,6 +74,7 @@ function Caption({ node }: { node: DocumentNode }) {
 
 interface DocumentRendererProps {
   document: DocumentData;
+  locale?: AppLocale;
   resolveImageUrl?: (source: string) => string;
   nodes?: DocumentNode[];
   analysis?: DocumentAnalysis;
@@ -138,7 +145,7 @@ function InlineImageContent({
   src: string;
   title: string | null;
 }) {
-  const { copy } = useAppPreferences();
+  const { copy } = useDocumentCopy();
   const [failed, setFailed] = useState(false);
   const resolvedSrc = resolvedImageUrl(src, resolveImageUrl);
   if (!resolvedSrc || failed) {
@@ -204,7 +211,7 @@ function FigureBlock({
   node: Extract<DocumentNode, { type: 'figure' }>;
   resolveImageUrl: ImageUrlResolver;
 }) {
-  const { copy } = useAppPreferences();
+  const { copy } = useDocumentCopy();
   const [failed, setFailed] = useState(false);
   const src = resolvedImageUrl(node.attrs.src, resolveImageUrl);
   const width = Math.min(100, Math.max(10, Number(node.attrs.width) || 100));
@@ -253,9 +260,11 @@ function TableCellContent({
 }) {
   return (
     <>
-      {cell.content.map((paragraph) =>
-        renderInline(paragraph.content, resolveImageUrl),
-      )}
+      {cell.content.map((paragraph) => (
+        <p key={paragraph.attrs.nodeId}>
+          {renderInline(paragraph.content, resolveImageUrl)}
+        </p>
+      ))}
     </>
   );
 }
@@ -409,49 +418,54 @@ function BlockNode({
 
 export function DocumentRenderer({
   document,
+  locale = 'ja',
   resolveImageUrl = (source) => source,
   nodes,
   analysis,
   showToc = true,
 }: DocumentRendererProps) {
-  const { copy } = useAppPreferences();
+  const copy = messages[locale];
   const computed = useMemo(
     () => analysis ?? analyzeDocument(document),
     [analysis, document],
   );
   return (
-    <AnalysisContext.Provider value={computed}>
-      <div className="document-renderer">
-        {showToc &&
-          document.metadata.toc === true &&
-          computed.outline.length > 0 && (
-            <nav className="document-toc" aria-label={copy.preview.toc}>
-              <h2>{copy.preview.toc}</h2>
-              <ol>
-                {computed.outline.map((entry) => (
-                  <li
-                    key={entry.nodeId}
-                    style={{
-                      paddingLeft: `${((entry.level ?? 1) - 1) * 16}px`,
-                    }}
-                  >
-                    <a href={`#${encodeURIComponent(anchorId(entry.nodeId))}`}>
-                      {entry.number ? `${entry.number} ` : ''}
-                      {entry.title}
-                    </a>
-                  </li>
-                ))}
-              </ol>
-            </nav>
-          )}
-        {(nodes ?? document.children).map((node) => (
-          <BlockNode
-            key={node.attrs.nodeId}
-            node={node}
-            resolveImageUrl={resolveImageUrl}
-          />
-        ))}
-      </div>
-    </AnalysisContext.Provider>
+    <LocaleContext.Provider value={locale}>
+      <AnalysisContext.Provider value={computed}>
+        <div className="document-renderer">
+          {showToc &&
+            document.metadata.toc === true &&
+            computed.outline.length > 0 && (
+              <nav className="document-toc" aria-label={copy.preview.toc}>
+                <h2>{copy.preview.toc}</h2>
+                <ol>
+                  {computed.outline.map((entry) => (
+                    <li
+                      key={entry.nodeId}
+                      style={{
+                        paddingLeft: `${((entry.level ?? 1) - 1) * 16}px`,
+                      }}
+                    >
+                      <a
+                        href={`#${encodeURIComponent(anchorId(entry.nodeId))}`}
+                      >
+                        {entry.number ? `${entry.number} ` : ''}
+                        {entry.title}
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              </nav>
+            )}
+          {(nodes ?? document.children).map((node) => (
+            <BlockNode
+              key={node.attrs.nodeId}
+              node={node}
+              resolveImageUrl={resolveImageUrl}
+            />
+          ))}
+        </div>
+      </AnalysisContext.Provider>
+    </LocaleContext.Provider>
   );
 }

@@ -1,7 +1,7 @@
 export type ResourceKind = 'image' | 'link';
 export type ImageUrlResolver = (source: string) => string;
 
-/** Only the local-asset resolver may introduce blob URLs, never document content. */
+/** Only the local-asset resolver may introduce blob URLs or embedded imported images. */
 export function resolveSafeImageUrl(
   source: unknown,
   resolveImageUrl: ImageUrlResolver = (value) => value,
@@ -11,6 +11,15 @@ export function resolveSafeImageUrl(
   if (!safeSource) return undefined;
   const resolved = resolveImageUrl(safeSource);
   if (typeof resolved !== 'string') return undefined;
+  // Export embeds trusted local attachments, including SVGs and images over the
+  // inline-document limit. The original document URL is still validated above.
+  if (
+    resolved !== safeSource &&
+    /^data:image\/(?:png|jpe?g|webp|gif|svg\+xml);base64,[a-z\d+/]*={0,2}$/i.test(
+      resolved,
+    )
+  )
+    return resolved;
   return resolved.startsWith('blob:')
     ? resolved
     : safeResourceUrl(resolved, 'image');

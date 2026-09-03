@@ -27,6 +27,20 @@ describe('isSafeResourceUrl', () => {
 });
 
 describe('resolveSafeImageUrl', () => {
+  it('allows trusted embedded attachments without permitting raw SVG or HTML payloads', () => {
+    const svg = 'data:image/svg+xml;base64,PHN2Zy8+';
+    expect(resolveSafeImageUrl('chart.svg', () => svg)).toBe(svg);
+    expect(resolveSafeImageUrl(svg)).toBeUndefined();
+    const large = 'data:image/png;base64,' + 'A'.repeat(2 * 1024 * 1024);
+    expect(resolveSafeImageUrl('large.png', () => large)).toBe(large);
+    expect(resolveSafeImageUrl(large)).toBeUndefined();
+    expect(
+      resolveSafeImageUrl('chart.svg', () => 'data:text/html;base64,PHN2Zy8+'),
+    ).toBeUndefined();
+    expect(
+      resolveSafeImageUrl('chart.svg', () => 'data:image/svg+xml,<svg/>'),
+    ).toBeUndefined();
+  });
   it('allows blob URLs only when a safe document path was resolved by the app', () => {
     const resolver = vi.fn(() => 'blob:local-image');
     expect(resolveSafeImageUrl(' chart.png ', resolver)).toBe(
