@@ -227,7 +227,9 @@ function renderInline(
   });
 }
 
-const resizeActions: readonly SlideImagePlacementAction[] = [
+type ResizeAction = Exclude<SlideImagePlacementAction, 'move'>;
+
+const resizeActions: readonly ResizeAction[] = [
   'north-west',
   'north-east',
   'south-west',
@@ -237,6 +239,29 @@ const resizeActions: readonly SlideImagePlacementAction[] = [
   'south',
   'west',
 ];
+
+const resizeDirections: Record<AppLocale, Record<ResizeAction, string>> = {
+  ja: {
+    'north-west': '左上の角',
+    'north-east': '右上の角',
+    'south-west': '左下の角',
+    'south-east': '右下の角',
+    north: '上辺',
+    east: '右辺',
+    south: '下辺',
+    west: '左辺',
+  },
+  en: {
+    'north-west': 'top-left corner',
+    'north-east': 'top-right corner',
+    'south-west': 'bottom-left corner',
+    'south-east': 'bottom-right corner',
+    north: 'top edge',
+    east: 'right edge',
+    south: 'bottom edge',
+    west: 'left edge',
+  },
+};
 
 function SlidePlacedFigure({
   node,
@@ -251,7 +276,7 @@ function SlidePlacedFigure({
   >;
   interaction?: FigureInteraction;
 }) {
-  const { copy } = useDocumentCopy();
+  const { copy, locale } = useDocumentCopy();
   const [failed, setFailed] = useState(false);
   const [draft, setDraft] = useState<SlideImagePlacement | null>(null);
   const currentPlacement = draft ?? placement;
@@ -281,6 +306,7 @@ function SlidePlacedFigure({
     event.preventDefault();
     event.stopPropagation();
     interaction.onSelect?.(node.attrs.nodeId);
+    event.currentTarget.focus();
     activeCleanup.current?.();
 
     const initial = currentPlacement;
@@ -336,6 +362,7 @@ function SlidePlacedFigure({
     );
     interaction.onSelect?.(node.attrs.nodeId);
     interaction.onPlacementChange(node.attrs.nodeId, next);
+    event.currentTarget.focus();
   };
 
   return (
@@ -355,7 +382,10 @@ function SlidePlacedFigure({
           type="button"
           className="slide-image-move-target"
           aria-label={node.attrs.alt || node.attrs.src}
-          onClick={() => interaction?.onSelect?.(node.attrs.nodeId)}
+          onClick={(event) => {
+            interaction?.onSelect?.(node.attrs.nodeId);
+            event.currentTarget.focus();
+          }}
           onPointerDown={(event) => beginPointer(event, 'move')}
           onKeyDown={(event) => adjustWithKeyboard(event, 'move')}
         />
@@ -386,8 +416,13 @@ function SlidePlacedFigure({
               key={action}
               type="button"
               className={'slide-image-handle slide-image-handle-' + action}
-              aria-label={copy.workspace.resizeImage}
-              onClick={() => interaction.onSelect?.(node.attrs.nodeId)}
+              aria-label={copy.workspace.resizeImage(
+                resizeDirections[locale][action],
+              )}
+              onClick={(event) => {
+                interaction?.onSelect?.(node.attrs.nodeId);
+                event.currentTarget.focus();
+              }}
               onPointerDown={(event) => beginPointer(event, action)}
               onKeyDown={(event) => adjustWithKeyboard(event, action)}
             />

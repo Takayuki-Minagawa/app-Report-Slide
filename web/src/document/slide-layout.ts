@@ -108,9 +108,11 @@ export function parseSlideImagePlacement(
   value: unknown,
 ): SlideImagePlacement | undefined {
   if (typeof value !== 'string') return undefined;
-  const parts = value.split(',').map((part) => Number(part.trim()));
-  if (parts.length !== 4 || parts.some((part) => !Number.isFinite(part)))
+  const rawParts = value.split(',');
+  if (rawParts.length !== 4 || rawParts.some((part) => !part.trim()))
     return undefined;
+  const parts = rawParts.map((part) => Number(part.trim()));
+  if (parts.some((part) => !Number.isFinite(part))) return undefined;
   const placement = {
     x: parts[0],
     y: parts[1],

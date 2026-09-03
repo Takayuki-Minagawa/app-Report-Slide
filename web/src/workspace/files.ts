@@ -56,14 +56,16 @@ function encodedAssetFilename(file: File): string | undefined {
 }
 
 /**
- * Creates a locally owned image source for the slide placement picker.
- * Keeping the original filename makes Markdown/JSON re-import work when the
- * user selects the same image again. A repeated filename intentionally updates
- * the shared local asset, just like replacing an image file in a folder.
+ * Creates an independent local image source for the slide placement picker.
+ * The original filename stays in the final path so a Markdown/JSON export can
+ * resolve it on a later import, while a generated directory prevents a second
+ * selection with the same basename from replacing an earlier figure.
  */
 export function createInsertedImageAsset(
   file: File,
   assets: AssetUrls,
+  occupiedSources: ReadonlySet<string> = new Set(),
+  existingAssetBytes = 0,
 ): { source: string; url: string } {
   if (!isImageAsset(file))
     throw new WorkspaceStatusError(
@@ -71,20 +73,16 @@ export function createInsertedImageAsset(
     );
   if (file.size > maximumAssetBytes)
     throw new WorkspaceStatusError(statusMessage('imageTooLarge'));
+  if (existingAssetBytes + file.size > maximumTotalAssetBytes)
+    throw new WorkspaceStatusError(statusMessage('imagesTooLarge'));
 
-  const filename = encodedAssetFilename(file);
-  if (filename)
-    return { source: 'assets/' + filename, url: URL.createObjectURL(file) };
-
+  const filename =
+    encodedAssetFilename(file) ?? 'image.' + extensionForImage(file);
   let source: string;
   do {
     insertedAssetSerial += 1;
-    source =
-      'assets/placed-image-' +
-      insertedAssetSerial +
-      '.' +
-      extensionForImage(file);
-  } while (assets.has(source));
+    source = 'assets/placed-image-' + insertedAssetSerial + '/' + filename;
+  } while (assets.has(source) || occupiedSources.has(source));
   return { source, url: URL.createObjectURL(file) };
 }
 function normalizedAssetPath(value: string): string {
@@ -163,6 +161,7 @@ export interface ImportedDocument {
   sourceName: string;
   diagnostics: MarkdownDiagnostic[];
   assets: AssetUrls;
+  assetBytes: number;
   unresolved: string[];
 }
 
@@ -191,10 +190,8 @@ export async function readWorkspaceFiles(
     throw new WorkspaceStatusError(statusMessage('markdownTooLarge'));
   if (imageFiles.some((asset) => asset.size > maximumAssetBytes))
     throw new WorkspaceStatusError(statusMessage('imageTooLarge'));
-  if (
-    imageFiles.reduce((total, asset) => total + asset.size, 0) >
-    maximumTotalAssetBytes
-  )
+  const assetBytes = imageFiles.reduce((total, asset) => total + asset.size, 0);
+  if (assetBytes > maximumTotalAssetBytes)
     throw new WorkspaceStatusError(statusMessage('imagesTooLarge'));
 
   const source = await file.text();
@@ -206,7 +203,7 @@ export async function readWorkspaceFiles(
     result.document,
     imageFiles,
   );
-  return { ...result, sourceName: file.name, assets, unresolved };
+  return { ...result, sourceName: file.name, assets, assetBytes, unresolved };
 }
 
 function filenameFor(document: DocumentData, extension: string): string {

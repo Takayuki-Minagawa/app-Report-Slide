@@ -121,7 +121,7 @@ export function SlideLayoutCanvas({
           figureInteraction={{
             selectedNodeId,
             onSelect: onSelectFigure,
-            onPlacementChange,
+            ...(locked ? {} : { onPlacementChange }),
           }}
         />
       </div>

@@ -198,7 +198,7 @@ describe('document feature workspace', () => {
     );
     expect(
       screen.getByText(
-        '画像を挿入するか本文の図をクリックして配置を開始します。ドラッグで移動し、選択枠のハンドルで大きさを変えます。矢印キーでも移動できます。',
+        /画像を挿入するか本文の図をクリックして配置を開始します。/,
       ),
     ).toBeInTheDocument();
   });
@@ -220,5 +220,61 @@ describe('document feature workspace', () => {
         ).value,
       ).toContain('slide_layout="32,22,36,42"'),
     );
+  });
+  it('keeps image placement keyboard focus and labels every resize handle', async () => {
+    renderWorkspace();
+    await applySource(
+      '---\ntype: slide\ntitle: キーボード配置\n---\n\n# キーボード配置\n\n![配置図](diagram.png)\n{slide_layout="12,18,40,30"}',
+    );
+    fireEvent.click(screen.getByRole('button', { name: '図を配置へ切り替え' }));
+    const mover = await screen.findByRole('button', { name: '配置図' });
+    mover.focus();
+    fireEvent.keyDown(mover, { key: 'ArrowRight' });
+
+    await waitFor(() => expect(mover).toHaveFocus());
+    for (const name of [
+      '画像の左上の角をリサイズ',
+      '画像の右上の角をリサイズ',
+      '画像の左下の角をリサイズ',
+      '画像の右下の角をリサイズ',
+      '画像の上辺をリサイズ',
+      '画像の右辺をリサイズ',
+      '画像の下辺をリサイズ',
+      '画像の左辺をリサイズ',
+    ])
+      expect(screen.getByRole('button', { name })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Markdownへ切り替え' }));
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole('textbox', {
+            name: 'Markdown原稿',
+          }) as HTMLTextAreaElement
+        ).value,
+      ).toContain('slide_layout="13,18,40,30"'),
+    );
+  });
+
+  it('disables image placement interactions while a Markdown draft is unresolved', async () => {
+    renderWorkspace();
+    await applySource(
+      '---\ntype: slide\ntitle: ロック中\n---\n\n# ロック中\n\n![既存図](diagram.png)',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Markdownへ切り替え' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Markdown原稿' }), {
+      target: {
+        value:
+          '---\ntype: slide\ntitle: ロック中の下書き\n---\n\n# ロック中の下書き',
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '図を配置へ切り替え' }));
+
+    expect(
+      await screen.findByRole('button', { name: '画像を挿入' }),
+    ).toBeDisabled();
+    expect(
+      screen.queryByRole('button', { name: '既存図' }),
+    ).not.toBeInTheDocument();
   });
 });

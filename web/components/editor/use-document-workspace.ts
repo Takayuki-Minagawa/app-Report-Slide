@@ -78,6 +78,7 @@ export type WorkspaceView = 'visual' | 'layout' | 'markdown' | 'preview';
 
 interface LoadDocumentOptions {
   assets?: AssetUrls;
+  assetBytes?: number;
   description?: StatusDescription;
 }
 
@@ -94,13 +95,43 @@ function currentDocument(
   };
 }
 
+function imageSources(document: DocumentData): Set<string> {
+  const sources = new Set<string>();
+  for (const node of walkDocumentTree(document.children)) {
+    if (node.type !== 'figure' && node.type !== 'inlineImage') continue;
+    sources.add(node.attrs.src);
+  }
+  return sources;
+}
+
+class ImageAssetStore {
+  private assetUrls: AssetUrls = new Map();
+  private totalBytes = 0;
+
+  get assets(): AssetUrls {
+    return this.assetUrls;
+  }
+
+  get bytes(): number {
+    return this.totalBytes;
+  }
+
+  replace(next: AssetUrls, nextBytes: number): AssetUrls {
+    const previous = this.assetUrls;
+    this.assetUrls = next;
+    this.totalBytes = nextBytes;
+    return previous;
+  }
+}
+
 function insertionPositionForSlide(editor: Editor, slideIndex: number): number {
   let currentSlide = 0;
   let insertion = editor.state.doc.content.size;
   let found = false;
   editor.state.doc.descendants((node, position) => {
     if (found) return false;
-    if (node.type.name !== 'slideBreak') return true;
+    if (node.type.name !== 'slideBreak' && node.type.name !== 'pageBreak')
+      return true;
     if (currentSlide === slideIndex) {
       insertion = position;
       found = true;
@@ -139,8 +170,8 @@ export function useDocumentWorkspace() {
     );
   }, []);
   const [markdownDirty, setMarkdownDirty] = useState(false);
-  const [assets, setAssets] = useState<AssetUrls>(() => new Map());
-  const ownedAssets = useRef(assets);
+  const [assetStore] = useState(() => new ImageAssetStore());
+  const [assets, setAssets] = useState<AssetUrls>(() => assetStore.assets);
   const [pendingRecovery, setPendingRecovery] =
     useState<WorkspaceRecovery | null>(null);
   const [recoveryReady, setRecoveryReady] = useState(false);
@@ -155,7 +186,7 @@ export function useDocumentWorkspace() {
     importRevision.current++;
   }, []);
   useEffect(() => invalidatePendingImport, [invalidatePendingImport]);
-  useEffect(() => () => revokeAssetUrls(ownedAssets.current), []);
+  useEffect(() => () => revokeAssetUrls(assetStore.assets), [assetStore]);
   useEffect(
     () => () => {
       activeHtmlExport.current = null;
@@ -163,18 +194,20 @@ export function useDocumentWorkspace() {
     [],
   );
 
-  const replaceAssets = useCallback((next: AssetUrls) => {
-    const previous = ownedAssets.current;
-    if (previous === next) return;
-    // State updates can be batched without rendering intermediate asset maps.
-    // Track ownership synchronously so even those maps are released.
-    ownedAssets.current = next;
-    setAssets(next);
-    const retained = new Set(next.values());
-    revokeAssetUrls(
-      new Map([...previous].filter(([, url]) => !retained.has(url))),
-    );
-  }, []);
+  const replaceAssets = useCallback(
+    (next: AssetUrls, nextAssetBytes: number) => {
+      const previous = assetStore.replace(next, nextAssetBytes);
+      if (previous === next) return;
+      // State updates can be batched without rendering intermediate asset maps.
+      // Track ownership synchronously so even those maps are released.
+      setAssets(next);
+      const retained = new Set(next.values());
+      revokeAssetUrls(
+        new Map([...previous].filter(([, url]) => !retained.has(url))),
+      );
+    },
+    [assetStore],
+  );
 
   const enqueueRecoveryTask = useCallback((task: () => Promise<void>) => {
     const queued = recoveryQueue.current.then(task, task);
@@ -216,13 +249,13 @@ export function useDocumentWorkspace() {
           return source;
         }
       }
-      return assets.get(path) ?? source;
+      return assetStore.assets.get(path) ?? source;
     },
-    [assets, chapterFile],
+    [assetStore, chapterFile],
   );
   const resolvePreviewImageUrl = useCallback(
-    (source: string) => assets.get(source) ?? source,
-    [assets],
+    (source: string) => assetStore.assets.get(source) ?? source,
+    [assetStore],
   );
   const extensions = useMemo(
     () =>
@@ -328,7 +361,8 @@ export function useDocumentWorkspace() {
       }
 
       invalidatePendingImport();
-      if (options.assets !== undefined) replaceAssets(options.assets);
+      if (options.assets !== undefined)
+        replaceAssets(options.assets, options.assetBytes ?? 0);
       setDocument(next);
       // A replaced source is a new editing session, so Undo cannot restore the previous file.
       setEditorSource((current) => ({
@@ -520,7 +554,13 @@ export function useDocumentWorkspace() {
       editor.schema.nodeFromJSON(toEditorDocument(restoredDocument));
       restoredAssets = restoreRecoveryAssets(pendingRecovery.assets);
       invalidatePendingImport();
-      replaceAssets(restoredAssets);
+      replaceAssets(
+        restoredAssets,
+        pendingRecovery.assets.reduce(
+          (total, asset) => total + asset.blob.size,
+          0,
+        ),
+      );
       restoredAssets = undefined;
       setDocument(restoredDocument);
       setEditorSource((current) => ({
@@ -566,7 +606,13 @@ export function useDocumentWorkspace() {
         return;
       let asset: { source: string; url: string } | undefined;
       try {
-        asset = createInsertedImageAsset(file, assets);
+        const currentAssets = assetStore.assets;
+        asset = createInsertedImageAsset(
+          file,
+          currentAssets,
+          imageSources(currentDocument(editor, document)),
+          assetStore.bytes,
+        );
         const inserted = editor
           .chain()
           .focus()
@@ -584,7 +630,10 @@ export function useDocumentWorkspace() {
           .run();
         if (!inserted)
           throw new WorkspaceStatusError(statusMessage('unableToInsertImage'));
-        replaceAssets(new Map([...assets, [asset.source, asset.url]]));
+        replaceAssets(
+          new Map([...currentAssets, [asset.source, asset.url]]),
+          assetStore.bytes + file.size,
+        );
         asset = undefined;
         setStatus({ kind: 'success', title: statusMessage('imageInserted') });
       } catch (error) {
@@ -597,8 +646,8 @@ export function useDocumentWorkspace() {
       }
     },
     [
-      assets,
-      document.type,
+      assetStore,
+      document,
       documentWriteLocked,
       editor,
       markdownDirty,
@@ -629,7 +678,7 @@ export function useDocumentWorkspace() {
             description.length > 0 ? 'loadedWithWarnings' : 'loaded',
             result.sourceName,
           ),
-          { assets: result.assets, description },
+          { assets: result.assets, assetBytes: result.assetBytes, description },
         );
         setProjectSession(null);
         void clearRecovery();

@@ -227,27 +227,52 @@ describe('workspace file import', () => {
     },
   );
   describe('slide placement image assets', () => {
-    it('uses an encoded original filename so a saved source can be selected again', () => {
+    it('keeps same-named selections independent while retaining a re-importable filename', () => {
       const file = new File(['image'], 'cover diagram(1).png', {
         type: 'image/png',
       });
       const first = createInsertedImageAsset(file, new Map());
-
-      expect(first.source).toBe('assets/cover%20diagram%281%29.png');
-      expect(first.url).toBe('blob:local-1');
-
-      const replacement = createInsertedImageAsset(
+      const second = createInsertedImageAsset(
         file,
         new Map([[first.source, first.url]]),
+        new Set([first.source]),
       );
-      expect(replacement.source).toBe(first.source);
+
+      expect(first.source).toMatch(
+        /^assets\/placed-image-\d+\/cover%20diagram%281%29\.png$/,
+      );
+      expect(second.source).toMatch(
+        /^assets\/placed-image-\d+\/cover%20diagram%281%29\.png$/,
+      );
+      expect(second.source).not.toBe(first.source);
+      const reimported = createLocalAssetUrls(withImages([first.source]), [
+        file,
+      ]);
+      expect(reimported.unresolved).toEqual([]);
+      expect(reimported.urls.get(first.source)).toBeDefined();
+
       revokeAssetUrls(
         new Map([
           [first.source, first.url],
-          ['replacement', replacement.url],
+          [second.source, second.url],
         ]),
       );
-      expect(revokeUrl).toHaveBeenCalledTimes(2);
+      revokeAssetUrls(reimported.urls);
+      expect(revokeUrl).toHaveBeenCalledTimes(3);
+    });
+
+    it('enforces the remaining total image budget before creating an object URL', () => {
+      const file = new File(['image'], 'large.png', { type: 'image/png' });
+      Object.defineProperty(file, 'size', { value: 15 * 1024 * 1024 });
+
+      let error: unknown;
+      try {
+        createInsertedImageAsset(file, new Map(), new Set(), 36 * 1024 * 1024);
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toMatchObject({ status: { key: 'imagesTooLarge' } });
+      expect(createUrl).not.toHaveBeenCalled();
     });
   });
 });

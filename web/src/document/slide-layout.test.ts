@@ -52,10 +52,17 @@ describe('slide image placement', () => {
     expect(defaultSlideImagePlacement).toSatisfy(isSlideImagePlacement);
   });
 
-  it.each([undefined, '12,3,40', '12,3,NaN,40', '96,3,5,40', '12,96,40,5'])(
-    'rejects invalid stored placement %o',
-    (value) => {
-      expect(parseSlideImagePlacement(value)).toBeUndefined();
-    },
-  );
+  it.each([
+    undefined,
+    '12,3,40',
+    '12,3,NaN,40',
+    ',3,40,5',
+    '12,,40,5',
+    '12,3,,5',
+    '12,3,40,',
+    '96,3,5,40',
+    '12,96,40,5',
+  ])('rejects invalid stored placement %o', (value) => {
+    expect(parseSlideImagePlacement(value)).toBeUndefined();
+  });
 });

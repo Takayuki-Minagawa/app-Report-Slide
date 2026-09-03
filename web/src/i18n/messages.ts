@@ -38,7 +38,7 @@ export interface UiMessages {
     slidePosition: string;
     slidePositionValue: (index: number, count: number) => string;
     slideLayoutHelp: string;
-    resizeImage: string;
+    resizeImage: (direction: string) => string;
     preview: string;
     switchToView: (label: string) => string;
     format: string;
@@ -273,8 +273,8 @@ export const messages: Record<AppLocale, UiMessages> = {
       slidePositionValue: (index, count) =>
         String(index) + ' / ' + String(count),
       slideLayoutHelp:
-        '画像を挿入するか本文の図をクリックして配置を開始します。ドラッグで移動し、選択枠のハンドルで大きさを変えます。矢印キーでも移動できます。',
-      resizeImage: '画像のサイズを変更',
+        '画像を挿入するか本文の図をクリックして配置を開始します。ドラッグで移動し、選択枠のハンドルで大きさを変えます。矢印キーで移動し、ハンドルにフォーカスすると同じキーでリサイズできます。',
+      resizeImage: (direction) => '画像の' + direction + 'をリサイズ',
       switchToView: (label) => `${label}へ切り替え`,
       format: '書式',
       bold: '太字',
@@ -555,8 +555,8 @@ export const messages: Record<AppLocale, UiMessages> = {
       slidePositionValue: (index, count) =>
         String(index) + ' / ' + String(count),
       slideLayoutHelp:
-        'Insert an image or click a document-flow figure to start placing it. Drag to move it, use the selection handles to resize it, and use arrow keys for fine movement.',
-      resizeImage: 'Resize image',
+        'Insert an image or click a document-flow figure to start placing it. Drag to move it, use the selection handles to resize it, and use arrow keys for fine movement or, with a focused handle, resizing.',
+      resizeImage: (direction) => 'Resize image: ' + direction,
       switchToView: (label) => `Switch to ${label}`,
       format: 'Formatting',
       bold: 'Bold',
