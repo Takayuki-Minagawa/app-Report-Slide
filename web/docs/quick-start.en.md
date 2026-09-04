@@ -20,7 +20,7 @@ KUMI is a browser application for editing and reviewing technical reports and sl
 1. Open **Place images** in a Slide and choose **Insert image** to select a PNG, JPEG, WebP, GIF, or SVG (up to 20 MB each and 50 MB in total). The image starts in the center of the current slide. Click an existing document-flow figure to move it into free placement.
 2. Drag an image to move it and use the eight handles on its selection outline to resize it. With the image selected, Arrow keys move it by 1%; Shift+Arrow moves it by 5%. Focus a handle to resize that edge with the same keys.
 3. The rectangle stays within the Slide and is preserved in Preview and the HTML slide export. Ordinary figures keep their existing document-flow layout.
-4. Markdown saves the rectangle as `slide_layout="x,y,width,height"`; Document JSON saves the same placement data. Neither stores the image binary, so select the saved source and the original image file together when you resume editing. Same-named images are stored independently; give files distinct names before resuming if more than one shares a basename.
+4. Markdown saves the rectangle as `slide_layout="x,y,width,height"`; Document JSON saves the same placement data. Neither stores the image binary, so select the saved source and the original image file together when you resume editing. Same-named images are stored independently, but a flat file picker cannot distinguish different originals with the same basename; give those originals unique filenames before resuming.
 
 ## 3. Edit tables in detail
 

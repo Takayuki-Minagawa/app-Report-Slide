@@ -198,34 +198,66 @@ describe('workspace file import', () => {
     expect(createUrl).not.toHaveBeenCalled();
   });
 
+  it('rejects an oversized source before reading it', async () => {
+    const source = sourceFile('report.md', markdown);
+    const readSource = vi.spyOn(source, 'text');
+    Object.defineProperty(source, 'size', { value: 5 * 1024 * 1024 + 1 });
+
+    await expect(readWorkspaceFiles([source])).rejects.toMatchObject({
+      status: { key: 'markdownTooLarge' },
+    });
+    expect(readSource).not.toHaveBeenCalled();
+    expect(createUrl).not.toHaveBeenCalled();
+  });
+
   it.each([
-    ['source', 'markdownTooLarge'],
     ['asset', 'imageTooLarge'],
     ['total', 'imagesTooLarge'],
   ] as const)(
-    'enforces the %s size limit before reading the source',
+    'enforces the %s size limit for images referenced by the document',
     async (kind, key) => {
-      const source = sourceFile('report.md', markdown);
-      const readSource = vi.spyOn(source, 'text');
+      const count = kind === 'total' ? 3 : 1;
       const assets = Array.from(
-        { length: kind === 'total' ? 3 : 1 },
+        { length: count },
         (_, index) =>
           new File(['x'], 'asset-' + index + '.png', { type: 'image/png' }),
       );
-      if (kind === 'source')
-        Object.defineProperty(source, 'size', { value: 5 * 1024 * 1024 + 1 });
-      else
-        for (const asset of assets)
-          Object.defineProperty(asset, 'size', {
-            value: kind === 'total' ? 20 * 1024 * 1024 : 20 * 1024 * 1024 + 1,
-          });
+      const source = sourceFile(
+        'report.md',
+        markdown +
+          '\n\n' +
+          assets.map((asset) => '![Asset](' + asset.name + ')').join('\n\n'),
+      );
+      const readSource = vi.spyOn(source, 'text');
+      for (const asset of assets)
+        Object.defineProperty(asset, 'size', {
+          value: kind === 'total' ? 20 * 1024 * 1024 : 20 * 1024 * 1024 + 1,
+        });
+
       await expect(
         readWorkspaceFiles([source, ...assets]),
       ).rejects.toMatchObject({ status: { key } });
-      expect(readSource).not.toHaveBeenCalled();
-      expect(createUrl).not.toHaveBeenCalled();
+      expect(readSource).toHaveBeenCalledOnce();
+      expect(createUrl).toHaveBeenCalledTimes(count);
+      expect(revokeUrl).toHaveBeenCalledTimes(count);
     },
   );
+
+  it('counts only document-referenced image attachments toward the local budget', async () => {
+    const source = sourceFile('report.md', markdown + '\n\n![Used](used.png)');
+    const used = new File(['used'], 'used.png', { type: 'image/png' });
+    const unused = new File(['unused'], 'unused.png', { type: 'image/png' });
+    Object.defineProperty(used, 'size', { value: 20 * 1024 * 1024 });
+    Object.defineProperty(unused, 'size', { value: 30 * 1024 * 1024 });
+
+    const result = await readWorkspaceFiles([source, used, unused]);
+
+    expect(result.assetBytes).toBe(20 * 1024 * 1024);
+    expect(result.assets.size).toBe(1);
+    expect(result.assets.get('used.png')).toBe('blob:local-1');
+    expect(createUrl).toHaveBeenCalledTimes(1);
+    revokeAssetUrls(result.assets);
+  });
   describe('slide placement image assets', () => {
     it('keeps same-named selections independent while retaining a re-importable filename', () => {
       const file = new File(['image'], 'cover diagram(1).png', {

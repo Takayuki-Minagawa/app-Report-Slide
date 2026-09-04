@@ -15,7 +15,7 @@ import {
   MarkdownSerializationError,
 } from '@/src/markdown/serializer';
 import type { MarkdownDiagnostic } from '@/src/markdown/diagnostics';
-import { revokeAssetUrls } from '@/src/workspace/files';
+import { registerAssetUrl, revokeAssetUrls } from '@/src/workspace/files';
 import { chapterImagePaths } from './assets';
 import {
   projectFileName,
@@ -222,10 +222,8 @@ export async function readReportProject(file: File): Promise<ImportedProject> {
   try {
     for (const path of images) {
       const bytes = new Uint8Array(entries[path]);
-      assets.set(
-        path,
-        URL.createObjectURL(new Blob([bytes], { type: imageMime(path) })),
-      );
+      const blob = new Blob([bytes], { type: imageMime(path) });
+      assets.set(path, registerAssetUrl(URL.createObjectURL(blob), blob.size));
     }
     return { project, assets, diagnostics };
   } catch (error) {

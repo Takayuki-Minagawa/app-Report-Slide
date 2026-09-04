@@ -1,6 +1,6 @@
 import type { DocumentData } from '@/src/document/model';
 import type { ReportProject } from '@/src/project/model';
-import { revokeAssetUrls, type AssetUrls } from './files';
+import { registerAssetUrl, revokeAssetUrls, type AssetUrls } from './files';
 
 const databaseName = 'kumi-workspace-recovery';
 const storeName = 'drafts';
@@ -207,7 +207,10 @@ export function restoreRecoveryAssets(
   try {
     for (const asset of assets) {
       if (!asset.path || urls.has(asset.path)) continue;
-      urls.set(asset.path, URL.createObjectURL(asset.blob));
+      urls.set(
+        asset.path,
+        registerAssetUrl(URL.createObjectURL(asset.blob), asset.blob.size),
+      );
     }
     return urls;
   } catch (error) {

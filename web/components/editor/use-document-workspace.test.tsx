@@ -382,7 +382,8 @@ describe('asynchronous document import', () => {
     });
 
     it('rejects an image that would exceed the total local-asset budget', async () => {
-      const createUrl = vi.fn(() => 'blob:budget');
+      let sequence = 0;
+      const createUrl = vi.fn(() => 'blob:budget-' + ++sequence);
       vi.stubGlobal(
         'URL',
         Object.assign(class extends URL {}, {
@@ -426,6 +427,66 @@ describe('asynchronous document import', () => {
         ),
       ).toHaveLength(2);
       expect(createUrl).toHaveBeenCalledTimes(2);
+    });
+
+    it('reclaims the image budget after visual edits remove placed images', async () => {
+      let sequence = 0;
+      const revokeUrl = vi.fn();
+      vi.stubGlobal(
+        'URL',
+        Object.assign(class extends URL {}, {
+          createObjectURL: () => 'blob:reclaim-' + ++sequence,
+          revokeObjectURL: revokeUrl,
+        }),
+      );
+      const { result, unmount } = await workspace();
+      const image = (name: string) => {
+        const file = new File(['image'], name, { type: 'image/png' });
+        Object.defineProperty(file, 'size', { value: 20 * 1024 * 1024 });
+        return file;
+      };
+
+      act(() => result.current.createDocument('slide'));
+      await waitFor(() => expect(result.current.document.type).toBe('slide'));
+      act(() => result.current.insertSlideImage(image('first.png'), 0));
+      act(() => result.current.insertSlideImage(image('second.png'), 0));
+      await waitFor(() =>
+        expect(
+          result.current.document.children.filter(
+            (node) => node.type === 'figure',
+          ),
+        ).toHaveLength(2),
+      );
+
+      act(() => void result.current.editor!.commands.clearContent());
+      await waitFor(() =>
+        expect(
+          result.current.document.children.filter(
+            (node) => node.type === 'figure',
+          ),
+        ).toHaveLength(0),
+      );
+      expect(revokeUrl.mock.calls.map(([url]) => url)).toEqual([
+        'blob:reclaim-1',
+        'blob:reclaim-2',
+      ]);
+
+      act(() => result.current.insertSlideImage(image('replacement.png'), 0));
+      await waitFor(() =>
+        expect(
+          result.current.document.children.filter(
+            (node) => node.type === 'figure',
+          ),
+        ).toHaveLength(1),
+      );
+      expect(sequence).toBe(3);
+
+      unmount();
+      expect(revokeUrl.mock.calls.map(([url]) => url)).toEqual([
+        'blob:reclaim-1',
+        'blob:reclaim-2',
+        'blob:reclaim-3',
+      ]);
     });
   });
 });

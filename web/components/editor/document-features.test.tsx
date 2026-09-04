@@ -1,8 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppPreferencesProvider } from '@/components/app-preferences';
 import { EditorWorkspace } from './editor-workspace';
 import { parseMarkdown } from '@/src/markdown/parser';
+
+afterEach(() => vi.unstubAllGlobals());
 
 function renderWorkspace() {
   return render(
@@ -202,6 +204,40 @@ describe('document feature workspace', () => {
       ),
     ).toBeInTheDocument();
   });
+  it('resolves a newly placed image in the visual editor', async () => {
+    const { container } = renderWorkspace();
+    vi.stubGlobal(
+      'URL',
+      Object.assign(class extends URL {}, {
+        createObjectURL: () => 'blob:visual-placement',
+        revokeObjectURL: vi.fn(),
+      }),
+    );
+    await applySource(
+      '---\ntype: slide\ntitle: Visual image\n---\n\n# Visual image',
+    );
+    fireEvent.click(screen.getByRole('button', { name: '図を配置へ切り替え' }));
+    fireEvent.change(await screen.findByLabelText('画像を選択'), {
+      target: {
+        files: [new File(['image'], 'visual.png', { type: 'image/png' })],
+      },
+    });
+
+    await waitFor(() =>
+      expect(
+        container.querySelector('.slide-layout-editor img'),
+      ).toHaveAttribute('src', 'blob:visual-placement'),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'ビジュアル編集へ切り替え' }),
+    );
+    await waitFor(() =>
+      expect(
+        container.querySelector('.kumi-editor-content img'),
+      ).toHaveAttribute('src', 'blob:visual-placement'),
+    );
+  });
+
   it('converts a document-flow Slide figure into a free-positioned figure', async () => {
     renderWorkspace();
     await applySource(

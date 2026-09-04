@@ -9,8 +9,33 @@ import { WorkspaceStatusError, statusMessage } from './status';
 /** Runtime-only object URLs must never be serialized into the document. */
 export type AssetUrls = ReadonlyMap<string, string>;
 
+const assetSizeByUrl = new Map<string, number>();
 const maximumAssetBytes = 20 * 1024 * 1024;
 const maximumTotalAssetBytes = 50 * 1024 * 1024;
+
+/** Records a blob URL so local-asset limits stay accurate after document edits. */
+export function registerAssetUrl(url: string, bytes: number): string {
+  assetSizeByUrl.set(url, bytes);
+  return url;
+}
+
+/** Returns the byte size of distinct, currently retained local image URLs. */
+export function assetByteTotal(urls: AssetUrls): number {
+  let total = 0;
+  const seen = new Set<string>();
+  for (const url of urls.values()) {
+    if (seen.has(url)) continue;
+    seen.add(url);
+    total += assetSizeByUrl.get(url) ?? 0;
+  }
+  return total;
+}
+
+function hasOversizedAsset(urls: AssetUrls): boolean {
+  return [...new Set(urls.values())].some(
+    (url) => (assetSizeByUrl.get(url) ?? 0) > maximumAssetBytes,
+  );
+}
 
 export const imageFileAccept =
   'image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.svg';
@@ -83,7 +108,10 @@ export function createInsertedImageAsset(
     insertedAssetSerial += 1;
     source = 'assets/placed-image-' + insertedAssetSerial + '/' + filename;
   } while (assets.has(source) || occupiedSources.has(source));
-  return { source, url: URL.createObjectURL(file) };
+  return {
+    source,
+    url: registerAssetUrl(URL.createObjectURL(file), file.size),
+  };
 }
 function normalizedAssetPath(value: string): string {
   const path = value.split(/[?#]/, 1)[0].replace(/\\/g, '/');
@@ -141,8 +169,11 @@ export function createLocalAssetUrls(
         continue;
       }
       const file = matches[0];
-      const url = urlByFile.get(file) ?? URL.createObjectURL(file);
-      urlByFile.set(file, url);
+      let url = urlByFile.get(file);
+      if (!url) {
+        url = registerAssetUrl(URL.createObjectURL(file), file.size);
+        urlByFile.set(file, url);
+      }
       urls.set(source, url);
     }
   } catch (error) {
@@ -153,7 +184,10 @@ export function createLocalAssetUrls(
 }
 
 export function revokeAssetUrls(urls: AssetUrls): void {
-  for (const url of new Set(urls.values())) URL.revokeObjectURL(url);
+  for (const url of new Set(urls.values())) {
+    URL.revokeObjectURL(url);
+    assetSizeByUrl.delete(url);
+  }
 }
 
 export interface ImportedDocument {
@@ -188,11 +222,6 @@ export async function readWorkspaceFiles(
     );
   if (file.size > 5 * 1024 * 1024)
     throw new WorkspaceStatusError(statusMessage('markdownTooLarge'));
-  if (imageFiles.some((asset) => asset.size > maximumAssetBytes))
-    throw new WorkspaceStatusError(statusMessage('imageTooLarge'));
-  const assetBytes = imageFiles.reduce((total, asset) => total + asset.size, 0);
-  if (assetBytes > maximumTotalAssetBytes)
-    throw new WorkspaceStatusError(statusMessage('imagesTooLarge'));
 
   const source = await file.text();
   const result =
@@ -203,6 +232,15 @@ export async function readWorkspaceFiles(
     result.document,
     imageFiles,
   );
+  const assetBytes = assetByteTotal(assets);
+  if (hasOversizedAsset(assets)) {
+    revokeAssetUrls(assets);
+    throw new WorkspaceStatusError(statusMessage('imageTooLarge'));
+  }
+  if (assetBytes > maximumTotalAssetBytes) {
+    revokeAssetUrls(assets);
+    throw new WorkspaceStatusError(statusMessage('imagesTooLarge'));
+  }
   return { ...result, sourceName: file.name, assets, assetBytes, unresolved };
 }
 
