@@ -1,8 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppPreferencesProvider } from '@/components/app-preferences';
 import { EditorWorkspace } from './editor-workspace';
 import { parseMarkdown } from '@/src/markdown/parser';
+
+afterEach(() => vi.unstubAllGlobals());
 
 function renderWorkspace() {
   return render(
@@ -178,5 +180,137 @@ describe('document feature workspace', () => {
         '複数段落セルの本文',
       ),
     );
+  });
+  it('shows the image placement canvas only for Slide documents', async () => {
+    renderWorkspace();
+    await screen.findByText('REPORT');
+    expect(
+      screen.queryByRole('button', { name: '図を配置へ切り替え' }),
+    ).not.toBeInTheDocument();
+
+    await applySource(
+      '---\ntype: slide\ntitle: 配置するスライド\n---\n\n# 配置するスライド',
+    );
+    expect(await screen.findByText('SLIDE')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '図を配置へ切り替え' }));
+
+    expect(await screen.findByLabelText('画像を選択')).toHaveAttribute(
+      'accept',
+      'image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.svg',
+    );
+    expect(
+      screen.getByText(
+        /画像を挿入するか本文の図をクリックして配置を開始します。/,
+      ),
+    ).toBeInTheDocument();
+  });
+  it('resolves a newly placed image in the visual editor', async () => {
+    const { container } = renderWorkspace();
+    vi.stubGlobal(
+      'URL',
+      Object.assign(class extends URL {}, {
+        createObjectURL: () => 'blob:visual-placement',
+        revokeObjectURL: vi.fn(),
+      }),
+    );
+    await applySource(
+      '---\ntype: slide\ntitle: Visual image\n---\n\n# Visual image',
+    );
+    fireEvent.click(screen.getByRole('button', { name: '図を配置へ切り替え' }));
+    fireEvent.change(await screen.findByLabelText('画像を選択'), {
+      target: {
+        files: [new File(['image'], 'visual.png', { type: 'image/png' })],
+      },
+    });
+
+    await waitFor(() =>
+      expect(
+        container.querySelector('.slide-layout-editor img'),
+      ).toHaveAttribute('src', 'blob:visual-placement'),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'ビジュアル編集へ切り替え' }),
+    );
+    await waitFor(() =>
+      expect(
+        container.querySelector('.kumi-editor-content img'),
+      ).toHaveAttribute('src', 'blob:visual-placement'),
+    );
+  });
+
+  it('converts a document-flow Slide figure into a free-positioned figure', async () => {
+    renderWorkspace();
+    await applySource(
+      '---\ntype: slide\ntitle: 既存図\n---\n\n# 既存図\n\n![既存図](diagram.png)',
+    );
+    fireEvent.click(screen.getByRole('button', { name: '図を配置へ切り替え' }));
+    fireEvent.click(await screen.findByRole('button', { name: '既存図' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Markdownへ切り替え' }));
+
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole('textbox', {
+            name: 'Markdown原稿',
+          }) as HTMLTextAreaElement
+        ).value,
+      ).toContain('slide_layout="32,22,36,42"'),
+    );
+  });
+  it('keeps image placement keyboard focus and labels every resize handle', async () => {
+    renderWorkspace();
+    await applySource(
+      '---\ntype: slide\ntitle: キーボード配置\n---\n\n# キーボード配置\n\n![配置図](diagram.png)\n{slide_layout="12,18,40,30"}',
+    );
+    fireEvent.click(screen.getByRole('button', { name: '図を配置へ切り替え' }));
+    const mover = await screen.findByRole('button', { name: '配置図' });
+    mover.focus();
+    fireEvent.keyDown(mover, { key: 'ArrowRight' });
+
+    await waitFor(() => expect(mover).toHaveFocus());
+    for (const name of [
+      '画像の左上の角をリサイズ',
+      '画像の右上の角をリサイズ',
+      '画像の左下の角をリサイズ',
+      '画像の右下の角をリサイズ',
+      '画像の上辺をリサイズ',
+      '画像の右辺をリサイズ',
+      '画像の下辺をリサイズ',
+      '画像の左辺をリサイズ',
+    ])
+      expect(screen.getByRole('button', { name })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Markdownへ切り替え' }));
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole('textbox', {
+            name: 'Markdown原稿',
+          }) as HTMLTextAreaElement
+        ).value,
+      ).toContain('slide_layout="13,18,40,30"'),
+    );
+  });
+
+  it('disables image placement interactions while a Markdown draft is unresolved', async () => {
+    renderWorkspace();
+    await applySource(
+      '---\ntype: slide\ntitle: ロック中\n---\n\n# ロック中\n\n![既存図](diagram.png)',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Markdownへ切り替え' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Markdown原稿' }), {
+      target: {
+        value:
+          '---\ntype: slide\ntitle: ロック中の下書き\n---\n\n# ロック中の下書き',
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '図を配置へ切り替え' }));
+
+    expect(
+      await screen.findByRole('button', { name: '画像を挿入' }),
+    ).toBeDisabled();
+    expect(
+      screen.queryByRole('button', { name: '既存図' }),
+    ).not.toBeInTheDocument();
   });
 });

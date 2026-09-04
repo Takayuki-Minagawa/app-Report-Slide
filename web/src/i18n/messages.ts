@@ -29,7 +29,16 @@ export interface UiMessages {
     newReport: string;
     newSlide: string;
     visual: string;
+    slideLayout: string;
     markdown: string;
+    insertImage: string;
+    chooseImage: string;
+    previousSlide: string;
+    nextSlide: string;
+    slidePosition: string;
+    slidePositionValue: (index: number, count: number) => string;
+    slideLayoutHelp: string;
+    resizeImage: (direction: string) => string;
     preview: string;
     switchToView: (label: string) => string;
     format: string;
@@ -123,6 +132,8 @@ export interface UiMessages {
     markdownTooLarge: string;
     imageTooLarge: string;
     imagesTooLarge: string;
+    imageInserted: string;
+    unableToInsertImage: string;
     unresolvedImages: (sources: string) => string;
     loaded: (filename: string) => string;
     loadedWithWarnings: (filename: string) => string;
@@ -253,6 +264,17 @@ export const messages: Record<AppLocale, UiMessages> = {
       visual: 'ビジュアル編集',
       markdown: 'Markdown',
       preview: '完成プレビュー',
+      slideLayout: '図を配置',
+      insertImage: '画像を挿入',
+      chooseImage: '画像を選択',
+      previousSlide: '前のスライド',
+      nextSlide: '次のスライド',
+      slidePosition: '編集中のスライド',
+      slidePositionValue: (index, count) =>
+        String(index) + ' / ' + String(count),
+      slideLayoutHelp:
+        '画像を挿入するか本文の図をクリックして配置を開始します。ドラッグで移動し、選択枠のハンドルで大きさを変えます。矢印キーで移動し、ハンドルにフォーカスすると同じキーでリサイズできます。',
+      resizeImage: (direction) => '画像の' + direction + 'をリサイズ',
       switchToView: (label) => `${label}へ切り替え`,
       format: '書式',
       bold: '太字',
@@ -349,6 +371,8 @@ export const messages: Record<AppLocale, UiMessages> = {
       markdownTooLarge: 'Markdownファイルは5MB以下にしてください',
       imageTooLarge: '画像ファイルは1件20MB以下にしてください',
       imagesTooLarge: '画像ファイルの合計は50MB以下にしてください',
+      imageInserted: '画像をスライドへ配置しました',
+      unableToInsertImage: '画像を挿入できませんでした',
       unresolvedImages: (sources) =>
         `ローカル画像を解決できません: ${sources}（Markdownと画像を同時に選択してください）`,
       loaded: (filename) => `${filename}を読み込みました`,
@@ -467,6 +491,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       editTitle: '2. 編集する',
       editSteps: [
         '「ビジュアル編集」で本文を直接編集し、上部の書式ボタンで見出し、リスト、引用、表、数式を追加します。',
+        'Slideでは「図を配置」を開き、「画像を挿入」で画像を選びます。図をドラッグして移動し、8方向のハンドルで大きさを変えられます。矢印キーは1%、Shift＋矢印キーは5%移動です。',
         '「Markdown」では原稿を直接編集します。変更後は「Markdownを適用」またはMarkdown／JSON保存を選んでください。',
         '要素を選ぶと右側のPropertiesでテーマ、目次、番号、参照ラベル、図の代替テキストなどを設定できます。',
       ],
@@ -521,6 +546,17 @@ export const messages: Record<AppLocale, UiMessages> = {
       visual: 'Visual editor',
       markdown: 'Markdown',
       preview: 'Preview',
+      slideLayout: 'Place images',
+      insertImage: 'Insert image',
+      chooseImage: 'Choose image',
+      previousSlide: 'Previous slide',
+      nextSlide: 'Next slide',
+      slidePosition: 'Slide being edited',
+      slidePositionValue: (index, count) =>
+        String(index) + ' / ' + String(count),
+      slideLayoutHelp:
+        'Insert an image or click a document-flow figure to start placing it. Drag to move it, use the selection handles to resize it, and use arrow keys for fine movement or, with a focused handle, resizing.',
+      resizeImage: (direction) => 'Resize image: ' + direction,
       switchToView: (label) => `Switch to ${label}`,
       format: 'Formatting',
       bold: 'Bold',
@@ -617,6 +653,8 @@ export const messages: Record<AppLocale, UiMessages> = {
       markdownTooLarge: 'Markdown files must be 5 MB or smaller',
       imageTooLarge: 'Each image must be 20 MB or smaller',
       imagesTooLarge: 'The combined image size must be 50 MB or smaller',
+      imageInserted: 'Placed the image on the slide',
+      unableToInsertImage: 'Could not insert the image',
       unresolvedImages: (sources) =>
         `Could not resolve local images: ${sources}. Select the Markdown file and images together.`,
       loaded: (filename) => `Loaded ${filename}`,
@@ -736,6 +774,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       editTitle: '2. Edit',
       editSteps: [
         'Edit directly in the Visual editor. The formatting toolbar adds headings, lists, quotes, tables, and equations.',
+        'For Slides, open “Place images” and choose “Insert image”. Drag an image to move it or use its eight handles to resize it. Arrow keys move it by 1%; Shift+Arrow moves it by 5%.',
         'Use the Markdown tab to edit source directly. Choose “Apply Markdown” or save Markdown/JSON after making changes.',
         'Select an element to configure its theme, table of contents, numbering, reference label, or image alternative text in Properties.',
       ],

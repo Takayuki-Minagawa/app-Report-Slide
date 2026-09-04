@@ -1,6 +1,6 @@
 import type { DocumentData } from '@/src/document/model';
 import type { ReportProject } from '@/src/project/model';
-import { revokeAssetUrls, type AssetUrls } from './files';
+import { registerAssetUrl, revokeAssetUrls, type AssetUrls } from './files';
 
 const databaseName = 'kumi-workspace-recovery';
 const storeName = 'drafts';
@@ -9,7 +9,7 @@ const recoverySchemaVersion = 1;
 
 let lastTimestamp = 0;
 
-export type RecoveryView = 'visual' | 'markdown' | 'preview';
+export type RecoveryView = 'visual' | 'layout' | 'markdown' | 'preview';
 
 export interface RecoveryAsset {
   path: string;
@@ -45,7 +45,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isRecoveryView(value: unknown): value is RecoveryView {
-  return value === 'visual' || value === 'markdown' || value === 'preview';
+  return (
+    value === 'visual' ||
+    value === 'layout' ||
+    value === 'markdown' ||
+    value === 'preview'
+  );
 }
 
 function isRecoveryAsset(value: unknown): value is RecoveryAsset {
@@ -202,7 +207,10 @@ export function restoreRecoveryAssets(
   try {
     for (const asset of assets) {
       if (!asset.path || urls.has(asset.path)) continue;
-      urls.set(asset.path, URL.createObjectURL(asset.blob));
+      urls.set(
+        asset.path,
+        registerAssetUrl(URL.createObjectURL(asset.blob), asset.blob.size),
+      );
     }
     return urls;
   } catch (error) {

@@ -91,6 +91,11 @@ export function EditorWorkspace() {
           analysis={workspace.analysis}
           displayedStatus={workspace.displayedStatus}
           resolveImageUrl={workspace.resolveImageUrl}
+          selectedNodeId={workspace.selectedNode?.nodeId}
+          documentWriteLocked={controlsLocked}
+          focusNode={workspace.focusNode}
+          applyAttributes={workspace.applyAttributes}
+          insertSlideImage={workspace.insertSlideImage}
           changeView={workspace.changeView}
           updateMarkdown={workspace.updateMarkdown}
           applyMarkdown={workspace.applyMarkdown}

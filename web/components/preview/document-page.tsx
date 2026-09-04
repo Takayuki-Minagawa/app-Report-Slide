@@ -3,7 +3,7 @@ import { resolveDocumentTheme } from '@/src/document/metadata';
 import type { DocumentAnalysis } from '@/src/document/semantics';
 import { messages, type AppLocale } from '@/src/i18n/messages';
 import type { ImageUrlResolver } from '@/src/security/resource-url';
-import { DocumentRenderer } from './document-renderer';
+import { DocumentRenderer, type FigureInteraction } from './document-renderer';
 
 interface DocumentPageProps {
   document: DocumentData;
@@ -13,6 +13,7 @@ interface DocumentPageProps {
   index: number;
   count: number;
   resolveImageUrl?: ImageUrlResolver;
+  figureInteraction?: FigureInteraction;
   id?: string;
   className?: string;
 }
@@ -26,6 +27,7 @@ export function DocumentPage({
   index,
   count,
   resolveImageUrl,
+  figureInteraction,
   id,
   className = '',
 }: DocumentPageProps) {
@@ -40,6 +42,7 @@ export function DocumentPage({
         slide ? copy.preview.slidePreview : copy.preview.reportPreview
       }
       data-page={index + 1}
+      data-slide-layout-canvas={figureInteraction ? '' : undefined}
     >
       <DocumentRenderer
         document={document}
@@ -48,6 +51,7 @@ export function DocumentPage({
         analysis={analysis}
         showToc={index === 0}
         resolveImageUrl={resolveImageUrl}
+        figureInteraction={figureInteraction}
       />
       <footer>
         {slide && <span>{document.metadata.author ?? ''}</span>}

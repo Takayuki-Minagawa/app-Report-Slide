@@ -246,4 +246,24 @@ describe('standalone slide HTML', () => {
     expect(cell.rowSpan).toBe(2);
     expect(result.querySelectorAll('tr')).toHaveLength(2);
   });
+  it('preserves PowerPoint-style image placement in standalone HTML', async () => {
+    const source = slides(
+      '![Placed](data:image/png;base64,AA==)\n{slide_layout="12,18,40,30"}',
+    );
+    const result = readHtml(
+      (await exportSlideHtml(source, new Map(), 'ja')).html,
+    );
+    const figure = result.querySelector<HTMLElement>(
+      '.slide-positioned-figure',
+    );
+
+    expect(figure).not.toBeNull();
+    expect(figure?.style.left).toBe('12%');
+    expect(figure?.style.top).toBe('18%');
+    expect(figure?.style.width).toBe('40%');
+    expect(figure?.style.height).toBe('30%');
+    expect(result.querySelector('style')?.textContent).toContain(
+      '.slide-positioned-figure',
+    );
+  });
 });

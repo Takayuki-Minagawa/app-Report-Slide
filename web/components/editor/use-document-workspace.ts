@@ -19,6 +19,7 @@ import {
 } from '@/src/document/semantics';
 import { walkDocumentTree } from '@/src/document/traversal';
 import { createEditorExtensions } from '@/src/editor/extensions';
+import { defaultSlideImagePlacement } from '@/src/document/slide-layout';
 import { parseMarkdown } from '@/src/markdown/parser';
 import {
   serializeDocument,
@@ -30,6 +31,8 @@ import {
   initialMarkdown,
 } from '@/src/workspace/initial-document';
 import {
+  assetByteTotal,
+  createInsertedImageAsset,
   readWorkspaceFiles,
   revokeAssetUrls,
   downloadDocument,
@@ -72,7 +75,7 @@ import {
   ReportProjectError,
 } from '@/src/project/model';
 
-export type WorkspaceView = 'visual' | 'markdown' | 'preview';
+export type WorkspaceView = 'visual' | 'layout' | 'markdown' | 'preview';
 
 interface LoadDocumentOptions {
   assets?: AssetUrls;
@@ -90,6 +93,62 @@ function currentDocument(
       ? (content as DocumentNode[])
       : document.children,
   };
+}
+
+function imageSources(nodes: readonly DocumentNode[]): Set<string> {
+  const sources = new Set<string>();
+  for (const node of walkDocumentTree(nodes)) {
+    if (node.type !== 'figure' && node.type !== 'inlineImage') continue;
+    sources.add(node.attrs.src);
+  }
+  return sources;
+}
+
+function retainedAssetsForSources(
+  assets: AssetUrls,
+  sources: ReadonlySet<string>,
+): AssetUrls {
+  const retained = new Map(
+    [...assets].filter(([source]) => sources.has(source)),
+  );
+  return retained.size === assets.size ? assets : retained;
+}
+
+class ImageAssetStore {
+  private assetUrls: AssetUrls = new Map();
+
+  get assets(): AssetUrls {
+    return this.assetUrls;
+  }
+
+  get bytes(): number {
+    return assetByteTotal(this.assetUrls);
+  }
+
+  replace(next: AssetUrls): AssetUrls {
+    const previous = this.assetUrls;
+    this.assetUrls = next;
+    return previous;
+  }
+}
+
+function insertionPositionForSlide(editor: Editor, slideIndex: number): number {
+  let currentSlide = 0;
+  let insertion = editor.state.doc.content.size;
+  let found = false;
+  editor.state.doc.descendants((node, position) => {
+    if (found) return false;
+    if (node.type.name !== 'slideBreak' && node.type.name !== 'pageBreak')
+      return true;
+    if (currentSlide === slideIndex) {
+      insertion = position;
+      found = true;
+      return false;
+    }
+    currentSlide += 1;
+    return true;
+  });
+  return insertion;
 }
 
 /** Owns document replacement, drafts and imports; selection and rendering stay separate. */
@@ -119,8 +178,8 @@ export function useDocumentWorkspace() {
     );
   }, []);
   const [markdownDirty, setMarkdownDirty] = useState(false);
-  const [assets, setAssets] = useState<AssetUrls>(() => new Map());
-  const ownedAssets = useRef(assets);
+  const [assetStore] = useState(() => new ImageAssetStore());
+  const [assets, setAssets] = useState<AssetUrls>(() => assetStore.assets);
   const [pendingRecovery, setPendingRecovery] =
     useState<WorkspaceRecovery | null>(null);
   const [recoveryReady, setRecoveryReady] = useState(false);
@@ -135,7 +194,7 @@ export function useDocumentWorkspace() {
     importRevision.current++;
   }, []);
   useEffect(() => invalidatePendingImport, [invalidatePendingImport]);
-  useEffect(() => () => revokeAssetUrls(ownedAssets.current), []);
+  useEffect(() => () => revokeAssetUrls(assetStore.assets), [assetStore]);
   useEffect(
     () => () => {
       activeHtmlExport.current = null;
@@ -143,18 +202,28 @@ export function useDocumentWorkspace() {
     [],
   );
 
-  const replaceAssets = useCallback((next: AssetUrls) => {
-    const previous = ownedAssets.current;
-    if (previous === next) return;
-    // State updates can be batched without rendering intermediate asset maps.
-    // Track ownership synchronously so even those maps are released.
-    ownedAssets.current = next;
-    setAssets(next);
-    const retained = new Set(next.values());
-    revokeAssetUrls(
-      new Map([...previous].filter(([, url]) => !retained.has(url))),
-    );
-  }, []);
+  const replaceAssets = useCallback(
+    (next: AssetUrls) => {
+      const previous = assetStore.replace(next);
+      if (previous === next) return;
+      // State updates can be batched without rendering intermediate asset maps.
+      // Track ownership synchronously so even those maps are released.
+      setAssets(next);
+      const retained = new Set(next.values());
+      revokeAssetUrls(
+        new Map([...previous].filter(([, url]) => !retained.has(url))),
+      );
+    },
+    [assetStore],
+  );
+
+  const pruneUnusedSlideAssets = useCallback(
+    (nodes: readonly DocumentNode[]) =>
+      replaceAssets(
+        retainedAssetsForSources(assetStore.assets, imageSources(nodes)),
+      ),
+    [assetStore, replaceAssets],
+  );
 
   const enqueueRecoveryTask = useCallback((task: () => Promise<void>) => {
     const queued = recoveryQueue.current.then(task, task);
@@ -172,7 +241,11 @@ export function useDocumentWorkspace() {
   }, [enqueueRecoveryTask]);
 
   const documentWriteLocked = view === 'markdown' || markdownDirty;
-  const selection = useDocumentSelection(documentWriteLocked, setStatus);
+  const selection = useDocumentSelection(
+    documentWriteLocked,
+    document.type,
+    setStatus,
+  );
   const {
     handleMathSelect,
     handleSelectionUpdate,
@@ -192,13 +265,13 @@ export function useDocumentWorkspace() {
           return source;
         }
       }
-      return assets.get(path) ?? source;
+      return assetStore.assets.get(path) ?? source;
     },
-    [assets, chapterFile],
+    [assetStore, chapterFile],
   );
   const resolvePreviewImageUrl = useCallback(
-    (source: string) => assets.get(source) ?? source,
-    [assets],
+    (source: string) => assetStore.assets.get(source) ?? source,
+    [assetStore],
   );
   const extensions = useMemo(
     () =>
@@ -223,9 +296,11 @@ export function useDocumentWorkspace() {
         const content = updatedEditor.getJSON().content;
         if (!Array.isArray(content)) return;
         invalidatePendingImport();
+        const children = content as DocumentNode[];
+        if (document.type === 'slide') pruneUnusedSlideAssets(children);
         setDocument((current) => ({
           ...current,
-          children: content as DocumentNode[],
+          children,
         }));
         setDocumentDirty(true);
         markProjectEdited();
@@ -304,7 +379,14 @@ export function useDocumentWorkspace() {
       }
 
       invalidatePendingImport();
-      if (options.assets !== undefined) replaceAssets(options.assets);
+      const sourceAssets = options.assets ?? assetStore.assets;
+      if (next.type === 'slide') {
+        replaceAssets(
+          retainedAssetsForSources(sourceAssets, imageSources(next.children)),
+        );
+      } else if (options.assets !== undefined) {
+        replaceAssets(sourceAssets);
+      }
       setDocument(next);
       // A replaced source is a new editing session, so Undo cannot restore the previous file.
       setEditorSource((current) => ({
@@ -321,7 +403,13 @@ export function useDocumentWorkspace() {
         description: combinedStatusDescription(options.description, warning),
       });
     },
-    [clearSelection, editor, invalidatePendingImport, replaceAssets],
+    [
+      assetStore.assets,
+      clearSelection,
+      editor,
+      invalidatePendingImport,
+      replaceAssets,
+    ],
   );
 
   const hasUnsavedChanges =
@@ -508,7 +596,12 @@ export function useDocumentWorkspace() {
       setDocumentDirty(true);
       setProjectSession(restoredProject);
       setView(
-        pendingRecovery.markdownDirty ? 'markdown' : pendingRecovery.view,
+        pendingRecovery.markdownDirty
+          ? 'markdown'
+          : pendingRecovery.view === 'layout' &&
+              restoredDocument.type !== 'slide'
+            ? 'visual'
+            : pendingRecovery.view,
       );
       clearSelection();
       setStatus({ kind: 'success', title: statusMessage('recoveredDraft') });
@@ -526,6 +619,69 @@ export function useDocumentWorkspace() {
     }
   };
 
+  const insertSlideImage = useCallback(
+    (file: File, slideIndex: number) => {
+      if (
+        !editor ||
+        document.type !== 'slide' ||
+        documentWriteLocked ||
+        markdownDirty
+      )
+        return;
+      let asset: { source: string; url: string } | undefined;
+      let previousAssets: AssetUrls | undefined;
+      let assetRegistered = false;
+      try {
+        const currentAssets = assetStore.assets;
+        previousAssets = currentAssets;
+        asset = createInsertedImageAsset(
+          file,
+          currentAssets,
+          imageSources(currentDocument(editor, document).children),
+          assetStore.bytes,
+        );
+        // The editor renders synchronously. Register the blob first so its
+        // figure extension resolves the local source during insertion.
+        replaceAssets(new Map([...currentAssets, [asset.source, asset.url]]));
+        assetRegistered = true;
+        const inserted = editor
+          .chain()
+          .focus()
+          .insertContentAt(insertionPositionForSlide(editor, slideIndex), {
+            type: 'figure',
+            attrs: {
+              src: asset.source,
+              alt: file.name.replace(/\.[^.]+$/, ''),
+              title: null,
+              width: 100,
+              align: 'center',
+              slidePlacement: { ...defaultSlideImagePlacement },
+            },
+          })
+          .run();
+        if (!inserted)
+          throw new WorkspaceStatusError(statusMessage('unableToInsertImage'));
+        asset = undefined;
+        setStatus({ kind: 'success', title: statusMessage('imageInserted') });
+      } catch (error) {
+        if (assetRegistered && previousAssets) replaceAssets(previousAssets);
+        else if (asset) revokeAssetUrls(new Map([[asset.source, asset.url]]));
+        setStatus({
+          kind: 'error',
+          title: statusMessage('unableToInsertImage'),
+          description: describeWorkspaceError(error, 'unableToLoad'),
+        });
+      }
+    },
+    [
+      assetStore,
+      document,
+      documentWriteLocked,
+      editor,
+      markdownDirty,
+      replaceAssets,
+    ],
+  );
   const importFiles = useCallback(
     async (files: readonly File[]) => {
       if (files.length === 0 || documentWriteLocked || !confirmReplacement())
@@ -616,6 +772,7 @@ export function useDocumentWorkspace() {
 
   const changeView = (nextView: WorkspaceView) => {
     invalidatePendingImport();
+    if (nextView === 'layout' && document.type !== 'slide') return;
     if (nextView === 'visual' && markdownDirty) {
       setStatus({
         kind: 'error',
@@ -814,6 +971,7 @@ export function useDocumentWorkspace() {
     resolveImageUrl,
     resolvePreviewImageUrl,
     importFiles,
+    insertSlideImage,
     updateMarkdown,
     applyMarkdown,
     createDocument,

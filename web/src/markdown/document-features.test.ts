@@ -226,4 +226,40 @@ $$
     }
     throw new Error('Expected diagnostic');
   });
+  it('preserves a Slide figure placement through canonical Markdown', () => {
+    const source = [
+      '---',
+      'type: slide',
+      'title: Layout',
+      '---',
+      '',
+      '![Diagram](assets/diagram.png)',
+      '{slide_layout="12.5,18,40,30"}',
+    ].join('\n');
+    const first = parseMarkdown(source).document;
+    const figure = first.children.find((node) => node.type === 'figure');
+    if (!figure || figure.type !== 'figure') throw new Error('figure expected');
+
+    expect(figure.attrs.slidePlacement).toEqual({
+      x: 12.5,
+      y: 18,
+      width: 40,
+      height: 30,
+    });
+    const canonical = serializeDocument(first);
+    expect(canonical).toContain('slide_layout="12.5,18,40,30"');
+    expect(normalized(parseMarkdown(canonical).document)).toEqual(
+      normalized(first),
+    );
+  });
+
+  it.each([
+    'slide_layout="95,0,10,20"',
+    'slide_layout="10,10,4,20"',
+    'slide_layout="10,10,40"',
+  ])('rejects invalid slide placement attributes: %s', (attribute) => {
+    expect(() =>
+      parseMarkdown('![Diagram](assets/diagram.png)\n{' + attribute + '}'),
+    ).toThrow(MarkdownImportError);
+  });
 });

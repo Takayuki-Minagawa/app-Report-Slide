@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { NodeSelection } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
 import type { MathSelection } from '@/src/editor/extensions';
+import type { DocumentType } from '@/src/document/model';
 import { semanticTypes } from '@/src/document/semantics';
 import { updateDocumentNode } from '@/src/editor/document-commands';
 import {
@@ -23,6 +24,7 @@ export interface SelectedNode {
 /** Selection and property drafts are scoped to a stable document node, not a UI position. */
 export function useDocumentSelection(
   documentWriteLocked: boolean,
+  documentType: DocumentType,
   setStatus: (status: WorkspaceStatus) => void,
 ) {
   const [selectedNode, setSelectedNode] = useState<SelectedNode | null>(null);
@@ -166,9 +168,12 @@ export function useDocumentSelection(
         if (
           !mathSelection.nodeId ||
           selectedNode?.nodeId !== mathSelection.nodeId ||
-          !updateDocumentNode(editor, mathSelection.nodeId, {
-            latex: mathDraft.trim(),
-          })
+          !updateDocumentNode(
+            editor,
+            mathSelection.nodeId,
+            { latex: mathDraft.trim() },
+            documentType,
+          )
         ) {
           setStatus({ kind: 'error', title: statusMessage('selectMathAgain') });
           return;
@@ -198,7 +203,14 @@ export function useDocumentSelection(
         setStatus({ kind: 'success', title: statusMessage('updatedEquation') });
       }
     },
-    [documentWriteLocked, mathDraft, mathSelection, selectedNode, setStatus],
+    [
+      documentType,
+      documentWriteLocked,
+      mathDraft,
+      mathSelection,
+      selectedNode,
+      setStatus,
+    ],
   );
 
   const applyAttributes = (
@@ -208,7 +220,7 @@ export function useDocumentSelection(
   ) => {
     if (!editor || documentWriteLocked) return;
     try {
-      if (!updateDocumentNode(editor, nodeId, attrs))
+      if (!updateDocumentNode(editor, nodeId, attrs, documentType))
         throw new WorkspaceStatusError(statusMessage('selectedElementRemoved'));
       setStatus({ kind: 'success', title: statusMessage('updatedAttributes') });
     } catch (error) {

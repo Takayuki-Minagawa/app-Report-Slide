@@ -9,8 +9,38 @@ import { WorkspaceStatusError, statusMessage } from './status';
 /** Runtime-only object URLs must never be serialized into the document. */
 export type AssetUrls = ReadonlyMap<string, string>;
 
+const assetSizeByUrl = new Map<string, number>();
 const maximumAssetBytes = 20 * 1024 * 1024;
 const maximumTotalAssetBytes = 50 * 1024 * 1024;
+
+/** Records a blob URL so local-asset limits stay accurate after document edits. */
+export function registerAssetUrl(url: string, bytes: number): string {
+  assetSizeByUrl.set(url, bytes);
+  return url;
+}
+
+/** Returns the byte size of distinct, currently retained local image URLs. */
+export function assetByteTotal(urls: AssetUrls): number {
+  let total = 0;
+  const seen = new Set<string>();
+  for (const url of urls.values()) {
+    if (seen.has(url)) continue;
+    seen.add(url);
+    total += assetSizeByUrl.get(url) ?? 0;
+  }
+  return total;
+}
+
+function hasOversizedAsset(urls: AssetUrls): boolean {
+  return [...new Set(urls.values())].some(
+    (url) => (assetSizeByUrl.get(url) ?? 0) > maximumAssetBytes,
+  );
+}
+
+export const imageFileAccept =
+  'image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.svg';
+
+let insertedAssetSerial = 0;
 
 export type DocumentFileFormat = 'markdown' | 'json';
 
@@ -30,6 +60,59 @@ function isImageAsset(file: File): boolean {
   );
 }
 
+function extensionForImage(file: File): string {
+  const extension = /\.(png|jpe?g|webp|gif|svg)$/i.exec(file.name)?.[1];
+  if (extension) return extension.toLowerCase();
+  const type = file.type.toLowerCase();
+  if (type === 'image/png') return 'png';
+  if (type === 'image/jpeg') return 'jpg';
+  if (type === 'image/webp') return 'webp';
+  if (type === 'image/gif') return 'gif';
+  return 'svg';
+}
+
+function encodedAssetFilename(file: File): string | undefined {
+  const filename = file.name.trim().replace(/[\\/]/g, '-').replace(/^\.+/, '');
+  if (!filename) return undefined;
+  return encodeURIComponent(filename).replace(
+    /[!'()*]/g,
+    (character) => '%' + character.charCodeAt(0).toString(16).toUpperCase(),
+  );
+}
+
+/**
+ * Creates an independent local image source for the slide placement picker.
+ * The original filename stays in the final path so a Markdown/JSON export can
+ * resolve it on a later import, while a generated directory prevents a second
+ * selection with the same basename from replacing an earlier figure.
+ */
+export function createInsertedImageAsset(
+  file: File,
+  assets: AssetUrls,
+  occupiedSources: ReadonlySet<string> = new Set(),
+  existingAssetBytes = 0,
+): { source: string; url: string } {
+  if (!isImageAsset(file))
+    throw new WorkspaceStatusError(
+      statusMessage('unsupportedAttachments', file.name),
+    );
+  if (file.size > maximumAssetBytes)
+    throw new WorkspaceStatusError(statusMessage('imageTooLarge'));
+  if (existingAssetBytes + file.size > maximumTotalAssetBytes)
+    throw new WorkspaceStatusError(statusMessage('imagesTooLarge'));
+
+  const filename =
+    encodedAssetFilename(file) ?? 'image.' + extensionForImage(file);
+  let source: string;
+  do {
+    insertedAssetSerial += 1;
+    source = 'assets/placed-image-' + insertedAssetSerial + '/' + filename;
+  } while (assets.has(source) || occupiedSources.has(source));
+  return {
+    source,
+    url: registerAssetUrl(URL.createObjectURL(file), file.size),
+  };
+}
 function normalizedAssetPath(value: string): string {
   const path = value.split(/[?#]/, 1)[0].replace(/\\/g, '/');
   let decoded = path;
@@ -86,8 +169,11 @@ export function createLocalAssetUrls(
         continue;
       }
       const file = matches[0];
-      const url = urlByFile.get(file) ?? URL.createObjectURL(file);
-      urlByFile.set(file, url);
+      let url = urlByFile.get(file);
+      if (!url) {
+        url = registerAssetUrl(URL.createObjectURL(file), file.size);
+        urlByFile.set(file, url);
+      }
       urls.set(source, url);
     }
   } catch (error) {
@@ -98,7 +184,10 @@ export function createLocalAssetUrls(
 }
 
 export function revokeAssetUrls(urls: AssetUrls): void {
-  for (const url of new Set(urls.values())) URL.revokeObjectURL(url);
+  for (const url of new Set(urls.values())) {
+    URL.revokeObjectURL(url);
+    assetSizeByUrl.delete(url);
+  }
 }
 
 export interface ImportedDocument {
@@ -106,6 +195,7 @@ export interface ImportedDocument {
   sourceName: string;
   diagnostics: MarkdownDiagnostic[];
   assets: AssetUrls;
+  assetBytes: number;
   unresolved: string[];
 }
 
@@ -132,13 +222,6 @@ export async function readWorkspaceFiles(
     );
   if (file.size > 5 * 1024 * 1024)
     throw new WorkspaceStatusError(statusMessage('markdownTooLarge'));
-  if (imageFiles.some((asset) => asset.size > maximumAssetBytes))
-    throw new WorkspaceStatusError(statusMessage('imageTooLarge'));
-  if (
-    imageFiles.reduce((total, asset) => total + asset.size, 0) >
-    maximumTotalAssetBytes
-  )
-    throw new WorkspaceStatusError(statusMessage('imagesTooLarge'));
 
   const source = await file.text();
   const result =
@@ -149,7 +232,16 @@ export async function readWorkspaceFiles(
     result.document,
     imageFiles,
   );
-  return { ...result, sourceName: file.name, assets, unresolved };
+  const assetBytes = assetByteTotal(assets);
+  if (hasOversizedAsset(assets)) {
+    revokeAssetUrls(assets);
+    throw new WorkspaceStatusError(statusMessage('imageTooLarge'));
+  }
+  if (assetBytes > maximumTotalAssetBytes) {
+    revokeAssetUrls(assets);
+    throw new WorkspaceStatusError(statusMessage('imagesTooLarge'));
+  }
+  return { ...result, sourceName: file.name, assets, assetBytes, unresolved };
 }
 
 function filenameFor(document: DocumentData, extension: string): string {

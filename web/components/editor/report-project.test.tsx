@@ -226,6 +226,7 @@ describe('chapter workspace lifecycle', () => {
     vi.spyOn(files, 'readWorkspaceFiles').mockResolvedValue({
       document: parseMarkdown('# New chapter').document,
       assets: new Map([['unused.png', 'blob:unused']]),
+      assetBytes: 0,
       sourceName: 'new.md',
       diagnostics: [],
       unresolved: [],

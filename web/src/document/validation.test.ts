@@ -385,4 +385,51 @@ describe('validateDocumentData', () => {
       DocumentValidationError,
     );
   });
+  it('accepts a valid free-positioned figure only in a Slide document', () => {
+    const document = createDefaultDocument('slide', idFactory());
+    document.children.push({
+      type: 'figure',
+      attrs: {
+        nodeId: 'placed-image',
+        src: 'assets/diagram.png',
+        alt: '構成図',
+        title: null,
+        width: 100,
+        align: 'center',
+        slidePlacement: { x: 12.5, y: 18, width: 40, height: 30 },
+      },
+    });
+
+    expect(validateDocumentData(document)).toBe(document);
+  });
+
+  it('rejects malformed placement rectangles and placement in a Report', () => {
+    const invalid = comprehensiveDocument();
+    const invalidFigure = invalid.children.find(
+      (node) => node.type === 'figure',
+    );
+    if (!invalidFigure || invalidFigure.type !== 'figure')
+      throw new Error('figure expected');
+    invalidFigure.attrs.slidePlacement = {
+      x: 98,
+      y: 0,
+      width: 5,
+      height: 20,
+    };
+    expect(() => validateDocumentData(invalid)).toThrow(
+      DocumentValidationError,
+    );
+
+    const report = comprehensiveDocument();
+    const reportFigure = report.children.find((node) => node.type === 'figure');
+    if (!reportFigure || reportFigure.type !== 'figure')
+      throw new Error('figure expected');
+    reportFigure.attrs.slidePlacement = {
+      x: 10,
+      y: 10,
+      width: 30,
+      height: 30,
+    };
+    expect(() => validateDocumentData(report)).toThrow(DocumentValidationError);
+  });
 });

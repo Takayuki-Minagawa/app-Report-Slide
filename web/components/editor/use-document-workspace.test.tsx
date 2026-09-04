@@ -243,4 +243,250 @@ describe('asynchronous document import', () => {
     });
     expect(revokeUrl).toHaveBeenCalledExactlyOnceWith('blob:unmounted');
   });
+  describe('slide image insertion', () => {
+    it('keeps same-named local images independent with default free-placement rectangles', async () => {
+      const revokeUrl = vi.fn();
+      let sequence = 0;
+      vi.stubGlobal(
+        'URL',
+        Object.assign(class extends URL {}, {
+          createObjectURL: () => 'blob:placed-' + ++sequence,
+          revokeObjectURL: revokeUrl,
+        }),
+      );
+      const { result, unmount } = await workspace();
+
+      act(() => result.current.createDocument('slide'));
+      await waitFor(() => expect(result.current.document.type).toBe('slide'));
+      act(() =>
+        result.current.insertSlideImage(
+          new File(['first'], 'architecture.png', { type: 'image/png' }),
+          0,
+        ),
+      );
+      await waitFor(() =>
+        expect(
+          result.current.document.children.filter(
+            (node) => node.type === 'figure',
+          ),
+        ).toHaveLength(1),
+      );
+
+      act(() =>
+        result.current.insertSlideImage(
+          new File(['second'], 'architecture.png', { type: 'image/png' }),
+          0,
+        ),
+      );
+      await waitFor(() =>
+        expect(
+          result.current.document.children.filter(
+            (node) => node.type === 'figure',
+          ),
+        ).toHaveLength(2),
+      );
+
+      const figures = result.current.document.children.filter(
+        (
+          node,
+        ): node is Extract<
+          (typeof result.current.document.children)[number],
+          { type: 'figure' }
+        > => node.type === 'figure',
+      );
+      expect(figures[0].attrs).toMatchObject({
+        alt: 'architecture',
+        slidePlacement: { x: 32, y: 22, width: 36, height: 42 },
+      });
+      expect(figures[0].attrs.src).toMatch(
+        /^assets\/placed-image-\d+\/architecture\.png$/,
+      );
+      expect(figures[1].attrs.src).toMatch(
+        /^assets\/placed-image-\d+\/architecture\.png$/,
+      );
+      expect(figures[1].attrs.src).not.toBe(figures[0].attrs.src);
+      expect(result.current.resolveImageUrl(figures[0].attrs.src)).toBe(
+        'blob:placed-1',
+      );
+      expect(result.current.resolveImageUrl(figures[1].attrs.src)).toBe(
+        'blob:placed-2',
+      );
+
+      unmount();
+      expect(revokeUrl.mock.calls.map(([url]) => url)).toEqual([
+        'blob:placed-1',
+        'blob:placed-2',
+      ]);
+    });
+
+    it('uses pageBreak boundaries when inserting into a selected Slide page', async () => {
+      const revokeUrl = vi.fn();
+      vi.stubGlobal(
+        'URL',
+        Object.assign(class extends URL {}, {
+          createObjectURL: () => 'blob:page-break',
+          revokeObjectURL: revokeUrl,
+        }),
+      );
+      const { result, unmount } = await workspace();
+      const source = [
+        '---',
+        'type: slide',
+        'title: Page break insertion',
+        '---',
+        '',
+        '# First',
+        '',
+        '::: pagebreak',
+        ':::',
+        '',
+        '# Second',
+        '',
+        '::: pagebreak',
+        ':::',
+        '',
+        '# Third',
+      ].join('\n');
+
+      act(() => result.current.changeView('markdown'));
+      await waitFor(() => expect(result.current.view).toBe('markdown'));
+      act(() => result.current.updateMarkdown(source));
+      act(() => result.current.applyMarkdown());
+      await waitFor(() => expect(result.current.document.type).toBe('slide'));
+      act(() =>
+        result.current.insertSlideImage(
+          new File(['image'], 'middle.png', { type: 'image/png' }),
+          1,
+        ),
+      );
+      await waitFor(() =>
+        expect(
+          result.current.document.children.some(
+            (node) => node.type === 'figure',
+          ),
+        ).toBe(true),
+      );
+
+      const figureIndex = result.current.document.children.findIndex(
+        (node) => node.type === 'figure',
+      );
+      const breakIndexes = result.current.document.children
+        .map((node, index) => (node.type === 'pageBreak' ? index : -1))
+        .filter((index) => index >= 0);
+      expect(breakIndexes).toHaveLength(2);
+      expect(figureIndex).toBeGreaterThan(breakIndexes[0]);
+      expect(figureIndex).toBeLessThan(breakIndexes[1]);
+
+      unmount();
+      expect(revokeUrl).toHaveBeenCalledExactlyOnceWith('blob:page-break');
+    });
+
+    it('rejects an image that would exceed the total local-asset budget', async () => {
+      let sequence = 0;
+      const createUrl = vi.fn(() => 'blob:budget-' + ++sequence);
+      vi.stubGlobal(
+        'URL',
+        Object.assign(class extends URL {}, {
+          createObjectURL: createUrl,
+          revokeObjectURL: vi.fn(),
+        }),
+      );
+      const { result } = await workspace();
+      const image = (name: string) => {
+        const file = new File(['image'], name, { type: 'image/png' });
+        Object.defineProperty(file, 'size', { value: 20 * 1024 * 1024 });
+        return file;
+      };
+
+      act(() => result.current.createDocument('slide'));
+      await waitFor(() => expect(result.current.document.type).toBe('slide'));
+      act(() => result.current.insertSlideImage(image('one.png'), 0));
+      await waitFor(() =>
+        expect(
+          result.current.document.children.filter(
+            (node) => node.type === 'figure',
+          ),
+        ).toHaveLength(1),
+      );
+      act(() => result.current.insertSlideImage(image('two.png'), 0));
+      await waitFor(() =>
+        expect(
+          result.current.document.children.filter(
+            (node) => node.type === 'figure',
+          ),
+        ).toHaveLength(2),
+      );
+      act(() => result.current.insertSlideImage(image('three.png'), 0));
+
+      await waitFor(() =>
+        expect(result.current.displayedStatus.kind).toBe('error'),
+      );
+      expect(
+        result.current.document.children.filter(
+          (node) => node.type === 'figure',
+        ),
+      ).toHaveLength(2);
+      expect(createUrl).toHaveBeenCalledTimes(2);
+    });
+
+    it('reclaims the image budget after visual edits remove placed images', async () => {
+      let sequence = 0;
+      const revokeUrl = vi.fn();
+      vi.stubGlobal(
+        'URL',
+        Object.assign(class extends URL {}, {
+          createObjectURL: () => 'blob:reclaim-' + ++sequence,
+          revokeObjectURL: revokeUrl,
+        }),
+      );
+      const { result, unmount } = await workspace();
+      const image = (name: string) => {
+        const file = new File(['image'], name, { type: 'image/png' });
+        Object.defineProperty(file, 'size', { value: 20 * 1024 * 1024 });
+        return file;
+      };
+
+      act(() => result.current.createDocument('slide'));
+      await waitFor(() => expect(result.current.document.type).toBe('slide'));
+      act(() => result.current.insertSlideImage(image('first.png'), 0));
+      act(() => result.current.insertSlideImage(image('second.png'), 0));
+      await waitFor(() =>
+        expect(
+          result.current.document.children.filter(
+            (node) => node.type === 'figure',
+          ),
+        ).toHaveLength(2),
+      );
+
+      act(() => void result.current.editor!.commands.clearContent());
+      await waitFor(() =>
+        expect(
+          result.current.document.children.filter(
+            (node) => node.type === 'figure',
+          ),
+        ).toHaveLength(0),
+      );
+      expect(revokeUrl.mock.calls.map(([url]) => url)).toEqual([
+        'blob:reclaim-1',
+        'blob:reclaim-2',
+      ]);
+
+      act(() => result.current.insertSlideImage(image('replacement.png'), 0));
+      await waitFor(() =>
+        expect(
+          result.current.document.children.filter(
+            (node) => node.type === 'figure',
+          ),
+        ).toHaveLength(1),
+      );
+      expect(sequence).toBe(3);
+
+      unmount();
+      expect(revokeUrl.mock.calls.map(([url]) => url)).toEqual([
+        'blob:reclaim-1',
+        'blob:reclaim-2',
+        'blob:reclaim-3',
+      ]);
+    });
+  });
 });
