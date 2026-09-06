@@ -1,4 +1,5 @@
 import { resolveDocumentTheme } from './metadata';
+import type { PageSettings } from './page-settings';
 import type { TableCellBorders } from './table';
 
 export type DocumentType = 'report' | 'slide';
@@ -17,6 +18,7 @@ export interface DocumentMetadata {
   author?: string;
   date?: string;
   theme?: string;
+  page_settings?: PageSettings;
   [key: string]: JsonValue | undefined;
 }
 

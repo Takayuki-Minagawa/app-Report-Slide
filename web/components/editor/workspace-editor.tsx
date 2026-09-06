@@ -13,6 +13,11 @@ import type { DocumentData } from '@/src/document/model';
 import type { DocumentAnalysis } from '@/src/document/semantics';
 import type { DisplayedWorkspaceStatus } from '@/src/workspace/status';
 import type { WorkspaceView } from './use-document-workspace';
+import {
+  reportPageStyle,
+  resolvePageSettings,
+} from '@/src/document/page-settings';
+import { pageSettingsMessages } from '@/src/i18n/page-settings';
 import { FormatToolbar } from './format-toolbar';
 import { TableToolbar } from './table-toolbar';
 
@@ -59,7 +64,8 @@ export function WorkspaceEditor({
   applyMarkdown,
   discardMarkdown,
 }: WorkspaceEditorProps) {
-  const { copy } = useAppPreferences();
+  const { copy, locale } = useAppPreferences();
+  const settings = resolvePageSettings((previewDocument ?? document).metadata);
   const views =
     document.type === 'slide'
       ? ([
@@ -92,7 +98,9 @@ export function WorkspaceEditor({
           ))}
         </div>
         <span className="text-[10px] text-muted-foreground">
-          {document.type === 'report' ? 'A4' : '16:9'} ・ 100%
+          {document.type === 'report'
+            ? `${settings.paper} ・ ${pageSettingsMessages[locale][settings.orientation]}`
+            : '16:9'}
         </span>
       </div>
 
@@ -102,8 +110,21 @@ export function WorkspaceEditor({
           <TableToolbar editor={editor} />
           <ScrollArea className="min-h-0 flex-1">
             <div className="editor-stage">
-              <div className={`editor-paper editor-paper-${document.type}`}>
-                <EditorContent editor={editor} />
+              <div
+                className={
+                  document.type === 'report' ? 'report-sheet' : 'contents'
+                }
+                style={
+                  document.type === 'report'
+                    ? reportPageStyle((previewDocument ?? document).metadata)
+                    : undefined
+                }
+              >
+                <div
+                  className={`editor-paper editor-paper-${document.type}${document.type === 'report' ? ' report-layout' : ''}`}
+                >
+                  <EditorContent editor={editor} />
+                </div>
               </div>
             </div>
           </ScrollArea>

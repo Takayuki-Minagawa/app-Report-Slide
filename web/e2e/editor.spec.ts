@@ -29,6 +29,65 @@ async function downloadText(download: Download): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+test('ページ設定を反映しMarkdown保存後に読み直せる', async ({ page }) => {
+  await page.goto('/');
+  await waitForEditor(page);
+  await page.getByRole('button', { name: 'Markdownへ切り替え' }).click();
+  await page
+    .getByRole('textbox', { name: 'Markdown原稿' })
+    .fill('# 設定検証\n\n本文段落。\n\n次の段落。');
+  await page.getByRole('button', { name: 'Markdownを適用' }).click();
+  await page.getByRole('combobox', { name: '用紙サイズ' }).selectOption('A5');
+  await page
+    .getByRole('combobox', { name: '用紙の向き' })
+    .selectOption('landscape');
+  await page.getByRole('spinbutton', { name: '左余白（mm）' }).fill('15');
+  await page
+    .getByRole('spinbutton', { name: '段落先頭の字下げ（字）' })
+    .fill('1');
+  await page.getByRole('spinbutton', { name: '行間（倍率）' }).fill('1.5');
+  await page.getByRole('button', { name: 'ページ設定を適用' }).click();
+  await expect(page.getByLabel('未保存')).toBeVisible();
+  await page.getByRole('button', { name: '完成プレビューへ切り替え' }).click();
+  const layout = await page.locator('.report-preview').evaluate((element) => {
+    const sheet = getComputedStyle(element);
+    const paragraph = getComputedStyle(
+      element.querySelector('.document-renderer > p')!,
+    );
+    const width = element.getBoundingClientRect().width;
+    return {
+      marginRatio: parseFloat(sheet.paddingLeft) / width,
+      pageRatio: parseFloat(sheet.minHeight) / width,
+      indentRatio:
+        parseFloat(paragraph.textIndent) / parseFloat(paragraph.fontSize),
+      lineRatio:
+        parseFloat(paragraph.lineHeight) / parseFloat(paragraph.fontSize),
+    };
+  });
+  expect(layout.marginRatio).toBeCloseTo(15 / 210, 3);
+  expect(layout.pageRatio).toBeCloseTo(148 / 210, 3);
+  expect(layout.indentRatio).toBeCloseTo(1, 3);
+  expect(layout.lineRatio).toBeCloseTo(1.5, 3);
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Markdown', exact: true }).click();
+  const saved = await downloadText(await downloadPromise);
+  expect(saved).toContain('page_settings:');
+  expect(saved).toContain('margin_left: 15');
+  await page.getByRole('button', { name: '標準設定に戻す' }).click();
+  await expect(page.getByRole('combobox', { name: '用紙サイズ' })).toHaveValue(
+    'A4',
+  );
+  await page.getByRole('button', { name: 'Markdownへ切り替え' }).click();
+  await page.getByRole('textbox', { name: 'Markdown原稿' }).fill(saved);
+  await page.getByRole('button', { name: 'Markdownを適用' }).click();
+  await expect(page.getByRole('combobox', { name: '用紙サイズ' })).toHaveValue(
+    'A5',
+  );
+  await expect(
+    page.getByRole('spinbutton', { name: '行間（倍率）' }),
+  ).toHaveValue('1.5');
+});
+
 test('Markdownの不正入力を拒否して現在文書を維持する', async ({ page }) => {
   await page.goto('/');
 
@@ -107,7 +166,9 @@ test('Markdown下書きをタブ間で保持し保存時に現在文書へ適用
   const source = page.getByRole('textbox', { name: 'Markdown原稿' });
   await expect(page.getByRole('button', { name: '元に戻す' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'やり直す' })).toBeDisabled();
-  await expect(page.getByRole('combobox')).toBeDisabled();
+  for (const name of ['テーマ', '用紙サイズ', '用紙の向き']) {
+    await expect(page.getByRole('combobox', { name })).toBeDisabled();
+  }
   await source.fill(draft);
   await expect(page.getByLabel('未保存')).toBeVisible();
 

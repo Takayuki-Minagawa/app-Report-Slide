@@ -78,7 +78,7 @@ describe('document feature workspace', () => {
       screen.getByRole('button', { name: '完成プレビューへ切り替え' }),
     );
     expect(screen.getByRole('button', { name: '属性を適用' })).toBeDisabled();
-    expect(screen.getByLabelText('A4レポートプレビュー')).toHaveTextContent(
+    expect(screen.getByLabelText('レポートプレビュー')).toHaveTextContent(
       '図 1 — 応答',
     );
   });

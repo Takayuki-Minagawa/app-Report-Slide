@@ -28,6 +28,11 @@ import {
 import { localizeDiagnosticMessage } from '@/src/i18n/diagnostics';
 import type { DisplayedWorkspaceStatus } from '@/src/workspace/status';
 import type { SelectedNode } from './use-document-selection';
+import { PageSettingsPanel } from './page-settings-panel';
+import {
+  resolvePageSettings,
+  type PageSettings,
+} from '@/src/document/page-settings';
 import { SemanticProperties } from './semantic-properties';
 
 interface WorkspacePropertiesProps {
@@ -44,6 +49,7 @@ interface WorkspacePropertiesProps {
   applyMath: () => void;
   applyAttributes: (nodeId: string, attrs: Record<string, unknown>) => void;
   updateTheme: (theme: string) => void;
+  updatePageSettings: (settings: PageSettings) => void;
   updateDocumentFlag: (flag: DocumentFlag, checked: boolean) => void;
   displayedStatus: DisplayedWorkspaceStatus;
   dirty: boolean;
@@ -63,6 +69,7 @@ export function WorkspaceProperties({
   applyMath,
   applyAttributes,
   updateTheme,
+  updatePageSettings,
   updateDocumentFlag,
   displayedStatus,
   dirty,
@@ -198,6 +205,17 @@ export function WorkspaceProperties({
             )}
           </section>
 
+          {document.type === 'report' && (
+            <>
+              <Separator />
+              <PageSettingsPanel
+                key={`${document.children[0]?.attrs.nodeId}:${JSON.stringify(resolvePageSettings(document.metadata))}`}
+                settings={resolvePageSettings(document.metadata)}
+                disabled={documentWriteLocked}
+                onApply={updatePageSettings}
+              />
+            </>
+          )}
           <Separator />
 
           <section>

@@ -7,6 +7,7 @@
   },
   "scripts": {
     "dev": "vinext dev",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
     "build": "tsc --noEmit && vinext build",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint",

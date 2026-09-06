@@ -201,7 +201,9 @@ describe('EditorWorkspace', () => {
     const source = await screen.findByRole('textbox', { name: 'Markdown原稿' });
     expect(screen.getByRole('button', { name: '元に戻す' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'やり直す' })).toBeDisabled();
-    expect(screen.getByRole('combobox')).toBeDisabled();
+    for (const select of screen.getAllByRole('combobox')) {
+      expect(select).toBeDisabled();
+    }
     fireEvent.change(source, {
       target: { value: `${(source as HTMLTextAreaElement).value}\n\n競合防止` },
     });

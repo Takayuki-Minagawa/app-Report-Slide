@@ -444,3 +444,60 @@
 .preview-table-wrap p + p {
   margin-top: 0.5rem;
 }
+
+/* Physical page proportions, scaled to fit the current editing/preview pane. */
+.report-sheet {
+  width: min(var(--report-width), 100%);
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.report-sheet .report-layout {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--report-height);
+  padding: var(--report-top) var(--report-right) var(--report-bottom)
+    var(--report-left);
+  font-size: var(--report-font-size);
+}
+
+.report-layout .document-renderer,
+.report-layout .tiptap {
+  font-size: inherit;
+  line-height: var(--report-line-height);
+  overflow-wrap: anywhere;
+}
+
+.report-layout .document-renderer > p,
+.report-layout .tiptap > p {
+  text-indent: var(--report-indent);
+  margin-block: 0 var(--report-paragraph-spacing);
+}
+
+.report-layout :is(.document-renderer, .tiptap) h1 {
+  font-size: 2.15em;
+}
+.report-layout :is(.document-renderer, .tiptap) h2 {
+  font-size: 1.5em;
+}
+.report-layout :is(.document-renderer, .tiptap) h3 {
+  font-size: 1.2em;
+}
+.report-layout
+  :is(.document-renderer, .tiptap)
+  :is(table, figcaption, caption) {
+  font-size: 0.86em;
+}
+
+.report-layout > footer {
+  bottom: max(0px, calc(var(--report-bottom) / 2 - 0.5em));
+  font-size: 0.72em;
+  line-height: 1;
+}
+
+.report-layout .tiptap {
+  min-height: max(
+    3em,
+    calc(var(--report-height) - var(--report-top) - var(--report-bottom))
+  );
+}

@@ -1,0 +1,48 @@
+export const pageSettingsMessages = {
+  ja: {
+    title: 'ページ設定',
+    paper: '用紙サイズ',
+    orientation: '用紙の向き',
+    portrait: '縦',
+    landscape: '横',
+    margin_top: '上余白（mm）',
+    margin_bottom: '下余白（mm）',
+    margin_left: '左余白（mm）',
+    margin_right: '右余白（mm）',
+    font_size: '本文サイズ（pt）',
+    first_line_indent: '段落先頭の字下げ（字）',
+    line_height: '行間（倍率）',
+    paragraph_spacing: '段落間隔（pt）',
+    apply: 'ページ設定を適用',
+    reset: '標準設定に戻す',
+    help: '適用後、Markdown／JSONに保存されます。プロジェクトでは全章に共通で適用され、プロジェクトZIPまたは全体出力に保存されます。',
+    preview:
+      '編集・完成プレビューに反映します。字下げは本文段落のみが対象です。自動改ページは行いません。',
+    invalid:
+      '入力範囲を確認してください。余白を除いた本文領域は幅・高さとも40 mm以上必要です。',
+    pending: '設定はまだ適用されていません。',
+  },
+  en: {
+    title: 'Page settings',
+    paper: 'Paper size',
+    orientation: 'Orientation',
+    portrait: 'Portrait',
+    landscape: 'Landscape',
+    margin_top: 'Top margin (mm)',
+    margin_bottom: 'Bottom margin (mm)',
+    margin_left: 'Left margin (mm)',
+    margin_right: 'Right margin (mm)',
+    font_size: 'Body font size (pt)',
+    first_line_indent: 'First-line indent (em)',
+    line_height: 'Line spacing (multiplier)',
+    paragraph_spacing: 'Paragraph spacing (pt)',
+    apply: 'Apply page settings',
+    reset: 'Restore standard settings',
+    help: 'After applying, save as Markdown or JSON. In a project, settings apply to all chapters and are saved in the project ZIP or combined export.',
+    preview:
+      'Reflected in the editor and preview. Indentation applies to body paragraphs only. Pages do not break automatically.',
+    invalid:
+      'Check the input ranges. Margins must leave a body area at least 40 mm wide and high.',
+    pending: 'These settings have not been applied yet.',
+  },
+} as const;

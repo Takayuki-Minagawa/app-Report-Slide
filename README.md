@@ -22,6 +22,7 @@ GitHub Pagesを有効にすると、[公開版](https://takayuki-minagawa.github
 - Slide文書の単一HTML出力（スライド送り、全画面表示、数式フォント・取り込んだ画像、結合セル・罫線の埋め込み）
 - Slideの「図を配置」キャンバス（画像選択、ドラッグ移動、8方向リサイズ、矢印キーによる微調整）
 - Report／Slide向けの基本テーマと完成プレビュー
+- Reportのページ設定（用紙・向き・余白・本文サイズ・字下げ・行間・段落間隔）、Markdown／JSON／プロジェクトZIPへの保存
 - 3ペイン構成のNavigator、Editor、Properties
 - Undo／Redo、Markdown直接編集、破損入力を適用しないエラー処理
 - ヘッダーから切り替えられるライト／ダークモード、日本語／英語の操作画面、アプリ内かんたんガイド
@@ -37,6 +38,10 @@ GitHub Pagesを有効にすると、[公開版](https://takayuki-minagawa.github
 - 有効な章を通した目次・番号・相互参照と、ページを切り替える全体プレビュー
 
 使い方・構文・制限は [文書機能ガイド](./web/docs/document-features.md) を参照してください。最初の操作は [かんたんガイド（日本語）](./web/docs/quick-start.ja.md) / [Quick guide (English)](./web/docs/quick-start.en.md) にまとめています。元の全体仕様は [仕様書](./md_report_slide_editor_web_spec.md) にあります。自動ページ割り、厳密なA4組版、PDF出力、ReportのHTML出力、脚注・文献、段組み、Chart、TeXファイル互換はまだ未実装です。
+
+## ページ設定
+
+右の「プロパティ」→「ページ設定」で変更し、「ページ設定を適用」を押します。編集画面と完成プレビューへ反映されます。適用後はMarkdown／JSON、章別プロジェクトではプロジェクトZIPまたは全体出力に保存してください。用紙・単位・保存形式・制限は [ページ設定ガイド](./web/docs/page-settings.ja.md) を参照してください。
 
 ## 表の高度編集
 
@@ -83,11 +88,11 @@ npm test
 npm run build
 ```
 
-GitHub Actionsでも同じゲートを実行します。
+これらのチェックはローカルで実行します。まとめて実行する場合は `npm run check` を使えます。E2Eは `npx playwright install chromium` の後、`npm run test:e2e` でローカル実行します。通常のCI用GitHub Actionsは使用しません。
 
 ### GitHub Pagesの運用
 
-`.github/workflows/deploy-pages.yml` はPull Requestで静的エクスポートを検証し、`main` へのpush時だけGitHub Pagesへデプロイします。GitHub Pagesが未設定のリポジトリでは、初回だけ **Settings → Pages → Build and deployment → Source** で **GitHub Actions** を選択してください。公開URLやリポジトリ配下のパスは、ワークフローがGitHub Pagesの設定から自動的に反映します。
+GitHub Actionsは `.github/workflows/deploy-pages.yml` による最終公開だけに使用します。Pull Requestでは実行せず、`main` へのpush（または `main` を指定した手動実行）で公開用静的サイトをビルドし、GitHub Pagesへデプロイします。品質検証はpush前にローカルで完了してください。GitHub Pagesが未設定のリポジトリでは、初回だけ **Settings → Pages → Build and deployment → Source** で **GitHub Actions** を選択してください。公開URLやリポジトリ配下のパスは、ワークフローがGitHub Pagesの設定から自動的に反映します。
 
 ## 設計
 

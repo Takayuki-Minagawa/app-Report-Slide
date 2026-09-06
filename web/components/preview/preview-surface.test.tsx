@@ -28,14 +28,14 @@ describe('semantic preview', () => {
     );
     fireEvent.click(screen.getByRole('link', { name: '節 2' }));
     expect(screen.getByRole('heading', { name: '2 Second' })).toHaveFocus();
-    expect(screen.getByLabelText('A4レポートプレビュー')).toHaveAttribute(
+    expect(screen.getByLabelText('レポートプレビュー')).toHaveAttribute(
       'data-page',
       '2',
     );
     fireEvent.click(screen.getByRole('button', { name: '前のページ' }));
     fireEvent.click(screen.getByRole('link', { name: '1 First' }));
     expect(screen.getByRole('heading', { name: '1 First' })).toHaveFocus();
-    expect(screen.getByLabelText('A4レポートプレビュー')).toHaveAttribute(
+    expect(screen.getByLabelText('レポートプレビュー')).toHaveAttribute(
       'data-page',
       '1',
     );
@@ -51,12 +51,12 @@ describe('semantic preview', () => {
       </AppPreferencesProvider>,
     );
     expect(container.querySelectorAll('.report-preview')).toHaveLength(1);
-    expect(screen.getByLabelText('A4レポートプレビュー')).toHaveAttribute(
+    expect(screen.getByLabelText('レポートプレビュー')).toHaveAttribute(
       'data-page',
       '1',
     );
     fireEvent.click(screen.getByRole('link', { name: '図 1' }));
-    expect(screen.getByLabelText('A4レポートプレビュー')).toHaveAttribute(
+    expect(screen.getByLabelText('レポートプレビュー')).toHaveAttribute(
       'data-page',
       '2',
     );
@@ -66,7 +66,7 @@ describe('semantic preview', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: '前のページ' }));
     fireEvent.click(screen.getByRole('link', { name: '2 Results' }));
-    expect(screen.getByLabelText('A4レポートプレビュー')).toHaveAttribute(
+    expect(screen.getByLabelText('レポートプレビュー')).toHaveAttribute(
       'data-page',
       '2',
     );
@@ -122,7 +122,7 @@ describe('semantic preview', () => {
         <PreviewSurface document={document} />
       </AppPreferencesProvider>,
     );
-    expect(screen.getAllByLabelText('A4レポートプレビュー')).toHaveLength(2);
+    expect(screen.getAllByLabelText('レポートプレビュー')).toHaveLength(2);
     expect(screen.getByRole('navigation', { name: '目次' })).toHaveTextContent(
       '1 Intro',
     );

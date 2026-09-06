@@ -10,6 +10,10 @@ import {
   type DocumentNode,
   type DocumentType,
 } from '@/src/document/model';
+import {
+  pageSettingsSchema,
+  type PageSettings,
+} from '@/src/document/page-settings';
 import type { DocumentFlag } from '@/src/document/metadata';
 import { migrateDocumentData } from '@/src/document/validation';
 import {
@@ -914,6 +918,23 @@ export function useDocumentWorkspace() {
     }
   };
 
+  const updatePageSettings = (settings: PageSettings) => {
+    if (documentWriteLocked) return;
+    const pageSettings = pageSettingsSchema.safeParse(settings);
+    if (!pageSettings.success) return;
+    const updates = { page_settings: pageSettings.data };
+    if (projectSession) {
+      projectActions.updateProjectMetadata(updates);
+      return;
+    }
+    invalidatePendingImport();
+    setDocument((current) => ({
+      ...current,
+      metadata: { ...current.metadata, ...updates },
+    }));
+    setDocumentDirty(true);
+  };
+
   const updateTheme = (theme: string) => {
     if (documentWriteLocked) return;
     if (projectSession) {
@@ -980,6 +1001,7 @@ export function useDocumentWorkspace() {
     saveDocument,
     exportHtml,
     htmlExporting,
+    updatePageSettings,
     updateTheme,
     updateDocumentFlag,
   };

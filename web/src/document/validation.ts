@@ -4,6 +4,7 @@ import { isSafeResourceUrl } from '@/src/security/resource-url';
 
 import type { DocumentData } from './model';
 import { booleanMetadataKeys, stringMetadataKeys } from './metadata';
+import { pageSettingsIssues } from './page-settings';
 import { labelPattern, semanticTypes } from './semantics';
 import { isTableCellBorders, tableBorderSides } from './table';
 import { isSlideImagePlacement } from './slide-layout';
@@ -760,6 +761,11 @@ export function validateDocumentData(value: unknown): DocumentData {
 
   const issues: string[] = [];
   const metadata = result.data.metadata;
+  issues.push(
+    ...pageSettingsIssues(metadata.page_settings).map(
+      (issue) => `metadata.${issue}`,
+    ),
+  );
   if ('type' in metadata) {
     issues.push('metadata.type: typeは文書ルートの予約キーです');
   }

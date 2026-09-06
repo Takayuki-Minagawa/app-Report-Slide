@@ -1,3 +1,4 @@
+import { reportPageStyle } from '@/src/document/page-settings';
 import type { DocumentData, DocumentNode } from '@/src/document/model';
 import { resolveDocumentTheme } from '@/src/document/metadata';
 import type { DocumentAnalysis } from '@/src/document/semantics';
@@ -33,10 +34,10 @@ export function DocumentPage({
 }: DocumentPageProps) {
   const slide = document.type === 'slide';
   const copy = messages[locale];
-  return (
+  const page = (
     <article
       id={id}
-      className={`${slide ? 'slide-preview' : 'report-preview'} ${className}`.trim()}
+      className={`${slide ? 'slide-preview' : 'report-preview report-layout'} ${className}`.trim()}
       data-theme={resolveDocumentTheme(document.type, document.metadata.theme)}
       aria-label={
         slide ? copy.preview.slidePreview : copy.preview.reportPreview
@@ -63,5 +64,12 @@ export function DocumentPage({
         )}
       </footer>
     </article>
+  );
+  return slide ? (
+    page
+  ) : (
+    <div className="report-sheet" style={reportPageStyle(document.metadata)}>
+      {page}
+    </div>
   );
 }

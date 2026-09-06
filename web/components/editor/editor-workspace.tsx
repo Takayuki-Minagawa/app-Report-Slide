@@ -57,6 +57,7 @@ export function EditorWorkspace() {
       setMathDraft={workspace.setMathDraft}
       applyMath={workspace.applyMath}
       applyAttributes={workspace.applyAttributes}
+      updatePageSettings={workspace.updatePageSettings}
       updateTheme={workspace.updateTheme}
       updateDocumentFlag={workspace.updateDocumentFlag}
       displayedStatus={workspace.displayedStatus}
