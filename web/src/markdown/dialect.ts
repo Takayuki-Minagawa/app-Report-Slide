@@ -41,16 +41,24 @@ export function createMarkdownIt(): MarkdownIt {
         );
       const pageBreak = /^:::\s+(pagebreak|slidebreak)\s*$/.exec(line);
       const advancedTable = /^:::\s+kumi-table\s*$/.test(line);
-      if (!attributes && !pageBreak && !advancedTable) return false;
+      const advancedChart = /^:::\s+kumi-chart\s*$/.test(line);
+      if (!attributes && !pageBreak && !advancedTable && !advancedChart)
+        return false;
       if (silent) return true;
-      if (advancedTable) {
+      if (advancedTable || advancedChart) {
         let closingLine = startLine + 1;
         while (closingLine < endLine && lineAt(closingLine) !== ':::') {
           closingLine += 1;
         }
         const closed = closingLine < endLine;
         const token = state.push(
-          closed ? 'kumi_advanced_table' : 'kumi_invalid_advanced_table',
+          closed
+            ? advancedChart
+              ? 'kumi_advanced_chart'
+              : 'kumi_advanced_table'
+            : advancedChart
+              ? 'kumi_invalid_advanced_chart'
+              : 'kumi_invalid_advanced_table',
           '',
           0,
         );

@@ -5,10 +5,12 @@ import {
   FileCode2,
   FileJson,
   FileText,
+  FolderArchive,
   Languages,
   Moon,
   PanelLeftOpen,
   Redo2,
+  Search,
   Save,
   SlidersHorizontal,
   Sun,
@@ -29,10 +31,12 @@ interface WorkspaceHeaderProps {
   dirty: boolean;
   documentWriteLocked: boolean;
   saveDocument: (format: DocumentFileFormat) => void;
+  saveArchive: () => Promise<void>;
   exportHtml: () => Promise<void>;
   htmlExporting: boolean;
   openNavigator: () => void;
   openProperties: () => void;
+  toggleSearch: () => void;
 }
 
 export function WorkspaceHeader({
@@ -42,10 +46,12 @@ export function WorkspaceHeader({
   dirty,
   documentWriteLocked,
   saveDocument,
+  saveArchive,
   exportHtml,
   htmlExporting,
   openNavigator,
   openProperties,
+  toggleSearch,
 }: WorkspaceHeaderProps) {
   const {
     copy,
@@ -145,6 +151,16 @@ export function WorkspaceHeader({
           {locale === 'ja' ? 'EN' : '日本語'}
         </Button>
         <UserManualDialog />
+        <Button
+          aria-label={locale === 'ja' ? '検索と置換' : 'Search and replace'}
+          title={locale === 'ja' ? '検索と置換' : 'Search and replace'}
+          size="icon-sm"
+          variant="ghost"
+          type="button"
+          onClick={toggleSearch}
+        >
+          <Search />
+        </Button>
         <Separator orientation="vertical" className="mx-1 h-6 self-center" />
         <Button
           aria-label={copy.workspace.undo}
@@ -165,6 +181,20 @@ export function WorkspaceHeader({
           <Redo2 />
         </Button>
         <Separator orientation="vertical" className="mx-1 h-6 self-center" />
+        {!project && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void saveArchive()}
+            title={
+              locale === 'ja'
+                ? '画像を含む編集用ZIP'
+                : 'Editable ZIP with images'
+            }
+          >
+            <FolderArchive data-icon="inline-start" /> ZIP
+          </Button>
+        )}
         <Button
           size="sm"
           variant="outline"
@@ -173,23 +203,31 @@ export function WorkspaceHeader({
           <FileJson data-icon="inline-start" />{' '}
           {project ? copy.project.saveChapterJson : 'JSON'}
         </Button>
-        {document.type === 'slide' && (
-          <Button
-            size="sm"
-            variant="outline"
-            aria-label={
-              htmlExporting
-                ? copy.workspace.exportingHtml
-                : copy.workspace.exportHtml
-            }
-            title={copy.workspace.exportHtml}
-            aria-busy={htmlExporting}
-            disabled={htmlExporting}
-            onClick={() => void exportHtml()}
-          >
-            <FileCode2 data-icon="inline-start" /> HTML
-          </Button>
-        )}
+        <Button
+          size="sm"
+          variant="outline"
+          aria-label={
+            htmlExporting
+              ? copy.workspace.exportingHtml
+              : document.type === 'slide'
+                ? copy.workspace.exportHtml
+                : locale === 'ja'
+                  ? 'Report HTMLを出力'
+                  : 'Export Report HTML'
+          }
+          title={
+            document.type === 'slide'
+              ? copy.workspace.exportHtml
+              : locale === 'ja'
+                ? 'Report HTMLを出力'
+                : 'Export Report HTML'
+          }
+          aria-busy={htmlExporting}
+          disabled={htmlExporting}
+          onClick={() => void exportHtml()}
+        >
+          <FileCode2 data-icon="inline-start" /> HTML
+        </Button>
         <Button size="sm" onClick={() => saveDocument('markdown')}>
           <Save data-icon="inline-start" />{' '}
           {project ? copy.project.saveChapterMarkdown : 'Markdown'}

@@ -11,6 +11,7 @@ import { Plugin } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 
 import { createNodeId } from '@/src/document/model';
+import { validateDocumentData } from '@/src/document/validation';
 import {
   isSlideImagePlacement,
   parseSlideImagePlacement,
@@ -52,6 +53,7 @@ const identifiedTypes = [
   'inlineImage',
   'figure',
   'blockMath',
+  'chart',
   'table',
   'tableRow',
   'tableHeader',
@@ -334,6 +336,64 @@ function createInlineImageExtension(
   });
 }
 
+const Chart = Node.create({
+  name: 'chart',
+  group: 'block',
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return {
+      chartType: { default: 'line' },
+      data: {
+        default: [
+          { label: 'A', x: 1, y: 1 },
+          { label: 'B', x: 2, y: 2 },
+        ],
+      },
+      xLabel: { default: 'X' },
+      yLabel: { default: 'Y' },
+      series: { default: 'Series 1' },
+      alt: { default: 'Chart' },
+      width: { default: 100 },
+      caption: { default: null },
+    };
+  },
+  parseHTML() {
+    return [
+      {
+        tag: 'div[data-kumi-chart]',
+        getAttrs: (element) => {
+          try {
+            const raw = element.getAttribute('data-kumi-chart') ?? '';
+            if (raw.length > 100_000) return false;
+            const attrs: unknown = JSON.parse(raw);
+            const chart = validateDocumentData({
+              schemaVersion: 2,
+              type: 'report',
+              metadata: {},
+              children: [{ type: 'chart', attrs }],
+            }).children[0];
+            return chart.type === 'chart' ? chart.attrs : false;
+          } catch {
+            return false;
+          }
+        },
+      },
+    ];
+  },
+  renderHTML({ node, HTMLAttributes }) {
+    return [
+      'div',
+      mergeAttributes(HTMLAttributes, {
+        'data-kumi-chart': JSON.stringify(node.attrs),
+        class: 'kumi-chart',
+        contenteditable: 'false',
+      }),
+      `Chart: ${node.attrs.series} (${node.attrs.data.length} points)`,
+    ];
+  },
+});
+
 export function createEditorExtensions({
   onMathSelect,
   resolveImageUrl = (source) => source,
@@ -416,6 +476,7 @@ export function createEditorExtensions({
         referrerpolicy: 'no-referrer',
       },
     }),
+    Chart,
     TableKit.configure({
       table: {
         resizable: false,

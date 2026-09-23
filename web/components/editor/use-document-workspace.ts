@@ -859,6 +859,50 @@ export function useDocumentWorkspace() {
     }
   };
 
+  const saveArchive = async () => {
+    const revision = ++importRevision.current;
+    try {
+      const snapshot = markdownDirty
+        ? parseMarkdown(markdownDraft, { fallbackType: document.type })
+        : { document: currentDocument(editor, document), diagnostics: [] };
+      validateChapterDraft(snapshot.document);
+      const { writeDocumentArchive } =
+        await import('@/src/workspace/document-archive');
+      const content = await writeDocumentArchive(snapshot.document, assets);
+      if (revision !== importRevision.current) return;
+      downloadFile(
+        snapshot.document,
+        'zip',
+        new Uint8Array(content),
+        'application/zip',
+      );
+      if (markdownDirty) {
+        markProjectEdited();
+        loadDocument(
+          snapshot.document,
+          locale === 'ja' ? 'ZIPを保存しました' : 'ZIP saved',
+          {
+            description: snapshot.diagnostics.map(diagnosticStatusMessage),
+          },
+        );
+      } else {
+        setDocumentDirty(false);
+        setStatus({
+          kind: 'success',
+          title: locale === 'ja' ? 'ZIPを保存しました' : 'ZIP saved',
+        });
+      }
+      if (!projectSession) void clearRecovery();
+    } catch (error) {
+      if (revision === importRevision.current)
+        setStatus({
+          kind: 'error',
+          title: locale === 'ja' ? 'ZIPを保存できません' : 'Could not save ZIP',
+          description: describeWorkspaceError(error, 'unableToSaveJson'),
+        });
+    }
+  };
+
   const exportHtml = async () => {
     if (activeHtmlExport.current !== null) return;
     const revision = ++importRevision.current;
@@ -868,20 +912,24 @@ export function useDocumentWorkspace() {
       const snapshot = markdownDirty
         ? parseMarkdown(markdownDraft, { fallbackType: document.type })
         : { document: currentDocument(editor, document), diagnostics: [] };
-      if (snapshot.document.type !== 'slide')
-        throw new WorkspaceStatusError(statusMessage('htmlSlidesOnly'));
       setStatus({ kind: 'idle', title: statusMessage('exportingHtml') });
       // Load the static renderer and embedded fonts only when export is requested.
-      const { exportSlideHtml } = await import('@/src/export/slide-html');
+      const source =
+        snapshot.document.type === 'report' && projectSession
+          ? assembleReportProject(
+              projectWithDocument(projectSession, snapshot.document),
+            )
+          : snapshot.document;
+      const result =
+        source.type === 'slide'
+          ? await (
+              await import('@/src/export/slide-html')
+            ).exportSlideHtml(source, assets, locale)
+          : await (
+              await import('@/src/export/report-html')
+            ).exportReportHtml(source, assets, locale);
       if (revision !== importRevision.current) return;
-      const result = await exportSlideHtml(snapshot.document, assets, locale);
-      if (revision !== importRevision.current) return;
-      downloadFile(
-        snapshot.document,
-        'html',
-        result.html,
-        'text/html;charset=utf-8',
-      );
+      downloadFile(source, 'html', result.html, 'text/html;charset=utf-8');
       setStatus({
         kind: 'success',
         title: statusMessage('exportedHtml'),
@@ -999,6 +1047,7 @@ export function useDocumentWorkspace() {
     changeView,
     discardMarkdown,
     saveDocument,
+    saveArchive,
     exportHtml,
     htmlExporting,
     updatePageSettings,

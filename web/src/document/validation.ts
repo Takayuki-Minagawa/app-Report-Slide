@@ -27,6 +27,7 @@ const blockTypes = new Set([
   'codeBlock',
   'figure',
   'blockMath',
+  'chart',
   'horizontalRule',
   'pageBreak',
   'slideBreak',
@@ -519,7 +520,10 @@ function validateBlockNode(
     for (const key of ['label', 'caption', 'numbered']) {
       const entry = attrs[key];
       if (entry === undefined || entry === null) continue;
-      if (!semanticTypes.has(node.type))
+      if (
+        !semanticTypes.has(node.type) &&
+        !(node.type === 'chart' && key === 'caption')
+      )
         issues.push(`${path}.attrs.${key}: このnodeには指定できません`);
       if (
         key === 'label' &&
@@ -675,6 +679,45 @@ function validateBlockNode(
         issues.push(`${path}.content: blockMathにcontentは指定できません`);
       }
       break;
+    case 'chart': {
+      if (!['line', 'scatter', 'bar'].includes(String(attrs?.chartType)))
+        issues.push(`${path}.attrs.chartType: line、scatter、barが必要です`);
+      for (const key of ['xLabel', 'yLabel', 'series', 'alt'])
+        expectString(attrs?.[key], `${path}.attrs.${key}`, issues);
+      if (
+        typeof attrs?.width !== 'number' ||
+        !Number.isFinite(attrs.width) ||
+        attrs.width < 10 ||
+        attrs.width > 100
+      )
+        issues.push(`${path}.attrs.width: 10から100の数値が必要です`);
+      if (
+        !Array.isArray(attrs?.data) ||
+        attrs.data.length < 1 ||
+        attrs.data.length > 200
+      )
+        issues.push(`${path}.attrs.data: 1から200件のデータが必要です`);
+      else
+        attrs.data.forEach((entry, index) => {
+          if (
+            !isRecord(entry) ||
+            typeof entry.label !== 'string' ||
+            entry.label.length > 80 ||
+            typeof entry.x !== 'number' ||
+            !Number.isFinite(entry.x) ||
+            typeof entry.y !== 'number' ||
+            !Number.isFinite(entry.y)
+          )
+            issues.push(
+              `${path}.attrs.data.${index}: label、有限のx、yが必要です`,
+            );
+        });
+      if (attrs?.caption !== undefined && attrs.caption !== null)
+        expectString(attrs.caption, `${path}.attrs.caption`, issues);
+      if (node.content !== undefined)
+        issues.push(`${path}.content: chartにcontentは指定できません`);
+      break;
+    }
     case 'pageBreak':
     case 'slideBreak':
       if (parent !== 'root')

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import type { Editor } from '@tiptap/react';
 import {
   Bold,
+  ChartNoAxesCombined,
   FunctionSquare,
   Heading1,
   Heading2,
@@ -17,7 +18,7 @@ import {
 import { useAppPreferences } from '@/components/app-preferences';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import type { DocumentType } from '@/src/document/model';
+import { createNodeId, type DocumentType } from '@/src/document/model';
 import { insertDocumentBreak } from '@/src/editor/document-commands';
 
 export function FormatToolbar({
@@ -122,6 +123,34 @@ export function FormatToolbar({
         }
       >
         <Table2 />
+      </FormatButton>
+      <FormatButton
+        label="Chart"
+        onClick={() =>
+          editor
+            ?.chain()
+            .focus()
+            .insertContent({
+              type: 'chart',
+              attrs: {
+                nodeId: createNodeId(),
+                chartType: 'line',
+                data: [
+                  { label: 'A', x: 1, y: 2 },
+                  { label: 'B', x: 2, y: 4 },
+                ],
+                xLabel: 'X',
+                yLabel: 'Y',
+                series: 'Series 1',
+                alt: 'Chart',
+                width: 100,
+                caption: null,
+              },
+            })
+            .run()
+        }
+      >
+        <ChartNoAxesCombined />
       </FormatButton>
       <Button
         size="sm"

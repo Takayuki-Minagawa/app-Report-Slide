@@ -2,6 +2,7 @@ import type {
   BlockMathNode,
   BlockquoteNode,
   BulletListNode,
+  ChartNode,
   CodeBlockNode,
   DocumentData,
   DocumentNode,
@@ -362,6 +363,37 @@ function parseAdvancedTable(
   }
 }
 
+function parseAdvancedChart(
+  token: MarkdownToken,
+  cursor: ParseCursor,
+): ChartNode | undefined {
+  try {
+    const parsed: unknown = JSON.parse(token.content);
+    if (!isRecord(parsed) || !isRecord(parsed.attrs))
+      throw new Error('Chart nodeが必要です');
+    parsed.attrs.nodeId = cursor.idFactory();
+    const document = validateDocumentData({
+      schemaVersion: 2,
+      type: 'report',
+      metadata: {},
+      children: [parsed],
+    });
+    const chart = document.children[0];
+    if (chart?.type !== 'chart') throw new Error('Chart nodeが必要です');
+    return chart;
+  } catch (error) {
+    cursor.diagnostics.push({
+      severity: 'error',
+      code: 'markdown.chart-invalid',
+      message:
+        'KUMIグラフブロックを読み込めません: ' +
+        (error instanceof Error ? error.message : 'JSONが不正です'),
+      line: (token.map?.[0] ?? 0) + 1 + cursor.lineOffset,
+    });
+    return undefined;
+  }
+}
+
 const advancedTableIdentifiedTypes = new Set([
   'paragraph',
   'heading',
@@ -509,6 +541,22 @@ function parseBlocks(
         cursor.index++;
         break;
       }
+      case 'kumi_advanced_chart': {
+        const chart = parseAdvancedChart(token, cursor);
+        if (chart) nodes.push(chart);
+        cursor.index++;
+        break;
+      }
+      case 'kumi_invalid_advanced_chart':
+        cursor.diagnostics.push({
+          severity: 'error',
+          code: 'markdown.chart-invalid',
+          message:
+            'KUMIグラフブロックは ::: kumi-chart と終了行の ::: で囲んでください',
+          line: (token.map?.[0] ?? 0) + 1 + cursor.lineOffset,
+        });
+        cursor.index++;
+        break;
       case 'kumi_invalid_advanced_table':
         cursor.diagnostics.push({
           severity: 'error',

@@ -77,7 +77,9 @@ function imageMime(path: string): string | undefined {
   )[extension ?? ''];
 }
 
-async function readZip(data: Uint8Array): Promise<Record<string, Uint8Array>> {
+export async function readZip(
+  data: Uint8Array,
+): Promise<Record<string, Uint8Array>> {
   if (data.byteLength > projectLimits.archiveBytes)
     throw new ReportProjectError('archiveTooLarge');
   const entryLimit = (name: string) =>
@@ -163,6 +165,33 @@ async function readZip(data: Uint8Array): Promise<Record<string, Uint8Array>> {
     throw new ReportProjectError('invalidArchive');
   } finally {
     await reader.close();
+  }
+}
+
+/** Shared ZIP writer for project and single-document archives. */
+export async function writeZip(
+  entries: Record<string, Uint8Array>,
+): Promise<Uint8Array> {
+  const writer = new ZipWriter(new Uint8ArrayWriter(), {
+    level: 6,
+    zip64: false,
+    dataDescriptor: false,
+  });
+  try {
+    let result: Uint8Array;
+    try {
+      for (const [name, bytes] of Object.entries(entries)) {
+        await writer.add(name, new Uint8ArrayReader(bytes));
+      }
+    } finally {
+      result = await writer.close();
+    }
+    if (result.byteLength > projectLimits.archiveBytes)
+      throw new ReportProjectError('archiveTooLarge');
+    return result;
+  } catch (error) {
+    if (error instanceof ReportProjectError) throw error;
+    throw new ReportProjectError('invalidArchive');
   }
 }
 
@@ -305,25 +334,5 @@ export async function writeReportProject(
   );
   if (Object.keys(entries).length > projectLimits.files)
     throw new ReportProjectError('tooManyFiles');
-  const writer = new ZipWriter(new Uint8ArrayWriter(), {
-    level: 6,
-    zip64: false,
-    dataDescriptor: false,
-  });
-  try {
-    let result: Uint8Array;
-    try {
-      for (const [name, bytes] of Object.entries(entries)) {
-        await writer.add(name, new Uint8ArrayReader(bytes));
-      }
-    } finally {
-      result = await writer.close();
-    }
-    if (result.byteLength > projectLimits.archiveBytes)
-      throw new ReportProjectError('archiveTooLarge');
-    return result;
-  } catch (error) {
-    if (error instanceof ReportProjectError) throw error;
-    throw new ReportProjectError('invalidArchive');
-  }
+  return writeZip(entries);
 }
