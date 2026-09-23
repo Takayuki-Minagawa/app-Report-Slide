@@ -90,7 +90,11 @@ test('画像込みZIP、検索置換、グラフ、Report HTMLを再開して印
     await expect(printed.locator('.report-sheet svg[role="img"]')).toHaveCount(
       1,
     );
-    const pdf = await printed.pdf({ printBackground: true });
+    await expect(printed.locator('#overflow-warning')).toBeVisible();
+    const pdf = await printed.pdf({
+      printBackground: true,
+      preferCSSPageSize: true,
+    });
     expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
   } finally {
     await offline.close();

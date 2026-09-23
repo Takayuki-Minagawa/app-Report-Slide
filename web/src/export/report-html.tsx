@@ -17,8 +17,17 @@ import { offlineMathStyles } from './math-styles';
 
 const reportScript = `const pages = [...document.querySelectorAll('.report-sheet')];
 const warning = document.getElementById('overflow-warning');
-const overflowing = pages.some(page => page.getBoundingClientRect().height > parseFloat(getComputedStyle(page).minHeight) + 2);
-if (overflowing && warning) warning.hidden = false;
+const updateWarning = () => {
+  const overflowing = pages.some(page => page.getBoundingClientRect().height > parseFloat(getComputedStyle(page).minHeight) + 2);
+  if (warning) warning.hidden = !overflowing;
+};
+window.addEventListener('load', updateWarning);
+document.fonts?.ready.then(updateWarning);
+if ('ResizeObserver' in window) {
+  const observer = new ResizeObserver(updateWarning);
+  pages.forEach(page => observer.observe(page));
+}
+updateWarning();
 document.getElementById('print-report')?.addEventListener('click', () => window.print());`;
 
 export async function exportReportHtml(
