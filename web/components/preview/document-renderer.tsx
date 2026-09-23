@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import katex from 'katex';
+import { ChartGraphic } from './chart-graphic';
 
 import { messages, type AppLocale } from '@/src/i18n/messages';
 import { formatSemanticReference } from '@/src/i18n/diagnostics';
@@ -633,6 +634,12 @@ function BlockNode({
       return (
         <div id={anchorId(key)}>
           <FigureBlock node={node} resolveImageUrl={resolveImageUrl} />
+        </div>
+      );
+    case 'chart':
+      return (
+        <div id={anchorId(key)}>
+          <ChartGraphic node={node} />
         </div>
       );
     case 'blockMath':

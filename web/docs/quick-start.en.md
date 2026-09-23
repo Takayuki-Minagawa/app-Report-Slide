@@ -44,7 +44,9 @@ The slide frame scales to fit the screen. Overflowing content can be scrolled wi
 
 Math fonts and imported images, including local images added through **Place images**, are embedded in the HTML. External image URLs still need a network connection. If an image has not been imported, save your source as Markdown/JSON first, then import the source and images together before exporting again.
 
-HTML is for viewing and presenting; it cannot be re-imported into KUMI. Unapplied Markdown drafts are included in the export, but are not applied to the editable document or marked as saved. **Save Markdown/JSON separately to keep an editable source.**
+HTML is for viewing and presenting; it cannot be re-imported into KUMI. Unapplied Markdown drafts are included in the export, but are not applied to the editable document or marked as saved. **Also save an editable ZIP, or Markdown/JSON with the images.**
+
+For a single Report or Slide, use **ZIP** in the header to save the editable document with imported images, then reopen it from the document panel. Report **HTML** can be printed or saved as PDF in a browser. Chapter projects use the separate **Save project ZIP** action. Use the header search button to find and replace text, and the Chart toolbar button to add an editable chart.
 
 ## 5. Change display and language
 

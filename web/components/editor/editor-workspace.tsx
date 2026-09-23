@@ -9,13 +9,15 @@ import { WorkspaceEditor } from './workspace-editor';
 import { WorkspaceProperties } from './workspace-properties';
 import { ProjectPanel } from './project-panel';
 import { RecoveryDialog } from './recovery-dialog';
+import { SearchReplace } from './search-replace';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 
 export function EditorWorkspace() {
   const workspace = useDocumentWorkspace();
-  const { copy } = useAppPreferences();
+  const { copy, locale } = useAppPreferences();
   const [navigatorOpen, setNavigatorOpen] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const controlsLocked =
     workspace.documentWriteLocked || workspace.projectActions.busy;
   const projectPanel = (overlay: boolean) => (
@@ -74,11 +76,20 @@ export function EditorWorkspace() {
         dirty={workspace.dirty}
         documentWriteLocked={workspace.documentWriteLocked}
         saveDocument={workspace.saveDocument}
+        saveArchive={workspace.saveArchive}
         exportHtml={workspace.exportHtml}
         htmlExporting={workspace.htmlExporting}
         openNavigator={() => setNavigatorOpen(true)}
         openProperties={() => setPropertiesOpen(true)}
+        toggleSearch={() => setSearchOpen((open) => !open)}
       />
+      {searchOpen && (
+        <SearchReplace
+          editor={workspace.editor}
+          locked={controlsLocked}
+          locale={locale}
+        />
+      )}
       <section className="workspace-grid">
         {navigator()}
         <WorkspaceEditor

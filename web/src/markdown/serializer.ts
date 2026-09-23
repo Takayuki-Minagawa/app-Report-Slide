@@ -156,7 +156,7 @@ function protectParagraphLine(line: string): string {
       : `&#32;${line.slice(1)}`;
   }
 
-  if (/^\s*:::\s+(?:pagebreak|slidebreak|kumi-table)\s*$/.test(line))
+  if (/^\s*:::\s+(?:pagebreak|slidebreak|kumi-table|kumi-chart)\s*$/.test(line))
     return line.replace(':', '\\:');
 
   const match = /^( {0,3})(.*)$/.exec(line);
@@ -336,6 +336,8 @@ function serializeNode(node: DocumentNode): string {
     }
     case 'figure':
       return serializeImage(node.attrs.src, node.attrs.alt, node.attrs.title);
+    case 'chart':
+      return ['::: kumi-chart', JSON.stringify(node), ':::'].join('\n');
     case 'blockMath':
       if (
         node.attrs.latex.split(/\r?\n/).some((line) => line.trim() === '$$')
@@ -368,7 +370,8 @@ function serializeBlocks(nodes: DocumentNode[]): string {
   return nodes
     .map((node) => {
       const attributes =
-        node.type === 'table' && !canUsePipeTable(node)
+        (node.type === 'table' && !canUsePipeTable(node)) ||
+        node.type === 'chart'
           ? ''
           : serializeBlockAttributes(node);
       return serializeNode(node) + attributes;

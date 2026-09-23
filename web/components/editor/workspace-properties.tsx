@@ -34,6 +34,8 @@ import {
   type PageSettings,
 } from '@/src/document/page-settings';
 import { SemanticProperties } from './semantic-properties';
+import { ChartProperties } from './chart-properties';
+import type { ChartNode } from '@/src/document/model';
 
 interface WorkspacePropertiesProps {
   overlay?: boolean;
@@ -261,6 +263,16 @@ export function WorkspaceProperties({
                     key={`${selectedSemantic.attrs.nodeId}:${JSON.stringify(selectedSemantic.attrs)}`}
                     node={selectedSemantic}
                     disabled={documentWriteLocked}
+                    onApply={applyAttributes}
+                  />
+                )}
+                {selectedNode.type === 'chart' && selectedNode.nodeId && (
+                  <ChartProperties
+                    key={`${selectedNode.nodeId}:${JSON.stringify(selectedNode.attrs)}`}
+                    attrs={selectedNode.attrs as unknown as ChartNode['attrs']}
+                    nodeId={selectedNode.nodeId}
+                    disabled={documentWriteLocked}
+                    locale={locale}
                     onApply={applyAttributes}
                   />
                 )}

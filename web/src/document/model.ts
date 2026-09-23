@@ -155,6 +155,19 @@ export interface BlockMathNode extends IdentifiedNode {
   };
 }
 
+export interface ChartNode extends IdentifiedNode {
+  type: 'chart';
+  attrs: IdentifiedNode['attrs'] & {
+    chartType: 'line' | 'scatter' | 'bar';
+    data: { label: string; x: number; y: number }[];
+    xLabel: string;
+    yLabel: string;
+    series: string;
+    alt: string;
+    width: number;
+  };
+}
+
 export interface HorizontalRuleNode extends IdentifiedNode {
   type: 'horizontalRule';
 }
@@ -208,6 +221,7 @@ export type DocumentNode =
   | CodeBlockNode
   | FigureNode
   | BlockMathNode
+  | ChartNode
   | HorizontalRuleNode
   | DocumentBreakNode
   | TableNode

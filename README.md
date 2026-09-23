@@ -4,7 +4,7 @@
 
 ## 公開版
 
-GitHub Pagesを有効にすると、[公開版](https://takayuki-minagawa.github.io/app-Report-Slide/) を利用できます。`main` への更新は自動的に静的サイトとして公開されます。
+既存の[GitHub Pages公開版](https://takayuki-minagawa.github.io/app-Report-Slide/) は、リポジトリの更新とは独立した以前の公開内容です。新しい版はローカルでビルドし、HTML／ZIPとして利用してください。
 
 ## 公開リポジトリとしての注意
 
@@ -20,6 +20,8 @@ GitHub Pagesを有効にすると、[公開版](https://takayuki-minagawa.github
 - MarkdownファイルのImportと、Markdown／Document JSONの保存
 - Reportの章別プロジェクト（追加・並べ替え・除外・削除、章単位の編集、画像を含むZIP保存・再読込）
 - Slide文書の単一HTML出力（スライド送り、全画面表示、数式フォント・取り込んだ画像、結合セル・罫線の埋め込み）
+- Report文書・章別プロジェクトの単一HTML出力とブラウザの印刷／PDF保存
+- 画像を含む単一文書ZIP、本文の検索・置換、編集可能な折れ線・散布図・棒グラフ
 - Slideの「図を配置」キャンバス（画像選択、ドラッグ移動、8方向リサイズ、矢印キーによる微調整）
 - Report／Slide向けの基本テーマと完成プレビュー
 - Reportのページ設定（用紙・向き・余白・本文サイズ・字下げ・行間・段落間隔）、Markdown／JSON／プロジェクトZIPへの保存
@@ -37,7 +39,7 @@ GitHub Pagesを有効にすると、[公開版](https://takayuki-minagawa.github
 - Document JSON v1／v2のImport、v2への非破壊移行
 - 有効な章を通した目次・番号・相互参照と、ページを切り替える全体プレビュー
 
-使い方・構文・制限は [文書機能ガイド](./web/docs/document-features.md) を参照してください。最初の操作は [かんたんガイド（日本語）](./web/docs/quick-start.ja.md) / [Quick guide (English)](./web/docs/quick-start.en.md) にまとめています。元の全体仕様は [仕様書](./md_report_slide_editor_web_spec.md) にあります。自動ページ割り、厳密なA4組版、PDF出力、ReportのHTML出力、脚注・文献、段組み、Chart、TeXファイル互換はまだ未実装です。
+使い方・構文・制限は [文書機能ガイド](./web/docs/document-features.md) を参照してください。最初の操作は [かんたんガイド（日本語）](./web/docs/quick-start.ja.md) / [Quick guide (English)](./web/docs/quick-start.en.md) にまとめています。元の全体仕様は [仕様書](./md_report_slide_editor_web_spec.md) にあります。厳密な自動ページ組版、アプリからの直接PDF生成、脚注・文献、段組み、TeXファイル互換はまだ未実装です。
 
 ## ページ設定
 
@@ -63,7 +65,11 @@ Reportを開いて左側の「現在のReportをプロジェクト化」を選�
 
 Slide文書を開き、ヘッダーの **HTML** を押すと、閲覧・発表用の `.html` ファイルを保存できます。ブラウザで開き、前へ／次へボタン、矢印キー、Spaceでスライドを送ります。Fキーで全画面表示に切り替えられます（対応ブラウザのみ）。操作表示は出力時の日本語／英語設定に従います。
 
-数式用フォントと取り込んだ画像（「図を配置」から追加したローカル画像を含む）をファイルに含めるため、これらはオフラインでも表示できます。外部URLの画像はリンクのままで、表示には通信が必要です。未取り込みのローカル画像があれば出力を止めて案内します。HTMLは編集用の保存形式ではなく、未保存状態やMarkdown下書きは変えません。編集を再開するために **Markdown／JSONも別途保存** してください。
+数式用フォントと取り込んだ画像（「図を配置」から追加したローカル画像を含む）をファイルに含めるため、これらはオフラインでも表示できます。外部URLの画像はリンクのままで、表示には通信が必要です。未取り込みのローカル画像があれば出力を止めて案内します。HTMLは編集用の保存形式ではなく、未保存状態やMarkdown下書きは変えません。編集を再開するために **画像込みZIPまたはMarkdown／JSONと画像を保存** してください。
+
+Reportと章別プロジェクトでもヘッダーの **HTML** から完成HTMLを出力できます。開いたHTMLの **印刷／PDF保存** からブラウザの印刷機能を利用します。用紙・余白と明示的な改ページを反映しますが、長い内容の自動改ページはブラウザ依存です。出力HTMLが用紙の高さを超える場合は警告を表示するので、印刷プレビューを確認してください。
+
+単一Report／Slideのヘッダーの **ZIP** は本文・設定・取り込んだ画像を1ファイルに保存します。再開時は文書パネルからそのZIPを開きます。章別プロジェクトのZIPとは別形式で、章構成を保存する場合は従来の **プロジェクトZIPを保存** を使用してください。
 
 ## 開発
 
@@ -92,7 +98,7 @@ npm run build
 
 ### GitHub Pagesの運用
 
-GitHub Actionsは `.github/workflows/deploy-pages.yml` による最終公開だけに使用します。Pull Requestでは実行せず、`main` へのpush（または `main` を指定した手動実行）で公開用静的サイトをビルドし、GitHub Pagesへデプロイします。品質検証はpush前にローカルで完了してください。GitHub Pagesが未設定のリポジトリでは、初回だけ **Settings → Pages → Build and deployment → Source** で **GitHub Actions** を選択してください。公開URLやリポジトリ配下のパスは、ワークフローがGitHub Pagesの設定から自動的に反映します。
+GitHub Actionsの利用制限に合わせ、Pagesデプロイ用ワークフローを削除しました。品質検証とビルドはローカルで実行してください。既存のPagesサイトは自動更新されません。GitHub Pagesのブランチ公開もGitHub内部でActionsを使用するため、Actionsを使わない公開手段として扱いません。
 
 ## 設計
 

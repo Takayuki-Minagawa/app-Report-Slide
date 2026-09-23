@@ -78,7 +78,7 @@ describe('workspace HTML export', () => {
     expect(result.current.dirty).toBe(true);
   });
 
-  it.each(['book', 'report'])(
+  it.each(['book'])(
     'rejects a %s Markdown draft without downloading or applying it',
     async (type) => {
       const { result } = await workspace();

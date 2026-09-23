@@ -87,7 +87,7 @@ export function WorkspaceNavigator({
         ref={markdownInput}
         className="sr-only"
         type="file"
-        accept=".md,.markdown,.json,application/json,text/markdown,image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.svg"
+        accept=".md,.markdown,.json,.zip,application/json,text/markdown,image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.svg"
         multiple
         disabled={documentWriteLocked}
         onChange={(event) => {

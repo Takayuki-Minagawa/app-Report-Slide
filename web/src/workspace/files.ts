@@ -203,6 +203,17 @@ export interface ImportedDocument {
 export async function readWorkspaceFiles(
   files: readonly File[],
 ): Promise<ImportedDocument> {
+  if (files.length === 1 && /\.zip$/i.test(files[0].name)) {
+    const { readDocumentArchive } = await import('./document-archive');
+    const result = await readDocumentArchive(files[0]);
+    return {
+      ...result,
+      sourceName: files[0].name,
+      diagnostics: [],
+      assetBytes: assetByteTotal(result.assets),
+      unresolved: [],
+    };
+  }
   const sources = files.filter((file) => sourceFormat(file) !== undefined);
   if (sources.length !== 1)
     throw new WorkspaceStatusError(statusMessage('selectOneSource'));
