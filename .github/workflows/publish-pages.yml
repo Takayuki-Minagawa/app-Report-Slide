@@ -1,8 +1,12 @@
 name: Publish GitHub Pages
 
-# Run only for a deliberate publication. No push or PR checks use Actions.
+# Run only for a deliberate publication. Ordinary branch pushes and PRs do not
+# use Actions.
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'publish-pages-*'
 
 permissions:
   contents: read

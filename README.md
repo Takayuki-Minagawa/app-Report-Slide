@@ -98,7 +98,7 @@ npm run build
 
 ### GitHub Pagesの運用
 
-GitHub Actionsの利用制限に合わせ、通常のCIは行いません。品質検証はローカルの `npm run check` と必要なE2Eで行います。公開時だけ、手動起動の `Publish GitHub Pages` ワークフローが静的ビルドとPagesデプロイを実行します。pushやPRでは起動しません。GitHub Pagesのブランチ公開もGitHub内部でActionsを使用するため、Actionsを使わない公開手段として扱いません。
+GitHub Actionsの利用制限に合わせ、通常のCIは行いません。品質検証はローカルの `npm run check` と必要なE2Eで行います。公開時だけ、マージ済みコミットに付けた `publish-pages-*` タグのpush、または手動起動で `Publish GitHub Pages` ワークフローが静的ビルドとPagesデプロイを実行します。通常のブランチpushやPRでは起動しません。GitHub Pagesのブランチ公開もGitHub内部でActionsを使用するため、Actionsを使わない公開手段として扱いません。
 
 ## 設計
 
