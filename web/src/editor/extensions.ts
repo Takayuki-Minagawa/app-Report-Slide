@@ -176,12 +176,24 @@ const DocumentAttributes = Extension.create({
                 node.type.name === 'tableCell') &&
               Array.isArray(node.attrs.colwidth)
             ) {
-              const widths = (node.attrs.colwidth as number[]).map((width) =>
-                Math.min(width, maximumTableColumnWidth),
-              );
+              const originalWidths = node.attrs.colwidth as unknown[];
+              const colspan = node.attrs.colspan as number;
+              const count =
+                Number.isInteger(colspan) && colspan >= 1 && colspan <= 100
+                  ? colspan
+                  : 1;
+              const widths = Array.from({ length: count }, (_, index) => {
+                const width = originalWidths[index];
+                return typeof width === 'number' &&
+                  Number.isFinite(width) &&
+                  (width === 0 || width >= 20)
+                  ? Math.min(width, maximumTableColumnWidth)
+                  : 0;
+              });
               if (
+                originalWidths.length !== widths.length ||
                 widths.some(
-                  (width, index) => width !== node.attrs.colwidth[index],
+                  (width, index) => !Object.is(width, originalWidths[index]),
                 )
               ) {
                 attributes = { ...node.attrs, colwidth: widths };

@@ -89,7 +89,13 @@ function setColumnWidths(current: Editor, widths: number[]): void {
 }
 
 describe('advanced table commands', () => {
-  it('caps a dragged column width before it reaches document serialization', () => {
+  it.each([
+    { input: 4_500, expected: 4_000 },
+    { input: Number.NaN, expected: 0 },
+    { input: Number.POSITIVE_INFINITY, expected: 0 },
+    { input: -10, expected: 0 },
+    { input: 10, expected: 0 },
+  ])('normalizes invalid editor column width $input', ({ input, expected }) => {
     const current = createEditor();
     const { map, tableStart } = tableContext(current);
     const position = tableStart + map.map[0];
@@ -98,12 +104,12 @@ describe('advanced table commands', () => {
     current.view.dispatch(
       current.state.tr.setNodeMarkup(position, undefined, {
         ...cell.attrs,
-        colwidth: [4_500],
+        colwidth: [input],
       }),
     );
 
     expect(tableJson(current).content[0].content[0].attrs.colwidth).toEqual([
-      4_000,
+      expected,
     ]);
     expect(() =>
       validateDocumentData({
@@ -113,6 +119,24 @@ describe('advanced table commands', () => {
         children: current.getJSON().content ?? [],
       }),
     ).not.toThrow();
+  });
+
+  it('keeps a column-width array aligned with the cell colspan', () => {
+    const current = createEditor();
+    const { map, tableStart } = tableContext(current);
+    const position = tableStart + map.map[0];
+    const cell = current.state.doc.nodeAt(position);
+    if (!cell) throw new Error('cell expected');
+    current.view.dispatch(
+      current.state.tr.setNodeMarkup(position, undefined, {
+        ...cell.attrs,
+        colwidth: [120, 180],
+      }),
+    );
+
+    expect(tableJson(current).content[0].content[0].attrs.colwidth).toEqual([
+      120,
+    ]);
   });
 
   it('distributes only selected columns across all rows and preserves their total', () => {
