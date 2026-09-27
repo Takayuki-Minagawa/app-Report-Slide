@@ -1,12 +1,9 @@
 name: Publish GitHub Pages
 
-# Run only for a deliberate publication. Ordinary branch pushes and PRs do not
-# use Actions.
+# Run only for a deliberate publication from main. Ordinary pushes, tags, and
+# PRs do not use Actions.
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - 'publish-pages-*'
 
 permissions:
   contents: read
@@ -19,6 +16,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
