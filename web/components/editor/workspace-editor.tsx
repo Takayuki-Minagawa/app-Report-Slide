@@ -20,6 +20,7 @@ import {
 import { pageSettingsMessages } from '@/src/i18n/page-settings';
 import { FormatToolbar } from './format-toolbar';
 import { TableToolbar } from './table-toolbar';
+import { TextRulerBar } from './text-ruler';
 
 interface WorkspaceEditorProps {
   previewDocument?: DocumentData;
@@ -110,20 +111,27 @@ export function WorkspaceEditor({
           <TableToolbar editor={editor} documentType={document.type} />
           <ScrollArea className="min-h-0 flex-1">
             <div className="editor-stage">
-              <div
-                className={
-                  document.type === 'report' ? 'report-sheet' : 'contents'
-                }
-                style={
-                  document.type === 'report'
-                    ? reportPageStyle((previewDocument ?? document).metadata)
-                    : undefined
-                }
-              >
+              <div className={`editor-canvas editor-canvas-${document.type}`}>
+                <TextRulerBar
+                  editor={editor}
+                  document={previewDocument ?? document}
+                  disabled={documentWriteLocked}
+                />
                 <div
-                  className={`editor-paper editor-paper-${document.type}${document.type === 'report' ? ' report-layout' : ''}`}
+                  className={
+                    document.type === 'report' ? 'report-sheet' : 'contents'
+                  }
+                  style={
+                    document.type === 'report'
+                      ? reportPageStyle((previewDocument ?? document).metadata)
+                      : undefined
+                  }
                 >
-                  <EditorContent editor={editor} />
+                  <div
+                    className={`editor-paper editor-paper-${document.type}${document.type === 'report' ? ' report-layout' : ''}`}
+                  >
+                    <EditorContent editor={editor} />
+                  </div>
                 </div>
               </div>
             </div>

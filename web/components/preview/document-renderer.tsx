@@ -27,6 +27,7 @@ import type {
   TableNode,
 } from '@/src/document/model';
 import { tableCellBorderStyle } from '@/src/document/table';
+import { textRulerStyle } from '@/src/document/text-ruler';
 import {
   safeResourceUrl,
   resolveSafeImageUrl as resolvedImageUrl,
@@ -585,7 +586,7 @@ function BlockNode({
         | 'h5'
         | 'h6';
       return (
-        <Tag id={anchorId(key)}>
+        <Tag id={anchorId(key)} style={textRulerStyle(node.attrs.textRuler)}>
           {target?.number && (
             <span className="section-number">{target.number} </span>
           )}
@@ -594,7 +595,11 @@ function BlockNode({
       );
     }
     case 'paragraph':
-      return <p>{renderInline(node.content, resolveImageUrl)}</p>;
+      return (
+        <p style={textRulerStyle(node.attrs.textRuler)}>
+          {renderInline(node.content, resolveImageUrl)}
+        </p>
+      );
     case 'bulletList':
       return (
         <ul>

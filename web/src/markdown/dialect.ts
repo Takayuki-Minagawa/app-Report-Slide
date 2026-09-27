@@ -36,7 +36,7 @@ export function createMarkdownIt(): MarkdownIt {
           .trim();
       const line = lineAt(startLine);
       const attributes =
-        /^\{(?:#|(?:label|caption|numbered|width|align|slide_layout)=)/.test(
+        /^\{(?:#|(?:label|caption|numbered|width|align|slide_layout|text_ruler)=)/.test(
           line,
         );
       const pageBreak = /^:::\s+(pagebreak|slidebreak)\s*$/.exec(line);

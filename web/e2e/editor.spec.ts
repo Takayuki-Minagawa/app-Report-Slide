@@ -88,6 +88,109 @@ test('ページ設定を反映しMarkdown保存後に読み直せる', async ({ 
   ).toHaveValue('1.5');
 });
 
+test('ルーラーで選択した複数段落の開始・終了・字下げを設定し保存できる', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await waitForEditor(page);
+  await page.getByRole('button', { name: 'Markdownへ切り替え' }).click();
+  await page
+    .getByRole('textbox', { name: 'Markdown原稿' })
+    .fill('第一段落の本文です。\n\n第二段落の本文です。');
+  await page.getByRole('button', { name: 'Markdownを適用' }).click();
+
+  const paragraphs = page.locator('.kumi-editor-content > p');
+  await expect(paragraphs).toHaveCount(2);
+  await page.locator('.kumi-editor-content').evaluate((editor) => {
+    const [first, second] = editor.querySelectorAll(':scope > p');
+    if (!first?.firstChild || !second?.firstChild) {
+      throw new Error('Expected two paragraphs');
+    }
+    const range = document.createRange();
+    range.setStart(first.firstChild, 0);
+    range.setEnd(second.firstChild, 2);
+    editor.focus();
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event('selectionchange'));
+  });
+
+  const ruler = page.getByRole('group', { name: '文字位置ルーラー' });
+  const left = ruler.getByRole('slider', { name: '左位置' });
+  const firstLine = ruler.getByRole('slider', { name: '1行目の字下げ' });
+  const right = ruler.getByRole('slider', { name: '右位置' });
+  await expect(left).toHaveAttribute('aria-disabled', 'false');
+  await left.focus();
+  await left.press('Shift+ArrowRight');
+  await firstLine.focus();
+  await firstLine.press('Shift+ArrowRight');
+  await right.focus();
+  await right.press('Shift+ArrowLeft');
+
+  for (const paragraph of await paragraphs.all()) {
+    await expect(paragraph).toHaveAttribute(
+      'data-kumi-text-ruler',
+      '{"left":5,"right":5,"firstLine":10}',
+    );
+    const style = await paragraph.evaluate((element) => {
+      const computed = getComputedStyle(element);
+      return {
+        left: parseFloat(computed.marginLeft),
+        right: parseFloat(computed.marginRight),
+        firstLine: parseFloat(computed.textIndent),
+      };
+    });
+    expect(style.left).toBeGreaterThan(1);
+    expect(style.right).toBeGreaterThan(1);
+    expect(style.firstLine).toBeGreaterThan(1);
+  }
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Markdown', exact: true }).click();
+  const saved = await downloadText(await downloadPromise);
+  expect(saved.match(/text_ruler=5,5,10/g)).toHaveLength(2);
+
+  await page.getByRole('button', { name: '完成プレビューへ切り替え' }).click();
+  const previewParagraphs = page.locator(
+    '.report-preview .document-renderer > p',
+  );
+  await expect(previewParagraphs).toHaveCount(2);
+  for (const paragraph of await previewParagraphs.all()) {
+    const leftMargin = await paragraph.evaluate((element) =>
+      parseFloat(getComputedStyle(element).marginLeft),
+    );
+    expect(leftMargin).toBeGreaterThan(1);
+  }
+
+  await page.getByRole('button', { name: 'Markdownへ切り替え' }).click();
+  await page.getByRole('textbox', { name: 'Markdown原稿' }).fill(saved);
+  await page.getByRole('button', { name: 'Markdownを適用' }).click();
+  await expect(page.locator('.kumi-editor-content > p')).toHaveCount(2);
+  for (const paragraph of await page
+    .locator('.kumi-editor-content > p')
+    .all()) {
+    await expect(paragraph).toHaveAttribute(
+      'data-kumi-text-ruler',
+      '{"left":5,"right":5,"firstLine":10}',
+    );
+  }
+
+  const restoredFirst = page.locator('.kumi-editor-content > p').first();
+  await restoredFirst.click();
+  await ruler.getByRole('button', { name: 'リセット' }).click();
+  await expect(restoredFirst).not.toHaveAttribute('data-kumi-text-ruler');
+  await expect(page.locator('.kumi-editor-content > p').nth(1)).toHaveAttribute(
+    'data-kumi-text-ruler',
+    '{"left":5,"right":5,"firstLine":10}',
+  );
+  await page.getByRole('button', { name: '元に戻す' }).click();
+  await expect(restoredFirst).toHaveAttribute(
+    'data-kumi-text-ruler',
+    '{"left":5,"right":5,"firstLine":10}',
+  );
+});
+
 test('Markdownの不正入力を拒否して現在文書を維持する', async ({ page }) => {
   await page.goto('/');
 

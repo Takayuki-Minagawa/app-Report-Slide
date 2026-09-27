@@ -12,6 +12,7 @@ import {
   tableBorderSides,
 } from './table';
 import { isSlideImagePlacement } from './slide-layout';
+import { isTextRuler } from './text-ruler';
 
 const documentEnvelopeSchema = z
   .object({
@@ -520,6 +521,15 @@ function validateBlockNode(
   validateNodeId(attrs, path, issues, nodeIds);
 
   if (attrs) {
+    if (attrs.textRuler !== undefined) {
+      if (node.type !== 'paragraph' && node.type !== 'heading') {
+        issues.push(`${path}.attrs.textRuler: 段落・見出しだけに指定できます`);
+      } else if (attrs.textRuler !== null && !isTextRuler(attrs.textRuler)) {
+        issues.push(
+          `${path}.attrs.textRuler: left・rightは0〜85、合計85以下、firstLineは0〜(100-right)の有限数値が必要です`,
+        );
+      }
+    }
     for (const key of ['label', 'caption', 'numbered']) {
       const entry = attrs[key];
       if (entry === undefined || entry === null) continue;

@@ -16,6 +16,19 @@ beforeEach(() => vi.stubGlobal('crypto', webcrypto));
 afterEach(() => vi.unstubAllGlobals());
 
 describe('standalone slide HTML', () => {
+  it('keeps paragraph ruler positions in exported slides', async () => {
+    const source = slides('Indented slide text\n{text_ruler=10,5,15}');
+    const { html } = await exportSlideHtml(source, new Map(), 'en');
+    const paragraph = readHtml(html).querySelector<HTMLElement>(
+      '.deck-slide .document-renderer > p',
+    );
+    expect(paragraph?.style.marginLeft).toBe('10%');
+    expect(paragraph?.style.marginRight).toBe('5%');
+    expect(Number.parseFloat(paragraph?.style.textIndent ?? '')).toBeCloseTo(
+      (5 / 85) * 100,
+    );
+  });
+
   it('embeds math fonts, pages, numbering and cross-slide references without app dependencies', async () => {
     const source = slides(
       '# Intro\n{#sec:intro}\n\n$E=mc^2$\n\n[@sec:result]\n\n::: slidebreak\n:::\n\n# Result\n{#sec:result}',
