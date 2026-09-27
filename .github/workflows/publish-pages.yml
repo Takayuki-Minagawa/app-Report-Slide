@@ -1,0 +1,55 @@
+name: Publish GitHub Pages
+
+# Run only for a deliberate publication. Ordinary branch pushes and PRs do not
+# use Actions.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'publish-pages-*'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: web/.node-version
+      - uses: actions/configure-pages@v5
+      - run: npm ci
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+        env:
+          GITHUB_PAGES: 'true'
+          GITHUB_PAGES_BASE_PATH: /app-Report-Slide
+      - name: Prepare Pages files
+        run: |
+          cp -R web/dist/client/app-Report-Slide/. web/dist/client/
+          rm -rf web/dist/client/app-Report-Slide
+          touch web/dist/client/.nojekyll
+          test -f web/dist/client/index.html
+          test -d web/dist/client/_next/static
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: web/dist/client
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

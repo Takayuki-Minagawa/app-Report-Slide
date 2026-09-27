@@ -5,6 +5,8 @@
   const next = document.getElementById('deck-next');
   const counter = document.getElementById('deck-counter');
   const fullscreen = document.getElementById('deck-fullscreen');
+  const print = document.getElementById('deck-print');
+  const progress = document.getElementById('deck-progress');
   const controls = document.getElementById('deck-controls');
   const status = document.getElementById('deck-status');
   if (
@@ -13,6 +15,8 @@
     !next ||
     !counter ||
     !fullscreen ||
+    !print ||
+    !progress ||
     !controls ||
     !status
   )
@@ -34,6 +38,7 @@
     previous.disabled = current === 0;
     next.disabled = current === slides.length - 1;
     counter.textContent = current + 1 + ' / ' + slides.length;
+    progress.value = current + 1;
     if (updateHash) setHash(slides[current].id);
   }
   function followHash(hash) {
@@ -52,11 +57,13 @@
     return true;
   }
   function fit() {
+    const viewport = document.getElementById('deck-viewport');
+    if (!viewport) return;
     const scale = Math.max(
       0.1,
       Math.min(
-        (window.innerWidth - 32) / 920,
-        (window.innerHeight - 120) / 517.5,
+        (viewport.clientWidth - 32) / 920,
+        (viewport.clientHeight - 24) / 517.5,
       ),
     );
     document.documentElement.style.setProperty('--deck-scale', String(scale));
@@ -74,6 +81,7 @@
   next.addEventListener('click', () => show(current + 1));
   fullscreen.hidden = !document.documentElement.requestFullscreen;
   fullscreen.addEventListener('click', toggleFullscreen);
+  print.addEventListener('click', () => window.print());
   document.addEventListener('keydown', (event) => {
     if (
       event.altKey ||
@@ -98,6 +106,7 @@
     else if (event.key === 'End') show(slides.length - 1);
     else if (event.key.toLowerCase() === 'f' && !fullscreen.hidden)
       void toggleFullscreen();
+    else if (event.key.toLowerCase() === 'p') window.print();
     else return;
     event.preventDefault();
   });
@@ -122,8 +131,9 @@
   });
   window.addEventListener('hashchange', () => followHash(location.hash));
   window.addEventListener('resize', fit);
-  fit();
   document.documentElement.classList.add('deck-ready');
   controls.hidden = false;
+  progress.hidden = false;
+  fit();
   if (!followHash(location.hash)) show(0, false);
 })();

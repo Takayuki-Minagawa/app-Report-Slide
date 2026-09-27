@@ -38,11 +38,12 @@ KUMI is a browser application for editing and reviewing technical reports and sl
 
 1. Create or import a **Slide** document and insert slide breaks where needed.
 2. Select **HTML** in the header to download a single `.html` file.
-3. Open the file in a browser. Use **Previous/Next**, ←/→, or Space to navigate, and Home/End to jump to the first/last slide. F or **Fullscreen** works in supported browsers. Table-of-contents and cross-reference links open the target slide.
+3. Open the file in a browser. Use **Previous/Next**, ←/→, or Space to navigate. The progress bar at the bottom shows your position in the deck. Home/End jumps to the first/last slide, and F or **Fullscreen** works in supported browsers. Table-of-contents and cross-reference links open the target slide.
+4. Select **Print / Save PDF** or press P to open the browser's print dialog for all slides. To create a PDF, choose a destination such as **Save as PDF**.
 
 The slide frame scales to fit the screen. Overflowing content can be scrolled within the slide; add more slide breaks before presenting if needed.
 
-Math fonts and imported images, including local images added through **Place images**, are embedded in the HTML. External image URLs still need a network connection. If an image has not been imported, save your source as Markdown/JSON first, then import the source and images together before exporting again.
+Math fonts and imported images, including local images added through **Place images**, are embedded in the HTML, so slide controls and printing or PDF saving work offline. External image URLs still need a network connection. If an image has not been imported, save your source as Markdown/JSON first, then import the source and images together before exporting again.
 
 HTML is for viewing and presenting; it cannot be re-imported into KUMI. Unapplied Markdown drafts are included in the export, but are not applied to the editable document or marked as saved. **Also save an editable ZIP, or Markdown/JSON with the images.**
 

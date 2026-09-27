@@ -19,18 +19,22 @@ const playerMessages = {
     previous: '前へ',
     next: '次へ',
     fullscreen: '全画面',
+    print: '印刷／PDF保存',
     navigation: 'スライド操作',
     counter: '表示中のスライド',
-    help: '← → / Space で移動 · F で全画面',
+    progress: '発表の進捗',
+    help: '← → / Space で移動 · F で全画面 · P で印刷',
     fullscreenUnavailable: 'このブラウザでは全画面表示を開始できません。',
   },
   en: {
     previous: 'Previous',
     next: 'Next',
     fullscreen: 'Fullscreen',
+    print: 'Print / Save PDF',
     navigation: 'Slide controls',
     counter: 'Current slide',
-    help: '← → / Space to navigate · F for fullscreen',
+    progress: 'Presentation progress',
+    help: '← → / Space to navigate · F for fullscreen · P to print',
     fullscreenUnavailable: 'Fullscreen is not available in this browser.',
   },
 };
@@ -130,7 +134,17 @@ export async function exportSlideHtml(
           >
             {copy.fullscreen}
           </button>
+          <button id="deck-print" type="button">
+            {copy.print}
+          </button>
         </nav>
+        <progress
+          id="deck-progress"
+          aria-label={copy.progress}
+          value={1}
+          max={pages.length}
+          hidden
+        />
         <output id="deck-status" />
         <template id="katex-license">
           <pre>{katexLicense}</pre>

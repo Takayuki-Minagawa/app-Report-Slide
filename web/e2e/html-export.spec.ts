@@ -68,6 +68,15 @@ test('HTMLスライドを保存し、オフラインで数式・画像・スラ�
     await expect(
       deck.getByRole('navigation', { name: 'スライド操作' }),
     ).toBeVisible();
+    const printButton = deck.getByRole('button', {
+      name: '印刷／PDF保存',
+      exact: true,
+    });
+    const progress = deck.getByRole('progressbar', { name: '発表の進捗' });
+    await expect(printButton).toBeVisible();
+    await expect(progress).toBeVisible();
+    await expect(progress).toHaveJSProperty('value', 1);
+    await expect(progress).toHaveJSProperty('max', 2);
     await expect(deck.locator('#slide-1')).toBeVisible();
     await expect(deck.locator('#slide-2')).toBeHidden();
     await expect(
@@ -83,6 +92,7 @@ test('HTMLスライドを保存し、オフラインで数式・画像・スラ�
     await deck.locator('.preview-reference').click();
     await expect(deck.locator('#slide-2')).toBeVisible();
     await expect(deck.locator('#deck-counter')).toHaveText('2 / 2');
+    await expect(progress).toHaveJSProperty('value', 2);
     const image = deck.getByRole('img', { name: '応答図' });
     await expect(image).toBeVisible();
     await expect(image).toHaveJSProperty('naturalWidth', 80);
@@ -92,15 +102,31 @@ test('HTMLスライドを保存し、オフラインで数式・画像・スラ�
 
     await deck.keyboard.press('Home');
     await expect(deck.locator('#slide-1')).toBeVisible();
+    await expect(progress).toHaveJSProperty('value', 1);
     await deck.keyboard.press('Space');
     await expect(deck.locator('#slide-2')).toBeVisible();
+    await expect(progress).toHaveJSProperty('value', 2);
     await deck.keyboard.press('ArrowLeft');
     await expect(deck.locator('#slide-1')).toBeVisible();
     await deck.getByRole('button', { name: '次へ', exact: true }).click();
     await expect(deck.locator('#slide-2')).toBeVisible();
 
+    await deck.evaluate(() => {
+      window.print = () => {
+        const root = document.documentElement;
+        root.dataset.printCalls = String(
+          Number(root.dataset.printCalls || 0) + 1,
+        );
+      };
+    });
+    await printButton.click();
+    await expect(deck.locator('html')).toHaveAttribute('data-print-calls', '1');
+    await deck.keyboard.press('p');
+    await expect(deck.locator('html')).toHaveAttribute('data-print-calls', '2');
+
     await deck.reload();
     await expect(deck.locator('#slide-2')).toBeVisible();
+    await expect(progress).toHaveJSProperty('value', 2);
     await deck.setViewportSize({ width: 390, height: 844 });
     const bounds = await deck.locator('#slide-2').boundingBox();
     expect(bounds!.width).toBeLessThanOrEqual(390);
@@ -108,6 +134,8 @@ test('HTMLスライドを保存し、オフラインで数式・画像・スラ�
     await deck.emulateMedia({ media: 'print' });
     await expect(deck.locator('#slide-1')).toBeVisible();
     await expect(deck.locator('#slide-2')).toBeVisible();
+    await expect(printButton).toBeHidden();
+    await expect(progress).toBeHidden();
     expect(networkRequests).toEqual([]);
     expect(errors).toEqual([]);
   } finally {
