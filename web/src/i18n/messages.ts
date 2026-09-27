@@ -506,7 +506,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       exportSteps: [
         '「完成プレビュー」でReportはA4ページ、Slideは16:9スライドとして確認できます。',
         'ヘッダーのMarkdownまたはJSONでファイルを保存します。Document JSONはMarkdownで表せない構造も保持できます。',
-        'Slide文書では「HTML」で閲覧・発表用の単一HTMLファイルを出力できます。ブラウザで開き、前へ／次へボタンや矢印キーで移動します。Fキーで全画面表示に切り替えられます（対応ブラウザのみ）。',
+        'Slide文書では「HTML」で閲覧・発表用の単一HTMLファイルを出力できます。前へ／次へボタンや矢印キーで移動し、進捗バーで現在位置を確認できます。Fキーで全画面表示、Pキーまたは「印刷／PDF保存」で全スライドを印刷できます。',
         '数式用フォントと取り込んだ画像はHTMLに含まれます。外部URLの画像には通信が必要です。HTML出力だけでは編集用原稿は保存されないため、MarkdownまたはJSONも保存してください。',
       ],
       preferencesTitle: '5. 表示を切り替える',
@@ -789,7 +789,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       exportSteps: [
         'Use Preview to review Reports as A4 pages and Slides as 16:9 slides.',
         'Save Markdown or JSON from the header. Document JSON preserves structures that Markdown cannot express.',
-        'For Slide documents, use HTML to export a standalone file for viewing and presenting. Open it in a browser and use Previous/Next or the arrow keys. Press F for fullscreen where supported.',
+        'For Slide documents, use HTML to export a standalone file for viewing and presenting. Use Previous/Next or the arrow keys to navigate, and the progress bar to track your place. Press F for fullscreen where supported; press P or Print / Save PDF to print every slide.',
         'Math fonts and imported images are embedded. External image URLs require a network connection. HTML export does not save your editable source, so also save Markdown or JSON.',
       ],
       preferencesTitle: '5. Change the display',

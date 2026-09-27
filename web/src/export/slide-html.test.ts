@@ -46,6 +46,12 @@ describe('standalone slide HTML', () => {
     );
     expect(target?.closest('article')?.id).toBe('slide-2');
     expect(result.querySelector('#deck-next')?.textContent).toBe('Next');
+    expect(result.querySelector('#deck-print')?.textContent).toBe(
+      'Print / Save PDF',
+    );
+    expect(
+      result.querySelector('progress#deck-progress')?.getAttribute('max'),
+    ).toBe('2');
     const css = result.querySelector('style')!.textContent!;
     const fontUrls = [...css.matchAll(/url\(([^)]+)\)/g)].map(
       (match) => match[1],
@@ -100,6 +106,9 @@ describe('standalone slide HTML', () => {
     expect(fetchImage).toHaveBeenCalledExactlyOnceWith('blob:chart');
     expect(result.html).not.toContain('blob:chart');
     expect(html.querySelector('#deck-next')?.textContent).toBe('次へ');
+    expect(html.querySelector('#deck-print')?.textContent).toBe(
+      '印刷／PDF保存',
+    );
   });
 
   it('rejects missing local images before fetching any assets', async () => {

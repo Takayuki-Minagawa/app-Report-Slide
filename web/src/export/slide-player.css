@@ -103,8 +103,13 @@ button {
 .deck-ready #deck-viewport {
   display: grid;
   place-items: center;
-  height: calc(100dvh - 112px);
+  flex: 1;
   min-height: 90px;
+}
+.deck-ready body {
+  display: flex;
+  height: 100dvh;
+  flex-direction: column;
 }
 .deck-ready #deck-stage {
   width: calc(920px * var(--deck-scale));
@@ -126,6 +131,7 @@ button {
   display: flex;
   justify-content: center;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 10px 16px;
 }
@@ -150,6 +156,24 @@ button {
   min-width: 72px;
   text-align: center;
   font-variant-numeric: tabular-nums;
+}
+#deck-progress {
+  display: block;
+  width: 100%;
+  height: 5px;
+  border: 0;
+  background: #41566c;
+  color: #68c9d0;
+  appearance: none;
+}
+#deck-progress::-webkit-progress-bar {
+  background: #41566c;
+}
+#deck-progress::-webkit-progress-value {
+  background: #68c9d0;
+}
+#deck-progress::-moz-progress-bar {
+  background: #68c9d0;
 }
 #deck-status {
   position: fixed;
@@ -179,8 +203,13 @@ button {
   body {
     background: white;
   }
+  .deck-ready body {
+    display: block;
+    height: auto;
+  }
   .deck-heading,
   .deck-controls,
+  #deck-progress,
   #deck-status {
     display: none !important;
   }
