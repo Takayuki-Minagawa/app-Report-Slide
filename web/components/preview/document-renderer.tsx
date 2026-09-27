@@ -24,6 +24,7 @@ import type {
   Mark,
   TableCellNode,
   TableHeaderNode,
+  TableNode,
 } from '@/src/document/model';
 import { tableCellBorderStyle } from '@/src/document/table';
 import {
@@ -547,6 +548,48 @@ function TableCellContent({
   );
 }
 
+/** Recover physical columns from the table grid, including row-spanning cells. */
+function tableColumnWidths(table: TableNode): Array<number | null> | null {
+  const widths: Array<number | null> = [];
+  const occupiedUntil: number[] = [];
+
+  table.content.forEach((row, rowIndex) => {
+    let column = 0;
+    for (const cell of row.content ?? []) {
+      const colspan = cell.attrs.colspan ?? 1;
+      const rowspan = cell.attrs.rowspan ?? 1;
+      let position = column;
+      while (position < column + colspan) {
+        if ((occupiedUntil[position] ?? 0) > rowIndex) {
+          column = position + 1;
+          position = column;
+        } else {
+          position += 1;
+        }
+      }
+
+      for (let offset = 0; offset < colspan; offset += 1) {
+        const index = column + offset;
+        const width = cell.attrs.colwidth?.[offset];
+        if (
+          widths[index] == null &&
+          typeof width === 'number' &&
+          Number.isFinite(width) &&
+          width > 0
+        ) {
+          widths[index] = width;
+        } else {
+          widths[index] ??= null;
+        }
+        if (rowspan > 1) occupiedUntil[index] = rowIndex + rowspan;
+      }
+      column += colspan;
+    }
+  });
+
+  return widths.some((width) => width !== null) ? widths : null;
+}
+
 function BlockNode({
   node,
   resolveImageUrl,
@@ -661,14 +704,35 @@ function BlockNode({
       return null;
     case 'horizontalRule':
       return <hr />;
-    case 'table':
+    case 'table': {
+      const columnWidths = tableColumnWidths(node);
+      const measuredWidth =
+        columnWidths?.reduce<number>((sum, width) => sum + (width ?? 0), 0) ??
+        0;
+      const missingWidthCount =
+        columnWidths?.filter((width) => width === null).length ?? 0;
+      const tableWidthStyle = columnWidths
+        ? missingWidthCount === 0
+          ? { width: `${measuredWidth}px` }
+          : { minWidth: `${measuredWidth + 80 * missingWidthCount}px` }
+        : undefined;
       return (
         <div className="preview-table-wrap" id={anchorId(key)}>
-          <table>
+          <table
+            className={columnWidths ? 'preview-table-sized' : undefined}
+            style={tableWidthStyle}
+          >
             {(target?.number || node.attrs.caption) && (
               <caption>
                 <Caption node={node} />
               </caption>
+            )}
+            {columnWidths && (
+              <colgroup>
+                {columnWidths.map((width, index) => (
+                  <col key={index} style={width ? { width } : undefined} />
+                ))}
+              </colgroup>
             )}
             <tbody>
               {node.content.map((row) => (
@@ -698,6 +762,7 @@ function BlockNode({
           </table>
         </div>
       );
+    }
     case 'tableRow':
     case 'tableHeader':
     case 'tableCell':

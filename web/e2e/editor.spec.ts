@@ -159,6 +159,78 @@ test('表セルから高度表ツールを開き、行・罫線・文字揃え�
   await expect(table.locator('th').first()).toHaveCSS('text-align', 'right');
 });
 
+test('表の列境界をドラッグし、選択した列を均等化して保存できる', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await waitForEditor(page);
+  await page.getByRole('button', { name: '表を挿入' }).click();
+
+  const table = page.locator('.kumi-editor-content table').last();
+  const firstHeader = table.locator('th').first();
+  await firstHeader.scrollIntoViewIfNeeded();
+  const firstCell = await firstHeader.boundingBox();
+  if (!firstCell) throw new Error('table header expected');
+  const borderX = firstCell.x + firstCell.width;
+  const centerY = firstCell.y + firstCell.height / 2;
+  const originalWidth = firstCell.width;
+
+  await page.mouse.move(borderX - 2, centerY);
+  await expect(table.locator('.column-resize-handle')).not.toHaveCount(0);
+  await page.mouse.down();
+  await page.mouse.move(borderX + 70, centerY, { steps: 5 });
+  await page.mouse.up();
+  await expect
+    .poll(async () =>
+      firstHeader.evaluate((cell) => cell.getBoundingClientRect().width),
+    )
+    .toBeGreaterThan(originalWidth + 25);
+  await expect(firstHeader).toHaveAttribute('colwidth', /\d/);
+
+  await page.getByRole('button', { name: '元に戻す' }).click();
+  await expect(firstHeader).not.toHaveAttribute('colwidth');
+  await expect
+    .poll(async () =>
+      firstHeader.evaluate((cell) => cell.getBoundingClientRect().width),
+    )
+    .toBeLessThan(originalWidth + 10);
+
+  const bodyCells = table.locator('tr').nth(1).locator('td');
+  await bodyCells.nth(0).scrollIntoViewIfNeeded();
+  const firstBody = await bodyCells.nth(0).boundingBox();
+  const secondBody = await bodyCells.nth(1).boundingBox();
+  if (!firstBody || !secondBody) throw new Error('body cells expected');
+  await page.mouse.move(
+    firstBody.x + firstBody.width / 2,
+    firstBody.y + firstBody.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    secondBody.x + secondBody.width / 2,
+    secondBody.y + secondBody.height / 2,
+    { steps: 5 },
+  );
+  await page.mouse.up();
+
+  const toolbar = page.getByRole('toolbar', { name: '表の編集' });
+  const distribute = toolbar.getByRole('button', { name: '選択列を均等化' });
+  await expect(distribute).toBeEnabled();
+  await distribute.click();
+  const columns = table.locator('colgroup > col');
+  await expect(columns).toHaveCount(3);
+  const widths = await columns.evaluateAll((items) =>
+    items.map((item) => item.getBoundingClientRect().width),
+  );
+  expect(Math.abs(widths[0] - widths[1])).toBeLessThanOrEqual(1);
+  await expect(table.locator('td').first()).toHaveAttribute('colwidth', /\d/);
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Markdown', exact: true }).click();
+  const saved = await downloadText(await downloadPromise);
+  expect(saved).toContain('::: kumi-table');
+  expect(saved).toContain('"colwidth"');
+});
+
 test('Markdown下書きをタブ間で保持し保存時に現在文書へ適用する', async ({
   page,
 }) => {

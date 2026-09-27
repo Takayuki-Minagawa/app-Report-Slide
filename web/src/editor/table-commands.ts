@@ -1,5 +1,6 @@
 import type { Editor } from '@tiptap/core';
 import {
+  CellSelection,
   mergeCells,
   selectedRect,
   splitCell,
@@ -21,6 +22,126 @@ export type TableBorderPreset = 'all' | 'outer' | 'inner' | TableBorderSide;
 export type TableBorderMode = 'draw' | 'erase';
 
 export type TableCellAlignment = 'left' | 'center' | 'right';
+
+const minimumColumnWidth = 80;
+
+function selectedColumnRange(editor: Editor) {
+  if (
+    !editor.isActive('table') ||
+    !(editor.state.selection instanceof CellSelection)
+  )
+    return null;
+  const selection = selectedRect(editor.state);
+  return selection.right - selection.left >= 2 ? selection : null;
+}
+
+export function canDistributeSelectedColumns(editor: Editor): boolean {
+  try {
+    return selectedColumnRange(editor) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function currentColumnWidths(
+  editor: Editor,
+  selection: NonNullable<ReturnType<typeof selectedColumnRange>>,
+): number[] {
+  const tablePosition = selection.tableStart - 1;
+  const tableDOM = editor.view.nodeDOM(tablePosition);
+  const tableElement =
+    tableDOM instanceof HTMLElement
+      ? tableDOM.tagName === 'TABLE'
+        ? tableDOM
+        : tableDOM.querySelector('table')
+      : null;
+  const columns = tableElement?.querySelectorAll('colgroup > col');
+
+  return Array.from({ length: selection.map.width }, (_, column) => {
+    const rendered = columns?.[column]?.getBoundingClientRect().width;
+    if (rendered && Number.isFinite(rendered))
+      return Math.max(minimumColumnWidth, rendered);
+
+    for (let row = 0; row < selection.map.height; row += 1) {
+      const position = selection.map.map[row * selection.map.width + column];
+      const cell = selection.table.nodeAt(position);
+      const width = (cell?.attrs.colwidth as number[] | null)?.[
+        column - selection.map.colCount(position)
+      ];
+      if (width && Number.isFinite(width))
+        return Math.max(minimumColumnWidth, width);
+    }
+    return minimumColumnWidth;
+  });
+}
+
+/** Equalizes the selected logical columns across every row, preserving their total width. */
+export function distributeSelectedTableColumns(
+  editor: Editor,
+  documentType: DocumentType,
+): boolean {
+  try {
+    const selection = selectedColumnRange(editor);
+    if (!selection) return false;
+
+    const widths = currentColumnWidths(editor, selection);
+    const count = selection.right - selection.left;
+    const total = Math.round(
+      widths
+        .slice(selection.left, selection.right)
+        .reduce((sum, width) => sum + width, 0),
+    );
+    const base = Math.floor(total / count);
+    const remainder = total % count;
+    if (base < minimumColumnWidth || base + (remainder > 0 ? 1 : 0) > 4_000)
+      return false;
+
+    const updates = new Map<number, number[]>();
+    for (let column = selection.left; column < selection.right; column += 1) {
+      const width = base + (column - selection.left < remainder ? 1 : 0);
+      for (let row = 0; row < selection.map.height; row += 1) {
+        const position = selection.map.map[row * selection.map.width + column];
+        const cell = selection.table.nodeAt(position);
+        if (!cell) return false;
+        const existing = cell.attrs.colwidth as number[] | null;
+        const cellWidths =
+          updates.get(position) ??
+          (existing ? [...existing] : Array(cell.attrs.colspan).fill(0));
+        cellWidths[column - selection.map.colCount(position)] = width;
+        updates.set(position, cellWidths);
+      }
+    }
+
+    const transaction = editor.state.tr;
+    for (const [position, colwidth] of updates) {
+      const absolutePosition = selection.tableStart + position;
+      const cell = transaction.doc.nodeAt(absolutePosition);
+      if (!cell) return false;
+      const original = cell.attrs.colwidth as number[] | null;
+      if (
+        original &&
+        original.every((width, index) => width === colwidth[index])
+      )
+        continue;
+      transaction.setNodeMarkup(absolutePosition, undefined, {
+        ...cell.attrs,
+        colwidth,
+      });
+    }
+    if (!transaction.docChanged) return false;
+    validateDocumentData({
+      schemaVersion: 2,
+      type: documentType,
+      metadata: {},
+      children: transaction.doc.toJSON().content,
+    });
+    editor.view.dispatch(transaction);
+    editor.view.focus();
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function selectedCellPositions(editor: Editor) {
   const selection = selectedRect(editor.state);

@@ -26,6 +26,7 @@ import {
   safeResourceUrl,
   resolveSafeImageUrl,
 } from '@/src/security/resource-url';
+import { UndoSafeTableView } from './table-view';
 
 export interface MathSelection {
   nodeId?: string;
@@ -479,7 +480,9 @@ export function createEditorExtensions({
     Chart,
     TableKit.configure({
       table: {
-        resizable: false,
+        resizable: true,
+        cellMinWidth: 80,
+        View: UndoSafeTableView,
       },
       tableCell: {},
       tableHeader: {},

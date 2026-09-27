@@ -398,9 +398,14 @@
   padding: 0;
 }
 
+.kumi-editor-content .tableWrapper {
+  overflow-x: auto;
+}
+
 .kumi-editor-content table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   font-family: var(--font-ui);
   font-size: 0.82rem;
 }
@@ -414,6 +419,8 @@
 .kumi-editor-content th,
 .kumi-editor-content td {
   min-width: 80px;
+  box-sizing: border-box;
+  position: relative;
   border: 1px solid #cad4df;
   padding: 0.45rem 0.6rem;
   vertical-align: top;
@@ -421,6 +428,21 @@
 
 .kumi-editor-content .selectedCell {
   background: #dcecff;
+}
+
+.kumi-editor-content .column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  z-index: 20;
+  width: 6px;
+  background: #50a2db;
+  pointer-events: none;
+}
+
+.kumi-editor-content.resize-cursor {
+  cursor: col-resize;
 }
 
 .tiptap-mathematics-render {

@@ -351,12 +351,11 @@ function validateTableCellFormatting(
       colwidth.forEach((width, index) => {
         if (
           typeof width !== 'number' ||
-          !Number.isInteger(width) ||
-          width < 20 ||
-          width > 4_000
+          !Number.isFinite(width) ||
+          (width !== 0 && (width < 20 || width > 4_000))
         ) {
           issues.push(
-            `${path}.attrs.colwidth.${index}: 20から4000の整数が必要です`,
+            `${path}.attrs.colwidth.${index}: 0（未設定）または20から4000の有限な数値が必要です`,
           );
         }
       });

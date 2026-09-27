@@ -4,6 +4,7 @@ import {
   AlignCenter,
   AlignLeft,
   AlignRight,
+  Columns3,
   Eraser,
   PanelBottom,
   PanelLeft,
@@ -24,6 +25,8 @@ import { Button } from '@/components/ui/button';
 import {
   applyTableCellAlignment,
   applyTableBorders,
+  canDistributeSelectedColumns,
+  distributeSelectedTableColumns,
   hasIncompatibleMergeBorders,
   mergeTableCellsPreservingBorders,
   selectedTableCellAlignment,
@@ -126,6 +129,7 @@ export function TableToolbar({
   if (!editor || !tableActive) return null;
 
   const mergeBorderConflict = hasIncompatibleMergeBorders(editor);
+  const canDistributeColumns = canDistributeSelectedColumns(editor);
   const cellAlignment = selectedTableCellAlignment(editor);
 
   const run = (command: () => boolean) => {
@@ -190,6 +194,15 @@ export function TableToolbar({
           onClick={() => run(() => editor.chain().focus().deleteColumn().run())}
         >
           <Trash2 />
+        </TableActionButton>
+        <TableActionButton
+          disabled={!canDistributeColumns}
+          label={copy.workspace.distributeColumns}
+          onClick={() =>
+            run(() => distributeSelectedTableColumns(editor, documentType))
+          }
+        >
+          <Columns3 />
         </TableActionButton>
       </TableToolbarGroup>
 
