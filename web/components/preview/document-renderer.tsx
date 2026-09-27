@@ -548,44 +548,20 @@ function TableCellContent({
   );
 }
 
-/** Recover physical columns from the table grid, including row-spanning cells. */
+/** Match Tiptap's table view: column widths come from the first row. */
 function tableColumnWidths(table: TableNode): Array<number | null> | null {
   const widths: Array<number | null> = [];
-  const occupiedUntil: number[] = [];
 
-  table.content.forEach((row, rowIndex) => {
-    let column = 0;
-    for (const cell of row.content ?? []) {
-      const colspan = cell.attrs.colspan ?? 1;
-      const rowspan = cell.attrs.rowspan ?? 1;
-      let position = column;
-      while (position < column + colspan) {
-        if ((occupiedUntil[position] ?? 0) > rowIndex) {
-          column = position + 1;
-          position = column;
-        } else {
-          position += 1;
-        }
-      }
-
-      for (let offset = 0; offset < colspan; offset += 1) {
-        const index = column + offset;
-        const width = cell.attrs.colwidth?.[offset];
-        if (
-          widths[index] == null &&
-          typeof width === 'number' &&
-          Number.isFinite(width) &&
-          width > 0
-        ) {
-          widths[index] = width;
-        } else {
-          widths[index] ??= null;
-        }
-        if (rowspan > 1) occupiedUntil[index] = rowIndex + rowspan;
-      }
-      column += colspan;
+  for (const cell of table.content[0]?.content ?? []) {
+    for (let offset = 0; offset < (cell.attrs.colspan ?? 1); offset += 1) {
+      const width = cell.attrs.colwidth?.[offset];
+      widths.push(
+        typeof width === 'number' && Number.isFinite(width) && width > 0
+          ? width
+          : null,
+      );
     }
-  });
+  }
 
   return widths.some((width) => width !== null) ? widths : null;
 }

@@ -11,6 +11,7 @@ import { validateDocumentData } from '@/src/document/validation';
 import {
   isTableBorder,
   isTableCellBorders,
+  maximumTableColumnWidth,
   tableBorderSides,
   type TableBorder,
   type TableBorderSide,
@@ -93,7 +94,10 @@ export function distributeSelectedTableColumns(
     );
     const base = Math.floor(total / count);
     const remainder = total % count;
-    if (base < minimumColumnWidth || base + (remainder > 0 ? 1 : 0) > 4_000)
+    if (
+      base < minimumColumnWidth ||
+      base + (remainder > 0 ? 1 : 0) > maximumTableColumnWidth
+    )
       return false;
 
     const updates = new Map<number, number[]>();

@@ -246,10 +246,10 @@ describe('standalone slide HTML', () => {
     table.content[0].content!.splice(1, 1);
     merged.attrs.colspan = 2;
     merged.attrs.rowspan = 2;
-    merged.attrs.colwidth = [120, 0];
+    merged.attrs.colwidth = [120, 240];
     table.content[0].content![1].attrs.colwidth = [180];
     table.content[1].content!.splice(0, 2);
-    table.content[2].content![1].attrs.colwidth = [240];
+    table.content[2].content![1].attrs.colwidth = [260];
 
     const result = readHtml(
       (await exportSlideHtml(source, new Map(), 'ja')).html,
@@ -282,6 +282,12 @@ describe('standalone slide HTML', () => {
 
     const table = source.children.find((node) => node.type === 'table');
     if (!table || table.type !== 'table') throw new Error('table expected');
+    table.content[1].content![0].attrs.colwidth = [200];
+    const laterRowOnly = readHtml(
+      (await exportSlideHtml(source, new Map(), 'ja')).html,
+    );
+    expect(laterRowOnly.querySelector('colgroup')).toBeNull();
+
     table.content[0].content![0].attrs.colwidth = [150];
     table.content[0].content![1].attrs.colwidth = [0];
     table.content[0].content![2].attrs.colwidth = [90];

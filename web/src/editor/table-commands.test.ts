@@ -89,6 +89,32 @@ function setColumnWidths(current: Editor, widths: number[]): void {
 }
 
 describe('advanced table commands', () => {
+  it('caps a dragged column width before it reaches document serialization', () => {
+    const current = createEditor();
+    const { map, tableStart } = tableContext(current);
+    const position = tableStart + map.map[0];
+    const cell = current.state.doc.nodeAt(position);
+    if (!cell) throw new Error('cell expected');
+    current.view.dispatch(
+      current.state.tr.setNodeMarkup(position, undefined, {
+        ...cell.attrs,
+        colwidth: [4_500],
+      }),
+    );
+
+    expect(tableJson(current).content[0].content[0].attrs.colwidth).toEqual([
+      4_000,
+    ]);
+    expect(() =>
+      validateDocumentData({
+        schemaVersion: 2,
+        type: 'report',
+        metadata: {},
+        children: current.getJSON().content ?? [],
+      }),
+    ).not.toThrow();
+  });
+
   it('distributes only selected columns across all rows and preserves their total', () => {
     const current = createEditor(true, 3);
     setColumnWidths(current, [120, 180, 300]);

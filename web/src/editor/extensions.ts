@@ -19,6 +19,7 @@ import {
 } from '@/src/document/slide-layout';
 import {
   isTableCellBorders,
+  maximumTableColumnWidth,
   parseTableCellBorders,
   tableCellBordersToCss,
 } from '@/src/document/table';
@@ -169,6 +170,23 @@ const DocumentAttributes = Extension.create({
           const transaction = newState.tr;
           newState.doc.descendants((node, position) => {
             if (!identifiedTypes.includes(node.type.name)) return;
+            let attributes = node.attrs;
+            if (
+              (node.type.name === 'tableHeader' ||
+                node.type.name === 'tableCell') &&
+              Array.isArray(node.attrs.colwidth)
+            ) {
+              const widths = (node.attrs.colwidth as number[]).map((width) =>
+                Math.min(width, maximumTableColumnWidth),
+              );
+              if (
+                widths.some(
+                  (width, index) => width !== node.attrs.colwidth[index],
+                )
+              ) {
+                attributes = { ...node.attrs, colwidth: widths };
+              }
+            }
             const current = node.attrs.nodeId;
             if (
               typeof current === 'string' &&
@@ -176,6 +194,9 @@ const DocumentAttributes = Extension.create({
               !seen.has(current)
             ) {
               seen.add(current);
+              if (attributes !== node.attrs) {
+                transaction.setNodeMarkup(position, undefined, attributes);
+              }
               return;
             }
 
@@ -183,7 +204,7 @@ const DocumentAttributes = Extension.create({
             while (seen.has(next)) next = createNodeId();
             seen.add(next);
             transaction.setNodeMarkup(position, undefined, {
-              ...node.attrs,
+              ...attributes,
               nodeId: next,
             });
           });

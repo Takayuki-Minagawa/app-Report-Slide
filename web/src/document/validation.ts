@@ -6,7 +6,11 @@ import type { DocumentData } from './model';
 import { booleanMetadataKeys, stringMetadataKeys } from './metadata';
 import { pageSettingsIssues } from './page-settings';
 import { labelPattern, semanticTypes } from './semantics';
-import { isTableCellBorders, tableBorderSides } from './table';
+import {
+  isTableCellBorders,
+  maximumTableColumnWidth,
+  tableBorderSides,
+} from './table';
 import { isSlideImagePlacement } from './slide-layout';
 
 const documentEnvelopeSchema = z
@@ -352,7 +356,7 @@ function validateTableCellFormatting(
         if (
           typeof width !== 'number' ||
           !Number.isFinite(width) ||
-          (width !== 0 && (width < 20 || width > 4_000))
+          (width !== 0 && (width < 20 || width > maximumTableColumnWidth))
         ) {
           issues.push(
             `${path}.attrs.colwidth.${index}: 0（未設定）または20から4000の有限な数値が必要です`,
