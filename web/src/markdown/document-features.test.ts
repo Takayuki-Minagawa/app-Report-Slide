@@ -17,6 +17,78 @@ function normalized(value: unknown): unknown {
 }
 
 describe('document feature dialect', () => {
+  it('round-trips ruler positions on paragraphs and headings', () => {
+    const source = [
+      '# 見出し',
+      '{#sec:ruler text_ruler=12.5,10,8}',
+      '',
+      '本文',
+      '{text_ruler=10,5,15}',
+    ].join('\n');
+    const first = parseMarkdown(source).document;
+    expect(first.children[0].attrs.textRuler).toEqual({
+      left: 12.5,
+      right: 10,
+      firstLine: 8,
+    });
+    expect(first.children[1].attrs.textRuler).toEqual({
+      left: 10,
+      right: 5,
+      firstLine: 15,
+    });
+    const canonical = serializeDocument(first);
+    expect(canonical).toContain('{text_ruler=10,5,15}');
+    expect(normalized(parseMarkdown(canonical).document)).toEqual(
+      normalized(first),
+    );
+  });
+
+  it('round-trips ruler positions in list items and quotes', () => {
+    const source = [
+      '- 項目',
+      '  {text_ruler=10,0,5}',
+      '',
+      '> 引用',
+      '> {text_ruler=5,10,15}',
+    ].join('\n');
+    const first = parseMarkdown(source).document;
+    const canonical = serializeDocument(first);
+    expect(normalized(parseMarkdown(canonical).document)).toEqual(
+      normalized(first),
+    );
+    expect(canonical).toContain('{text_ruler=10,0,5}');
+    expect(canonical).toContain('{text_ruler=5,10,15}');
+  });
+
+  it('uses the advanced table format when a cell paragraph has ruler positions', () => {
+    const document = parseMarkdown('| Head |\n| --- |\n| Body |').document;
+    const table = document.children[0];
+    if (table.type !== 'table') throw new Error('Expected table');
+    const cell = table.content[1].content?.[0];
+    if (!cell) throw new Error('Expected table cell');
+    cell.content[0].attrs.textRuler = {
+      left: 10,
+      right: 0,
+      firstLine: 15,
+    };
+    const canonical = serializeDocument(document);
+    expect(canonical).toContain('::: kumi-table');
+    expect(normalized(parseMarkdown(canonical).document)).toEqual(
+      normalized(document),
+    );
+  });
+
+  it.each([
+    'Body\n{text_ruler=86,0,0}',
+    'Body\n{text_ruler=45,41,45}',
+    'Body\n{text_ruler=10,5,96}',
+    'Body\n{text_ruler=NaN,5,10}',
+    'Body\n{text_ruler=10,5}',
+    '![Figure](image.png)\n{text_ruler=10,5,10}',
+  ])('rejects invalid ruler attributes: %s', (source) => {
+    expect(() => parseMarkdown(source)).toThrow(MarkdownImportError);
+  });
+
   it('preserves references next to punctuation, including link-definition colons', () => {
     const symbols = Array.from('!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~');
     for (const text of [

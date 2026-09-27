@@ -7,6 +7,21 @@ beforeEach(() => vi.stubGlobal('crypto', webcrypto));
 afterEach(() => vi.unstubAllGlobals());
 
 describe('standalone Report HTML', () => {
+  it('keeps paragraph ruler positions in exported reports', async () => {
+    const source = parseMarkdown(
+      '---\ntype: report\n---\n\nIndented report text\n{text_ruler=10,5,15}',
+    ).document;
+    const { html } = await exportReportHtml(source, new Map(), 'ja');
+    const paragraph = new DOMParser()
+      .parseFromString(html, 'text/html')
+      .querySelector<HTMLElement>('.report-sheet .document-renderer > p');
+    expect(paragraph?.style.marginLeft).toBe('10%');
+    expect(paragraph?.style.marginRight).toBe('5%');
+    expect(Number.parseFloat(paragraph?.style.textIndent ?? '')).toBeCloseTo(
+      (5 / 85) * 100,
+    );
+  });
+
   it('includes paper settings, explicit page breaks, print control and cross-page references', async () => {
     const source = parseMarkdown(
       '---\ntype: report\ntitle: Print test\ntoc: true\npage_settings:\n  paper: A5\n  orientation: landscape\n  margin_top: 20\n  margin_bottom: 20\n  margin_left: 20\n  margin_right: 20\n  font_size: 10.5\n  first_line_indent: 0\n  line_height: 1.85\n  paragraph_spacing: 12\n---\n\n# First\n{#sec:first}\n\n[@sec:second]\n\n::: pagebreak\n:::\n\n# Second\n{#sec:second}',

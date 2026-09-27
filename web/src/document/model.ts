@@ -1,6 +1,7 @@
 import { resolveDocumentTheme } from './metadata';
 import type { PageSettings } from './page-settings';
 import type { TableCellBorders } from './table';
+import type { TextRuler } from './text-ruler';
 
 export type DocumentType = 'report' | 'slide';
 
@@ -85,6 +86,7 @@ interface IdentifiedNode {
 
 export interface ParagraphNode extends IdentifiedNode {
   type: 'paragraph';
+  attrs: IdentifiedNode['attrs'] & { textRuler?: TextRuler | null };
   content?: InlineNode[];
 }
 
@@ -92,6 +94,7 @@ export interface HeadingNode extends IdentifiedNode {
   type: 'heading';
   attrs: IdentifiedNode['attrs'] & {
     level: 1 | 2 | 3 | 4 | 5 | 6;
+    textRuler?: TextRuler | null;
   };
   content?: InlineNode[];
 }

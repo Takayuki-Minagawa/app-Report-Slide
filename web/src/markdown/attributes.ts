@@ -4,14 +4,15 @@ import {
   parseSlideImagePlacement,
   serializeSlideImagePlacement,
 } from '@/src/document/slide-layout';
+import { isTextRuler } from '@/src/document/text-ruler';
 
 /** A strict single-line attribute grammar. Quoted values follow JSON string escaping. */
 export function parseBlockAttributes(
   source: string,
   node: DocumentNode | undefined,
 ): Record<string, unknown> {
-  if (!node || !semanticTypes.has(node.type))
-    throw new Error('属性行は見出し・図・表・式の直後に指定してください');
+  if (!node || (node.type !== 'paragraph' && !semanticTypes.has(node.type)))
+    throw new Error('属性行は段落・見出し・図・表・式の直後に指定してください');
   if (!source.endsWith('}')) throw new Error('属性行の末尾に } が必要です');
   let rest = source.slice(1, -1).trim();
   const attrs: Record<string, unknown> = {};
@@ -31,6 +32,7 @@ export function parseBlockAttributes(
         'width',
         'align',
         'slide_layout',
+        'text_ruler',
       ].includes(key) ||
       parsedKeys.has(key)
     )
@@ -46,8 +48,32 @@ export function parseBlockAttributes(
       throw new Error(
         'ラベルは英字から始まる128文字以内の英数字・:._-で指定してください',
       );
+    if (node.type === 'paragraph' && key !== 'text_ruler') {
+      throw new Error('段落にはtext_rulerだけを指定できます');
+    }
     if (key === 'caption' && node.type === 'heading')
       throw new Error('見出しにはcaptionを指定できません');
+    if (key === 'text_ruler') {
+      if (node.type !== 'paragraph' && node.type !== 'heading')
+        throw new Error('text_rulerは段落・見出しだけに指定できます');
+      if (
+        typeof value !== 'string' ||
+        !/^(?:0|[1-9]\d*)(?:\.\d+)?,(?:0|[1-9]\d*)(?:\.\d+)?,(?:0|[1-9]\d*)(?:\.\d+)?$/.test(
+          value,
+        )
+      ) {
+        throw new Error(
+          'text_rulerはleft,right,firstLineの数値を指定してください',
+        );
+      }
+      const [left, right, firstLine] = value.split(',').map(Number);
+      const ruler = { left, right, firstLine };
+      if (!isTextRuler(ruler))
+        throw new Error('text_rulerの位置を本文幅の範囲内に指定してください');
+      attrs.textRuler = ruler;
+      rest = rest.slice(match[0].length);
+      continue;
+    }
     if (key === 'slide_layout') {
       if (node.type !== 'figure')
         throw new Error('slide_layoutは図だけに指定できます');
@@ -84,9 +110,17 @@ export function parseBlockAttributes(
 }
 
 export function serializeBlockAttributes(node: DocumentNode): string {
-  if (!semanticTypes.has(node.type)) return '';
+  if (node.type !== 'paragraph' && !semanticTypes.has(node.type)) return '';
   const attrs: string[] = [];
-  if (node.attrs.label) attrs.push(`#${node.attrs.label}`);
+  if (semanticTypes.has(node.type) && node.attrs.label)
+    attrs.push(`#${node.attrs.label}`);
+  if (
+    (node.type === 'paragraph' || node.type === 'heading') &&
+    isTextRuler(node.attrs.textRuler)
+  ) {
+    const { left, right, firstLine } = node.attrs.textRuler;
+    attrs.push(`text_ruler=${left},${right},${firstLine}`);
+  }
   if (node.type === 'figure') {
     if (node.attrs.width !== 100) attrs.push(`width=${node.attrs.width}%`);
     if (node.attrs.align !== 'center') attrs.push(`align=${node.attrs.align}`);
@@ -95,9 +129,9 @@ export function serializeBlockAttributes(node: DocumentNode): string {
         `slide_layout=${JSON.stringify(serializeSlideImagePlacement(node.attrs.slidePlacement))}`,
       );
   }
-  if (node.attrs.caption != null)
+  if (semanticTypes.has(node.type) && node.attrs.caption != null)
     attrs.push(`caption=${JSON.stringify(node.attrs.caption)}`);
-  if (node.attrs.numbered != null)
+  if (semanticTypes.has(node.type) && node.attrs.numbered != null)
     attrs.push(`numbered=${node.attrs.numbered}`);
   return attrs.length
     ? `${node.type === 'table' ? '\n\n' : '\n'}{${attrs.join(' ')}}`

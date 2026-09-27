@@ -11,6 +11,7 @@ KUMI is a browser application for editing and reviewing technical reports and sl
 ## 2. Edit
 
 - Edit text directly in the **Visual editor**. The formatting toolbar adds headings, lists, quotes, tables, equations, and page or slide breaks.
+- Select one or more top-level paragraphs or headings, then use the **Text ruler** above the editor to set the left and right positions and first-line indent. Drag a marker or focus it and use the arrow keys. Move the first-line marker before the left marker for a hanging indent; choose **Reset** to clear these settings.
 - Use the **Markdown** tab to edit source. Choose **Apply Markdown**, or save **Markdown/JSON** from the header when you finish. While a Markdown draft is unapplied, KUMI prevents a return to the visual editor to avoid conflicting changes.
 - Unfinished content, chapter structure, unapplied Markdown, and imported images are temporarily kept as a recovery copy in this browser. When you return, choose whether to restore or remove it. This is device-local help only, so keep Markdown, JSON, or a project ZIP as the source of record.
 - Select an element to configure its theme, table of contents, numbering, reference label, caption, and an image's width, alignment, or alternative text in **Properties**.
@@ -70,6 +71,6 @@ For a single Report or Slide, use **ZIP** in the header to save the editable doc
 
 Apply or discard Markdown and return to the visual editor before changing the chapter structure. Structural changes are outside Undo; switching or deleting chapters resets the body Undo history. A device-local recovery copy can help resume unfinished work, but **save a ZIP before closing the tab**. See [Chapter projects](./report-projects.en.md) for details.
 
-## Using the published version
+## Published app and your data
 
-GitHub Pages is public. Do not import documents or images containing customer information, personal data, confidential information, or credentials. Handle files stored on your device or exported from KUMI according to your organization's policies.
+GitHub Pages publishes the app and its bundled sample. Imported documents and images and your edits stay in this browser; they are not automatically sent to or published on GitHub Pages or in the repository. Images linked by external URLs are requested from their hosts when displayed. You control any files you save or share.

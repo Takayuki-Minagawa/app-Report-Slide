@@ -11,6 +11,7 @@ import { Plugin } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 
 import { createNodeId } from '@/src/document/model';
+import { isTextRuler, textRulerStyle } from '@/src/document/text-ruler';
 import { validateDocumentData } from '@/src/document/validation';
 import {
   isSlideImagePlacement,
@@ -67,6 +68,32 @@ const DocumentAttributes = Extension.create({
 
   addGlobalAttributes() {
     return [
+      {
+        types: ['paragraph', 'heading'],
+        attributes: {
+          textRuler: {
+            default: null,
+            parseHTML: (element) => {
+              const source = element.getAttribute('data-kumi-text-ruler');
+              if (!source) return null;
+              try {
+                const value: unknown = JSON.parse(source);
+                return isTextRuler(value) ? value : null;
+              } catch {
+                return null;
+              }
+            },
+            renderHTML: (attributes) => {
+              if (!isTextRuler(attributes.textRuler)) return {};
+              const style = textRulerStyle(attributes.textRuler)!;
+              return {
+                'data-kumi-text-ruler': JSON.stringify(attributes.textRuler),
+                style: `margin-left:${style.marginLeft};margin-right:${style.marginRight};text-indent:${style.textIndent}`,
+              };
+            },
+          },
+        },
+      },
       {
         types: ['heading', 'figure', 'table', 'blockMath'],
         attributes: {

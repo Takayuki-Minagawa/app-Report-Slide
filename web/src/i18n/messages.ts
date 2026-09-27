@@ -42,6 +42,14 @@ export interface UiMessages {
     preview: string;
     switchToView: (label: string) => string;
     format: string;
+    textRuler: string;
+    rulerLeft: string;
+    rulerFirstLine: string;
+    rulerRight: string;
+    rulerReset: string;
+    rulerHint: string;
+    rulerMulti: (count: number) => string;
+    rulerUnavailable: string;
     bold: string;
     italic: string;
     heading1: string;
@@ -282,6 +290,15 @@ export const messages: Record<AppLocale, UiMessages> = {
       resizeImage: (direction) => '画像の' + direction + 'をリサイズ',
       switchToView: (label) => `${label}へ切り替え`,
       format: '書式',
+      textRuler: '文字位置ルーラー',
+      rulerLeft: '左位置',
+      rulerFirstLine: '1行目の字下げ',
+      rulerRight: '右位置',
+      rulerReset: 'リセット',
+      rulerHint:
+        '上の印をドラッグして左位置・右位置・1行目の字下げを調整します。印にフォーカスして矢印キーでも変更できます。',
+      rulerMulti: (count) => `${count} 個のテキストブロックを選択中`,
+      rulerUnavailable: '本文直下の段落または見出しを選択してください',
       bold: '太字',
       italic: '斜体',
       heading1: '見出し1',
@@ -501,6 +518,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       editTitle: '2. 編集する',
       editSteps: [
         '「ビジュアル編集」で本文を直接編集し、上部の書式ボタンで見出し、リスト、引用、表、数式を追加します。',
+        '本文直下の段落・見出しを1つまたは複数選び、上部の文字位置ルーラーで左位置・右位置・1行目の字下げを調整します。印はドラッグまたは矢印キーで動かせます。1行目を左位置より前にするとぶら下げ字下げになり、「リセット」で解除できます。',
         'Slideでは「図を配置」を開き、「画像を挿入」で画像を選びます。図をドラッグして移動し、8方向のハンドルで大きさを変えられます。矢印キーは1%、Shift＋矢印キーは5%移動です。',
         '「Markdown」では原稿を直接編集します。変更後は「Markdownを適用」またはMarkdown／JSON保存を選んでください。',
         '要素を選ぶと右側のPropertiesでテーマ、目次、番号、参照ラベル、図の代替テキストなどを設定できます。',
@@ -526,9 +544,9 @@ export const messages: Record<AppLocale, UiMessages> = {
         'ヘッダーの月／太陽ボタンでライト・ダークモードを切り替えます。文書の紙面プレビューは読みやすさのため白い紙面として保たれます。',
         '「EN」または「日本語」ボタンでアプリ操作画面を切り替えます。編集中の文書本文は自動翻訳されません。',
       ],
-      privacyTitle: '公開版を使うときの注意',
+      privacyTitle: '公開版と作業データ',
       privacyText:
-        'GitHub Pagesは公開サイトです。顧客情報、個人情報、秘密情報、アクセストークンを含む文書や画像は読み込ませないでください。',
+        'GitHub Pagesで公開されるのはアプリ本体と同梱のサンプルです。読み込んだ文書・画像や編集中の内容はこのブラウザ内で扱われ、GitHub Pagesやリポジトリへ自動送信・公開されません。外部URLの画像は表示時に参照先へアクセスします。保存・共有したファイルは利用者が管理してください。',
     },
   },
   en: {
@@ -571,6 +589,16 @@ export const messages: Record<AppLocale, UiMessages> = {
       resizeImage: (direction) => 'Resize image: ' + direction,
       switchToView: (label) => `Switch to ${label}`,
       format: 'Formatting',
+      textRuler: 'Text ruler',
+      rulerLeft: 'Left position',
+      rulerFirstLine: 'First-line indent',
+      rulerRight: 'Right position',
+      rulerReset: 'Reset',
+      rulerHint:
+        'Drag the markers to set the left and right positions and first-line indent. Focus a marker and use the arrow keys for keyboard adjustments.',
+      rulerMulti: (count) =>
+        `${count} text block${count === 1 ? '' : 's'} selected`,
+      rulerUnavailable: 'Select a top-level paragraph or heading',
       bold: 'Bold',
       italic: 'Italic',
       heading1: 'Heading 1',
@@ -791,6 +819,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       editTitle: '2. Edit',
       editSteps: [
         'Edit directly in the Visual editor. The formatting toolbar adds headings, lists, quotes, tables, and equations.',
+        'Select one or more top-level paragraphs or headings, then use the text ruler above the editor to set left and right positions and the first-line indent. Drag a marker or focus it and use the arrow keys. Move the first-line marker before the left marker for a hanging indent; choose Reset to clear these settings.',
         'For Slides, open “Place images” and choose “Insert image”. Drag an image to move it or use its eight handles to resize it. Arrow keys move it by 1%; Shift+Arrow moves it by 5%.',
         'Use the Markdown tab to edit source directly. Choose “Apply Markdown” or save Markdown/JSON after making changes.',
         'Select an element to configure its theme, table of contents, numbering, reference label, or image alternative text in Properties.',
@@ -816,9 +845,9 @@ export const messages: Record<AppLocale, UiMessages> = {
         'Use the moon/sun button in the header to switch between light and dark mode. The document canvas stays paper-white for readability.',
         'Use the EN or 日本語 button to change the application interface. It does not translate the document you are editing.',
       ],
-      privacyTitle: 'Using the published version',
+      privacyTitle: 'Published app and your data',
       privacyText:
-        'GitHub Pages is public. Do not import documents or images containing customer information, personal data, confidential material, or access tokens.',
+        'GitHub Pages publishes the app and its bundled sample. Imported documents and images and your edits stay in this browser; they are not automatically sent to or published on GitHub Pages or in the repository. Images linked by external URLs are requested from their hosts when displayed. You control any files you save or share.',
     },
   },
 };

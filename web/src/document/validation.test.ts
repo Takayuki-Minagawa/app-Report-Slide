@@ -131,6 +131,45 @@ function comprehensiveDocument(): DocumentData {
 }
 
 describe('validateDocumentData', () => {
+  it('段落と見出しのルーラー位置を検証する', () => {
+    const document = comprehensiveDocument();
+    document.children[0].attrs.textRuler = {
+      left: 10,
+      right: 5,
+      firstLine: 8,
+    };
+    document.children[1].attrs.textRuler = {
+      left: 10,
+      right: 5,
+      firstLine: 15,
+    };
+    expect(validateDocumentData(document)).toBe(document);
+    document.children[1].attrs.textRuler = null;
+    expect(validateDocumentData(document)).toBe(document);
+  });
+
+  it.each([
+    { left: 86, right: 0, firstLine: 0 },
+    { left: 45, right: 41, firstLine: 45 },
+    { left: 10, right: 5, firstLine: 96 },
+    { left: 10, right: 5, firstLine: Number.POSITIVE_INFINITY },
+    { left: 10, right: 5, firstLine: 12, extra: 1 },
+  ])('不正なルーラー位置を拒否する: %j', (ruler) => {
+    const document = comprehensiveDocument();
+    document.children[1].attrs.textRuler = ruler as never;
+    expect(() => validateDocumentData(document)).toThrow(
+      DocumentValidationError,
+    );
+  });
+
+  it('段落・見出し以外のルーラー位置を拒否する', () => {
+    const document = comprehensiveDocument();
+    document.children[2].attrs.textRuler = { left: 0, right: 0, firstLine: 0 };
+    expect(() => validateDocumentData(document)).toThrow(
+      DocumentValidationError,
+    );
+  });
+
   it('全MVP 1 nodeを含む正しいDocumentDataを受け入れる', () => {
     const document = comprehensiveDocument();
     expect(validateDocumentData(document)).toBe(document);

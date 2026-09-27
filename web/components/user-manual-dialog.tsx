@@ -84,7 +84,7 @@ export function UserManualDialog() {
               title={manual.recoveryTitle}
               items={manual.recoverySteps}
             />
-            <section className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
+            <section className="rounded-md border bg-muted/30 p-3">
               <h3 className="font-semibold">{manual.privacyTitle}</h3>
               <p className="mt-1 text-muted-foreground">{manual.privacyText}</p>
             </section>
