@@ -25,4 +25,25 @@ describe('standalone Report HTML', () => {
     ).toMatch(/^#kumi-/);
     expect(parsed.querySelector('link, script[src]')).toBeNull();
   });
+
+  it('keeps resized table columns in a standalone report', async () => {
+    const source = parseMarkdown(
+      '---\ntype: report\n---\n\n| A | B |\n| --- | --- |\n| 1 | 2 |',
+    ).document;
+    const table = source.children.find((node) => node.type === 'table');
+    if (!table || table.type !== 'table') throw new Error('table expected');
+    table.content[0].content![0].attrs.colwidth = [140];
+    table.content[0].content![1].attrs.colwidth = [220];
+
+    const { html } = await exportReportHtml(source, new Map(), 'ja');
+    const result = new DOMParser().parseFromString(html, 'text/html');
+    const columns = [...result.querySelectorAll<HTMLTableColElement>('col')];
+    expect(columns.map((column) => column.style.width)).toEqual([
+      '140px',
+      '220px',
+    ]);
+    expect(result.querySelector<HTMLTableElement>('table')?.style.width).toBe(
+      '360px',
+    );
+  });
 });

@@ -8,6 +8,8 @@ import { createEditorExtensions } from './extensions';
 import {
   applyTableCellAlignment,
   applyTableBorders,
+  canDistributeSelectedColumns,
+  distributeSelectedTableColumns,
   hasIncompatibleMergeBorders,
   mergeTableCellsPreservingBorders,
   selectedTableCellAlignment,
@@ -21,7 +23,7 @@ afterEach(() => {
   editor = undefined;
 });
 
-function createEditor(withHeaderRow = true): Editor {
+function createEditor(withHeaderRow = true, columns = 2): Editor {
   editor = new Editor({
     extensions: createEditorExtensions({ onMathSelect: () => undefined }),
     content: {
@@ -29,7 +31,7 @@ function createEditor(withHeaderRow = true): Editor {
       content: [{ type: 'paragraph', attrs: { nodeId: 'initial' } }],
     },
   });
-  editor.commands.insertTable({ rows: 2, cols: 2, withHeaderRow });
+  editor.commands.insertTable({ rows: 2, cols: columns, withHeaderRow });
   return editor;
 }
 
@@ -71,7 +73,114 @@ function tableJson(current: Editor) {
   };
 }
 
+function setColumnWidths(current: Editor, widths: number[]): void {
+  const { map, tableStart } = tableContext(current);
+  const transaction = current.state.tr;
+  for (const position of new Set(map.map)) {
+    const cell = transaction.doc.nodeAt(tableStart + position);
+    if (!cell) throw new Error('cell expected');
+    const firstColumn = map.colCount(position);
+    transaction.setNodeMarkup(tableStart + position, undefined, {
+      ...cell.attrs,
+      colwidth: widths.slice(firstColumn, firstColumn + cell.attrs.colspan),
+    });
+  }
+  current.view.dispatch(transaction);
+}
+
 describe('advanced table commands', () => {
+  it.each([
+    { input: 4_500, expected: 4_000 },
+    { input: Number.NaN, expected: 0 },
+    { input: Number.POSITIVE_INFINITY, expected: 0 },
+    { input: -10, expected: 0 },
+    { input: 10, expected: 0 },
+  ])('normalizes invalid editor column width $input', ({ input, expected }) => {
+    const current = createEditor();
+    const { map, tableStart } = tableContext(current);
+    const position = tableStart + map.map[0];
+    const cell = current.state.doc.nodeAt(position);
+    if (!cell) throw new Error('cell expected');
+    current.view.dispatch(
+      current.state.tr.setNodeMarkup(position, undefined, {
+        ...cell.attrs,
+        colwidth: [input],
+      }),
+    );
+
+    expect(tableJson(current).content[0].content[0].attrs.colwidth).toEqual([
+      expected,
+    ]);
+    expect(() =>
+      validateDocumentData({
+        schemaVersion: 2,
+        type: 'report',
+        metadata: {},
+        children: current.getJSON().content ?? [],
+      }),
+    ).not.toThrow();
+  });
+
+  it('keeps a column-width array aligned with the cell colspan', () => {
+    const current = createEditor();
+    const { map, tableStart } = tableContext(current);
+    const position = tableStart + map.map[0];
+    const cell = current.state.doc.nodeAt(position);
+    if (!cell) throw new Error('cell expected');
+    current.view.dispatch(
+      current.state.tr.setNodeMarkup(position, undefined, {
+        ...cell.attrs,
+        colwidth: [120, 180],
+      }),
+    );
+
+    expect(tableJson(current).content[0].content[0].attrs.colwidth).toEqual([
+      120,
+    ]);
+  });
+
+  it('distributes only selected columns across all rows and preserves their total', () => {
+    const current = createEditor(true, 3);
+    setColumnWidths(current, [120, 180, 300]);
+    selectCells(current, 0, 1);
+
+    expect(canDistributeSelectedColumns(current)).toBe(true);
+    expect(distributeSelectedTableColumns(current, 'report')).toBe(true);
+    for (const row of tableJson(current).content) {
+      expect(row.content.map((cell) => cell.attrs.colwidth)).toEqual([
+        [150],
+        [150],
+        [300],
+      ]);
+    }
+    expect(distributeSelectedTableColumns(current, 'report')).toBe(false);
+  });
+
+  it('updates the correct width slot in a merged cell', () => {
+    const current = createEditor(true, 3);
+    selectCells(current, 0, 1);
+    expect(current.commands.mergeCells()).toBe(true);
+    setColumnWidths(current, [120, 180, 300]);
+    selectCells(current, 4, 5);
+
+    expect(distributeSelectedTableColumns(current, 'report')).toBe(true);
+    expect(
+      tableJson(current).content[0].content.map((cell) => cell.attrs.colwidth),
+    ).toEqual([[120, 240], [240]]);
+    expect(
+      tableJson(current).content[1].content.map((cell) => cell.attrs.colwidth),
+    ).toEqual([[120], [240], [240]]);
+  });
+
+  it('requires a multi-column cell selection before distributing widths', () => {
+    const current = createEditor();
+    selectCells(current, 0);
+
+    expect(canDistributeSelectedColumns(current)).toBe(false);
+    expect(distributeSelectedTableColumns(current, 'report')).toBe(false);
+    expect(tableJson(current).content[0].content[0].attrs.colwidth).toBeNull();
+  });
+
   it.each(['left', 'center', 'right'] as const)(
     'aligns all selected cells %s without changing other cells',
     (alignment) => {

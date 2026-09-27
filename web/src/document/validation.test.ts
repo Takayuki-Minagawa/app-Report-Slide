@@ -336,6 +336,44 @@ describe('validateDocumentData', () => {
     expect(validateDocumentData(document)).toBe(document);
   });
 
+  it('結合セルの列幅で未設定の0と小数を受け入れる', () => {
+    const document = comprehensiveDocument();
+    const table = document.children.find((node) => node.type === 'table');
+    if (!table || table.type !== 'table') throw new Error('table expected');
+
+    const header = table.content[0].content![0];
+    header.attrs.colspan = 2;
+    header.attrs.colwidth = [0, 120.5];
+    const body = table.content[1].content![0];
+    body.attrs.colspan = 2;
+    body.attrs.colwidth = [135.25, 0];
+
+    expect(validateDocumentData(document)).toBe(document);
+  });
+
+  it.each([0, 20, 120.5, 4_000])('列幅%fを受け入れる', (width) => {
+    const document = comprehensiveDocument();
+    const table = document.children.find((node) => node.type === 'table');
+    if (!table || table.type !== 'table') throw new Error('table expected');
+    table.content[1].content![0].attrs.colwidth = [width];
+
+    expect(validateDocumentData(document)).toBe(document);
+  });
+
+  it.each([-1, 0.5, 19.99, 4_000.01, Number.NaN, Number.POSITIVE_INFINITY])(
+    '列幅%fを拒否する',
+    (width) => {
+      const document = comprehensiveDocument();
+      const table = document.children.find((node) => node.type === 'table');
+      if (!table || table.type !== 'table') throw new Error('table expected');
+      table.content[1].content![0].attrs.colwidth = [width];
+
+      expect(() => validateDocumentData(document)).toThrow(
+        DocumentValidationError,
+      );
+    },
+  );
+
   it('rowspanを含む整合した表を受け入れる', () => {
     const document = comprehensiveDocument();
     const table = document.children.find((node) => node.type === 'table');

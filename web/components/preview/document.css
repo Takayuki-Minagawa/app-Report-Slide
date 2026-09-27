@@ -184,6 +184,10 @@
   font-size: 0.82rem;
 }
 
+.preview-table-wrap table.preview-table-sized {
+  table-layout: fixed;
+}
+
 .preview-table-wrap th {
   background: #173b5e;
   color: white;

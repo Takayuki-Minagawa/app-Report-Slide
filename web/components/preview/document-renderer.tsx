@@ -24,6 +24,7 @@ import type {
   Mark,
   TableCellNode,
   TableHeaderNode,
+  TableNode,
 } from '@/src/document/model';
 import { tableCellBorderStyle } from '@/src/document/table';
 import {
@@ -547,6 +548,24 @@ function TableCellContent({
   );
 }
 
+/** Match Tiptap's table view: column widths come from the first row. */
+function tableColumnWidths(table: TableNode): Array<number | null> | null {
+  const widths: Array<number | null> = [];
+
+  for (const cell of table.content[0]?.content ?? []) {
+    for (let offset = 0; offset < (cell.attrs.colspan ?? 1); offset += 1) {
+      const width = cell.attrs.colwidth?.[offset];
+      widths.push(
+        typeof width === 'number' && Number.isFinite(width) && width > 0
+          ? width
+          : null,
+      );
+    }
+  }
+
+  return widths.some((width) => width !== null) ? widths : null;
+}
+
 function BlockNode({
   node,
   resolveImageUrl,
@@ -661,14 +680,35 @@ function BlockNode({
       return null;
     case 'horizontalRule':
       return <hr />;
-    case 'table':
+    case 'table': {
+      const columnWidths = tableColumnWidths(node);
+      const measuredWidth =
+        columnWidths?.reduce<number>((sum, width) => sum + (width ?? 0), 0) ??
+        0;
+      const missingWidthCount =
+        columnWidths?.filter((width) => width === null).length ?? 0;
+      const tableWidthStyle = columnWidths
+        ? missingWidthCount === 0
+          ? { width: `${measuredWidth}px` }
+          : { minWidth: `${measuredWidth + 80 * missingWidthCount}px` }
+        : undefined;
       return (
         <div className="preview-table-wrap" id={anchorId(key)}>
-          <table>
+          <table
+            className={columnWidths ? 'preview-table-sized' : undefined}
+            style={tableWidthStyle}
+          >
             {(target?.number || node.attrs.caption) && (
               <caption>
                 <Caption node={node} />
               </caption>
+            )}
+            {columnWidths && (
+              <colgroup>
+                {columnWidths.map((width, index) => (
+                  <col key={index} style={width ? { width } : undefined} />
+                ))}
+              </colgroup>
             )}
             <tbody>
               {node.content.map((row) => (
@@ -698,6 +738,7 @@ function BlockNode({
           </table>
         </div>
       );
+    }
     case 'tableRow':
     case 'tableHeader':
     case 'tableCell':

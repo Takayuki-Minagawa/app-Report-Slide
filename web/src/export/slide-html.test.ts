@@ -235,6 +235,78 @@ describe('standalone slide HTML', () => {
     expect(result.querySelectorAll('td')).toHaveLength(1);
   });
 
+  it('renders stored column widths across merged and row-spanning cells', async () => {
+    const source = slides(
+      '| A | B | C |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |',
+    );
+    const table = source.children.find((node) => node.type === 'table');
+    if (!table || table.type !== 'table') throw new Error('table expected');
+
+    const merged = table.content[0].content![0];
+    table.content[0].content!.splice(1, 1);
+    merged.attrs.colspan = 2;
+    merged.attrs.rowspan = 2;
+    merged.attrs.colwidth = [120, 240];
+    table.content[0].content![1].attrs.colwidth = [180];
+    table.content[1].content!.splice(0, 2);
+    table.content[2].content![1].attrs.colwidth = [260];
+
+    const result = readHtml(
+      (await exportSlideHtml(source, new Map(), 'ja')).html,
+    );
+    const columns = [...result.querySelectorAll<HTMLTableColElement>('col')];
+    const renderedTable = result.querySelector<HTMLTableElement>(
+      '.preview-table-sized',
+    );
+
+    expect(columns.map((column) => column.style.width)).toEqual([
+      '120px',
+      '240px',
+      '180px',
+    ]);
+    expect(renderedTable?.style.width).toBe('540px');
+    expect(renderedTable?.querySelector('th')?.colSpan).toBe(2);
+    expect(renderedTable?.querySelector('th')?.rowSpan).toBe(2);
+    expect(result.querySelector('style')?.textContent).toContain(
+      '.preview-table-wrap table.preview-table-sized',
+    );
+  });
+
+  it('leaves unsized tables fluid and keeps unspecified columns fluid', async () => {
+    const source = slides('| A | B | C |\n| --- | --- | --- |\n| 1 | 2 | 3 |');
+    const defaultResult = readHtml(
+      (await exportSlideHtml(source, new Map(), 'ja')).html,
+    );
+    expect(defaultResult.querySelector('colgroup')).toBeNull();
+    expect(defaultResult.querySelector('.preview-table-sized')).toBeNull();
+
+    const table = source.children.find((node) => node.type === 'table');
+    if (!table || table.type !== 'table') throw new Error('table expected');
+    table.content[1].content![0].attrs.colwidth = [200];
+    const laterRowOnly = readHtml(
+      (await exportSlideHtml(source, new Map(), 'ja')).html,
+    );
+    expect(laterRowOnly.querySelector('colgroup')).toBeNull();
+
+    table.content[0].content![0].attrs.colwidth = [150];
+    table.content[0].content![1].attrs.colwidth = [0];
+    table.content[0].content![2].attrs.colwidth = [90];
+    const result = readHtml(
+      (await exportSlideHtml(source, new Map(), 'ja')).html,
+    );
+    const columns = [...result.querySelectorAll<HTMLTableColElement>('col')];
+    const renderedTable = result.querySelector<HTMLTableElement>(
+      '.preview-table-sized',
+    );
+    expect(columns.map((column) => column.style.width)).toEqual([
+      '150px',
+      '',
+      '90px',
+    ]);
+    expect(renderedTable?.style.width).toBe('');
+    expect(renderedTable?.style.minWidth).toBe('320px');
+  });
+
   it('renders a table row that is completely covered by a row-spanning cell', async () => {
     const source = slides('| A | B |\n| --- | --- |\n| 1 | 2 |');
     const table = source.children.find((node) => node.type === 'table');

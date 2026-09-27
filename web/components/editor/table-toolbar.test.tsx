@@ -141,6 +141,26 @@ describe('TableToolbar', () => {
     ).toEqual([null, null]);
   });
 
+  it('distributes selected columns only when the selection spans multiple columns', async () => {
+    const current = createEditor(true);
+    renderToolbar(current);
+    await screen.findByRole('toolbar', { name: '表の編集' });
+    const distribute = screen.getByRole('button', {
+      name: '選択列を均等化',
+    });
+    expect(distribute).toBeDisabled();
+
+    selectCells(current, 0, 1);
+    await waitFor(() => expect(distribute).toBeEnabled());
+    fireEvent.click(distribute);
+    expect(
+      tableJson(current).content[0].content.map((cell) => cell.attrs.colwidth),
+    ).toEqual([[80], [80]]);
+    expect(
+      tableJson(current).content[1].content.map((cell) => cell.attrs.colwidth),
+    ).toEqual([[80], [80]]);
+  });
+
   it('explains why merging is unavailable for conflicting perimeter borders', async () => {
     const current = createEditor(true);
     renderToolbar(current);

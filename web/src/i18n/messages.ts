@@ -61,6 +61,7 @@ export interface UiMessages {
     addColumnBefore: string;
     addColumnAfter: string;
     deleteColumn: string;
+    distributeColumns: string;
     mergeCells: string;
     mergeBorderConflict: string;
     splitCell: string;
@@ -300,6 +301,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       addColumnBefore: '左に列を追加',
       addColumnAfter: '右に列を追加',
       deleteColumn: '列を削除',
+      distributeColumns: '選択列を均等化',
       mergeCells: 'セルを結合',
       mergeBorderConflict:
         '選択範囲の外周罫線が異なります。罫線を統一してから結合してください。',
@@ -506,6 +508,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       tableTitle: '3. 表を高度に編集する',
       tableSteps: [
         '表のセル内にカーソルを置くと、表専用ツールバーが現れます。上／下の行、左／右の列を追加・削除し、選択中の行をヘッダー行へ切り替えられます。',
+        '列の境界をドラッグすると幅を変更できます。複数列にまたがるセル範囲を選び「選択列を均等化」を押すと、その列を全行で同じ幅にします。',
         'セルを選び、文字揃えの左・中央・右ボタンで配置を設定できます。複数セルを選んだ場合はまとめて変更します。',
         '隣接する複数セルを選択して「セルを結合」を押します。結合範囲の同じ外周辺で罫線設定が異なる場合は、設定を統一するまで結合できません。結合済みセル内で「セルを分割」を押すと元のグリッドへ戻せます。',
         '罫線では、全体・外側・内側・各辺を選び、色・実線／破線／点線／二重線・太さを指定して適用します。「罫線を消す」に切り替えると、同じ対象の線だけを消去できます。',
@@ -587,6 +590,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       addColumnBefore: 'Add column before',
       addColumnAfter: 'Add column after',
       deleteColumn: 'Delete column',
+      distributeColumns: 'Distribute selected columns equally',
       mergeCells: 'Merge cells',
       mergeBorderConflict:
         'The selected perimeter borders differ. Make them consistent before merging.',
@@ -794,6 +798,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       tableTitle: '3. Edit tables in detail',
       tableSteps: [
         'Place the cursor in a table cell to reveal the table toolbar. Add or remove rows above/below and columns before/after, and toggle the selected row as a header row.',
+        'Drag a column border to resize it. Select cells spanning multiple columns and choose “Distribute selected columns equally” to even out those columns across all rows.',
         'Select a cell and choose left, center, or right text alignment. Select multiple cells to align them together.',
         'Select adjacent cells and choose “Merge cells”. If the same perimeter edge has different border settings across the selected cells, make them consistent before merging. In a merged cell, choose “Split cell” to restore its grid.',
         'For borders, choose all, outer, inner, or a single edge; then set the color, solid/dashed/dotted/double style, and width. Switch to “Erase borders” to remove only the same targeted edges.',

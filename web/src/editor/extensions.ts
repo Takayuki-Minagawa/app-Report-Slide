@@ -19,6 +19,7 @@ import {
 } from '@/src/document/slide-layout';
 import {
   isTableCellBorders,
+  maximumTableColumnWidth,
   parseTableCellBorders,
   tableCellBordersToCss,
 } from '@/src/document/table';
@@ -26,6 +27,7 @@ import {
   safeResourceUrl,
   resolveSafeImageUrl,
 } from '@/src/security/resource-url';
+import { UndoSafeTableView } from './table-view';
 
 export interface MathSelection {
   nodeId?: string;
@@ -168,6 +170,35 @@ const DocumentAttributes = Extension.create({
           const transaction = newState.tr;
           newState.doc.descendants((node, position) => {
             if (!identifiedTypes.includes(node.type.name)) return;
+            let attributes = node.attrs;
+            if (
+              (node.type.name === 'tableHeader' ||
+                node.type.name === 'tableCell') &&
+              Array.isArray(node.attrs.colwidth)
+            ) {
+              const originalWidths = node.attrs.colwidth as unknown[];
+              const colspan = node.attrs.colspan as number;
+              const count =
+                Number.isInteger(colspan) && colspan >= 1 && colspan <= 100
+                  ? colspan
+                  : 1;
+              const widths = Array.from({ length: count }, (_, index) => {
+                const width = originalWidths[index];
+                return typeof width === 'number' &&
+                  Number.isFinite(width) &&
+                  (width === 0 || width >= 20)
+                  ? Math.min(width, maximumTableColumnWidth)
+                  : 0;
+              });
+              if (
+                originalWidths.length !== widths.length ||
+                widths.some(
+                  (width, index) => !Object.is(width, originalWidths[index]),
+                )
+              ) {
+                attributes = { ...node.attrs, colwidth: widths };
+              }
+            }
             const current = node.attrs.nodeId;
             if (
               typeof current === 'string' &&
@@ -175,6 +206,9 @@ const DocumentAttributes = Extension.create({
               !seen.has(current)
             ) {
               seen.add(current);
+              if (attributes !== node.attrs) {
+                transaction.setNodeMarkup(position, undefined, attributes);
+              }
               return;
             }
 
@@ -182,7 +216,7 @@ const DocumentAttributes = Extension.create({
             while (seen.has(next)) next = createNodeId();
             seen.add(next);
             transaction.setNodeMarkup(position, undefined, {
-              ...node.attrs,
+              ...attributes,
               nodeId: next,
             });
           });
@@ -479,7 +513,9 @@ export function createEditorExtensions({
     Chart,
     TableKit.configure({
       table: {
-        resizable: false,
+        resizable: true,
+        cellMinWidth: 80,
+        View: UndoSafeTableView,
       },
       tableCell: {},
       tableHeader: {},

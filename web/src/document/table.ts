@@ -1,5 +1,7 @@
 export const tableBorderSides = ['top', 'right', 'bottom', 'left'] as const;
 
+export const maximumTableColumnWidth = 4_000;
+
 export type TableBorderSide = (typeof tableBorderSides)[number];
 
 export const tableBorderStyles = [
