@@ -111,7 +111,14 @@ export function WorkspaceEditor({
           <TableToolbar editor={editor} documentType={document.type} />
           <ScrollArea className="min-h-0 flex-1">
             <div className="editor-stage">
-              <div className={`editor-canvas editor-canvas-${document.type}`}>
+              <div
+                className={`editor-canvas editor-canvas-${document.type}`}
+                style={
+                  document.type === 'report'
+                    ? reportPageStyle((previewDocument ?? document).metadata)
+                    : undefined
+                }
+              >
                 <TextRulerBar
                   editor={editor}
                   document={previewDocument ?? document}

@@ -294,7 +294,7 @@
 }
 
 .editor-canvas-report {
-  width: min(760px, 100%);
+  width: min(760px, var(--report-width), 100%);
 }
 
 .editor-canvas-slide {

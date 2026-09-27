@@ -48,6 +48,19 @@ test('ページ設定を反映しMarkdown保存後に読み直せる', async ({ 
   await page.getByRole('spinbutton', { name: '行間（倍率）' }).fill('1.5');
   await page.getByRole('button', { name: 'ページ設定を適用' }).click();
   await expect(page.getByLabel('未保存')).toBeVisible();
+  const ruler = await page.locator('.text-ruler-track').boundingBox();
+  const editorParagraph = await page
+    .locator('.tiptap > p')
+    .first()
+    .boundingBox();
+  expect(ruler).not.toBeNull();
+  expect(editorParagraph).not.toBeNull();
+  expect(Math.abs(ruler!.x - editorParagraph!.x)).toBeLessThan(2);
+  expect(
+    Math.abs(
+      ruler!.x + ruler!.width - editorParagraph!.x - editorParagraph!.width,
+    ),
+  ).toBeLessThan(2);
   await page.getByRole('button', { name: '完成プレビューへ切り替え' }).click();
   const layout = await page.locator('.report-preview').evaluate((element) => {
     const sheet = getComputedStyle(element);
