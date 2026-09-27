@@ -180,7 +180,15 @@ export function TextRulerBar({
       }
       step="0.1"
       value={tenth(position)}
-      readOnly
+      onChange={(event) => {
+        if (!editor || !active || dragRef.current) return;
+        const next = moveMarker(ruler, kind, Number(event.currentTarget.value));
+        applyTextRuler(
+          editor,
+          next,
+          blocks.map((block) => block.nodeId),
+        );
+      }}
       tabIndex={active ? 0 : -1}
       aria-label={label}
       aria-valuetext={`${tenth(position)}%`}
