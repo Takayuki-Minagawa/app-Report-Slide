@@ -5,7 +5,7 @@ import {
   splitCell,
   TableMap,
 } from '@tiptap/pm/tables';
-import { createNodeId } from '@/src/document/model';
+import { createNodeId, type DocumentType } from '@/src/document/model';
 import { validateDocumentData } from '@/src/document/validation';
 import {
   isTableBorder,
@@ -19,6 +19,78 @@ import {
 export type TableBorderPreset = 'all' | 'outer' | 'inner' | TableBorderSide;
 
 export type TableBorderMode = 'draw' | 'erase';
+
+export type TableCellAlignment = 'left' | 'center' | 'right';
+
+function selectedCellPositions(editor: Editor) {
+  const selection = selectedRect(editor.state);
+  return {
+    tableStart: selection.tableStart,
+    positions: selection.map.cellsInRect(selection),
+  };
+}
+
+/** Returns the shared explicit alignment, or null for mixed/default cells. */
+export function selectedTableCellAlignment(
+  editor: Editor,
+): TableCellAlignment | null {
+  if (!editor.isActive('table')) return null;
+  try {
+    const { tableStart, positions } = selectedCellPositions(editor);
+    if (positions.length === 0) return null;
+    let shared: TableCellAlignment | null | undefined;
+    for (const position of positions) {
+      const cell = editor.state.doc.nodeAt(tableStart + position);
+      if (!cell || !['tableCell', 'tableHeader'].includes(cell.type.name))
+        return null;
+      const alignment = cell.attrs.align as TableCellAlignment | null;
+      if (shared !== undefined && shared !== alignment) return null;
+      shared = alignment;
+    }
+    return shared ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Sets every selected cell in one undoable transaction. */
+export function applyTableCellAlignment(
+  editor: Editor,
+  alignment: TableCellAlignment,
+  documentType: DocumentType,
+): boolean {
+  if (!editor.isActive('table')) return false;
+  try {
+    const { tableStart, positions } = selectedCellPositions(editor);
+    let transaction = editor.state.tr;
+    for (const position of positions) {
+      const absolutePosition = tableStart + position;
+      const cell = transaction.doc.nodeAt(absolutePosition);
+      if (
+        !cell ||
+        !['tableCell', 'tableHeader'].includes(cell.type.name) ||
+        cell.attrs.align === alignment
+      )
+        continue;
+      transaction = transaction.setNodeMarkup(absolutePosition, undefined, {
+        ...cell.attrs,
+        align: alignment,
+      });
+    }
+    if (!transaction.docChanged) return false;
+    validateDocumentData({
+      schemaVersion: 2,
+      type: documentType,
+      metadata: {},
+      children: transaction.doc.toJSON().content,
+    });
+    editor.view.dispatch(transaction);
+    editor.view.focus();
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const oppositeSide: Record<TableBorderSide, TableBorderSide> = {
   top: 'bottom',

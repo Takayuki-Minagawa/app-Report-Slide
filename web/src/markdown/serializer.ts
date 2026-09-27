@@ -243,8 +243,10 @@ function canUsePipeTable(table: TableNode): boolean {
     if (
       cells.length !== columnCount ||
       cells.some(
-        (cell) =>
+        (cell, columnIndex) =>
           cell.type !== (rowIndex === 0 ? 'tableHeader' : 'tableCell') ||
+          (rowIndex > 0 &&
+            cell.attrs.align !== firstCells[columnIndex].attrs.align) ||
           (cell.attrs.colspan ?? 1) !== 1 ||
           (cell.attrs.rowspan ?? 1) !== 1 ||
           (cell.attrs.colwidth !== undefined && cell.attrs.colwidth !== null) ||

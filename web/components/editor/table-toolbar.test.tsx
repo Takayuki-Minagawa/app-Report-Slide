@@ -67,7 +67,7 @@ function selectCells(current: Editor, anchor: number, head = anchor): void {
 function renderToolbar(current: Editor) {
   return render(
     <AppPreferencesProvider>
-      <TableToolbar editor={current} />
+      <TableToolbar editor={current} documentType="report" />
     </AppPreferencesProvider>,
   );
 }
@@ -114,6 +114,31 @@ describe('TableToolbar', () => {
         left: { color: '#0f766e', style: 'double', width: 2 },
       }),
     );
+  });
+
+  it('sets left, center, and right text alignment for selected cells', async () => {
+    const current = createEditor(true);
+    renderToolbar(current);
+    await screen.findByRole('toolbar', { name: '表の編集' });
+    selectCells(current, 0, 1);
+
+    for (const [label, alignment] of [
+      ['セルを中央揃え', 'center'],
+      ['セルを右揃え', 'right'],
+      ['セルを左揃え', 'left'],
+    ] as const) {
+      const button = screen.getByRole('button', { name: label });
+      fireEvent.click(button);
+      await waitFor(() =>
+        expect(button).toHaveAttribute('aria-pressed', 'true'),
+      );
+      expect(
+        tableJson(current).content[0].content.map((cell) => cell.attrs.align),
+      ).toEqual([alignment, alignment]);
+    }
+    expect(
+      tableJson(current).content[1].content.map((cell) => cell.attrs.align),
+    ).toEqual([null, null]);
   });
 
   it('explains why merging is unavailable for conflicting perimeter borders', async () => {

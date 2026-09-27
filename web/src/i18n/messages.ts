@@ -66,6 +66,10 @@ export interface UiMessages {
     splitCell: string;
     toggleHeaderRow: string;
     deleteTable: string;
+    tableAlignment: string;
+    alignTableLeft: string;
+    alignTableCenter: string;
+    alignTableRight: string;
     tableBorders: string;
     drawBorders: string;
     eraseBorders: string;
@@ -302,6 +306,10 @@ export const messages: Record<AppLocale, UiMessages> = {
       splitCell: 'セルを分割',
       toggleHeaderRow: 'ヘッダー行を切り替え',
       deleteTable: '表を削除',
+      tableAlignment: '文字揃え',
+      alignTableLeft: 'セルを左揃え',
+      alignTableCenter: 'セルを中央揃え',
+      alignTableRight: 'セルを右揃え',
       tableBorders: '罫線',
       drawBorders: '罫線を引く',
       eraseBorders: '罫線を消す',
@@ -498,9 +506,10 @@ export const messages: Record<AppLocale, UiMessages> = {
       tableTitle: '3. 表を高度に編集する',
       tableSteps: [
         '表のセル内にカーソルを置くと、表専用ツールバーが現れます。上／下の行、左／右の列を追加・削除し、選択中の行をヘッダー行へ切り替えられます。',
+        'セルを選び、文字揃えの左・中央・右ボタンで配置を設定できます。複数セルを選んだ場合はまとめて変更します。',
         '隣接する複数セルを選択して「セルを結合」を押します。結合範囲の同じ外周辺で罫線設定が異なる場合は、設定を統一するまで結合できません。結合済みセル内で「セルを分割」を押すと元のグリッドへ戻せます。',
         '罫線では、全体・外側・内側・各辺を選び、色・実線／破線／点線／二重線・太さを指定して適用します。「罫線を消す」に切り替えると、同じ対象の線だけを消去できます。',
-        '通常の表は標準Markdown表として保存されます。結合セル、個別罫線、複数段落を含む表は、KUMIの可逆表ブロックとしてMarkdownに保存されます。外部のMarkdown編集器でそのブロックを変更せず、JSONまたはプロジェクトZIPも原本として保存してください。',
+        '通常の表は標準Markdown表として保存されます。結合セル、列内で異なる文字揃え、個別罫線、複数段落を含む表は、KUMIの可逆表ブロックとしてMarkdownに保存されます。外部のMarkdown編集器でそのブロックを変更せず、JSONまたはプロジェクトZIPも原本として保存してください。',
       ],
       exportTitle: '4. 確認・保存する',
       exportSteps: [
@@ -584,6 +593,10 @@ export const messages: Record<AppLocale, UiMessages> = {
       splitCell: 'Split cell',
       toggleHeaderRow: 'Toggle header row',
       deleteTable: 'Delete table',
+      tableAlignment: 'Text alignment',
+      alignTableLeft: 'Align cell left',
+      alignTableCenter: 'Align cell center',
+      alignTableRight: 'Align cell right',
       tableBorders: 'Borders',
       drawBorders: 'Draw borders',
       eraseBorders: 'Erase borders',
@@ -781,9 +794,10 @@ export const messages: Record<AppLocale, UiMessages> = {
       tableTitle: '3. Edit tables in detail',
       tableSteps: [
         'Place the cursor in a table cell to reveal the table toolbar. Add or remove rows above/below and columns before/after, and toggle the selected row as a header row.',
+        'Select a cell and choose left, center, or right text alignment. Select multiple cells to align them together.',
         'Select adjacent cells and choose “Merge cells”. If the same perimeter edge has different border settings across the selected cells, make them consistent before merging. In a merged cell, choose “Split cell” to restore its grid.',
         'For borders, choose all, outer, inner, or a single edge; then set the color, solid/dashed/dotted/double style, and width. Switch to “Erase borders” to remove only the same targeted edges.',
-        'Simple tables save as standard Markdown tables. Tables with merged cells, per-edge borders, or multiple paragraphs save as a lossless KUMI table block in Markdown. Do not alter that block in an external Markdown editor; also keep JSON or a project ZIP as the source of record.',
+        'Simple tables save as standard Markdown tables. Tables with merged cells, different alignments within a column, per-edge borders, or multiple paragraphs save as a lossless KUMI table block in Markdown. Do not alter that block in an external Markdown editor; also keep JSON or a project ZIP as the source of record.',
       ],
       exportTitle: '4. Review and save',
       exportSteps: [
