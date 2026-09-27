@@ -78,7 +78,7 @@ describe('advanced table commands', () => {
       const current = createEditor();
       selectCells(current, 0, 1);
 
-      expect(applyTableCellAlignment(current, alignment)).toBe(true);
+      expect(applyTableCellAlignment(current, alignment, 'report')).toBe(true);
       expect(selectedTableCellAlignment(current)).toBe(alignment);
       expect(
         tableJson(current).content[0].content.map((cell) => cell.attrs.align),
@@ -86,21 +86,53 @@ describe('advanced table commands', () => {
       expect(
         tableJson(current).content[1].content.map((cell) => cell.attrs.align),
       ).toEqual([null, null]);
-      expect(applyTableCellAlignment(current, alignment)).toBe(false);
+      expect(applyTableCellAlignment(current, alignment, 'report')).toBe(false);
     },
   );
 
   it('updates a mixed selection even when its anchor is already aligned', () => {
     const current = createEditor();
     selectCells(current, 0);
-    expect(applyTableCellAlignment(current, 'center')).toBe(true);
+    expect(applyTableCellAlignment(current, 'center', 'report')).toBe(true);
     selectCells(current, 0, 1);
     expect(selectedTableCellAlignment(current)).toBeNull();
 
-    expect(applyTableCellAlignment(current, 'center')).toBe(true);
+    expect(applyTableCellAlignment(current, 'center', 'report')).toBe(true);
     expect(
       tableJson(current).content[0].content.map((cell) => cell.attrs.align),
     ).toEqual(['center', 'center']);
+  });
+
+  it('aligns Slide table cells when the document contains a placed image', () => {
+    const current = createEditor();
+    current.commands.setContent({
+      type: 'doc',
+      content: [
+        ...(current.getJSON().content ?? []),
+        {
+          type: 'figure',
+          attrs: {
+            nodeId: 'placed-image',
+            src: 'assets/diagram.png',
+            alt: 'Diagram',
+            title: null,
+            width: 100,
+            align: 'center',
+            slidePlacement: { x: 12, y: 18, width: 40, height: 30 },
+          },
+        },
+      ],
+    });
+    selectCells(current, 0, 1);
+
+    expect(applyTableCellAlignment(current, 'right', 'slide')).toBe(true);
+    expect(
+      tableJson(current).content[0].content.map((cell) => cell.attrs.align),
+    ).toEqual(['right', 'right']);
+    expect(
+      current.getJSON().content?.find((node) => node.type === 'figure')?.attrs
+        ?.slidePlacement,
+    ).toEqual({ x: 12, y: 18, width: 40, height: 30 });
   });
 
   it('applies outer borders to a selected range and mirrors a shared edge', () => {

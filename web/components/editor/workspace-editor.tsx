@@ -107,7 +107,7 @@ export function WorkspaceEditor({
       {view === 'visual' && (
         <>
           <FormatToolbar editor={editor} documentType={document.type} />
-          <TableToolbar editor={editor} />
+          <TableToolbar editor={editor} documentType={document.type} />
           <ScrollArea className="min-h-0 flex-1">
             <div className="editor-stage">
               <div

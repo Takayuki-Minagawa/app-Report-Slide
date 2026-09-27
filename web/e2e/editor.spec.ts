@@ -134,7 +134,9 @@ test('数式と表を挿入してDocumentを編集できる', async ({ page }) =
   await expect(page.getByLabel('未保存')).toBeVisible();
 });
 
-test('表セルから高度表ツールを開き、行・罫線・文字揃えを編集できる', async ({ page }) => {
+test('表セルから高度表ツールを開き、行・罫線・文字揃えを編集できる', async ({
+  page,
+}) => {
   await page.goto('/');
   await waitForEditor(page);
 

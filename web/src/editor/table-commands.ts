@@ -5,7 +5,7 @@ import {
   splitCell,
   TableMap,
 } from '@tiptap/pm/tables';
-import { createNodeId } from '@/src/document/model';
+import { createNodeId, type DocumentType } from '@/src/document/model';
 import { validateDocumentData } from '@/src/document/validation';
 import {
   isTableBorder,
@@ -57,6 +57,7 @@ export function selectedTableCellAlignment(
 export function applyTableCellAlignment(
   editor: Editor,
   alignment: TableCellAlignment,
+  documentType: DocumentType,
 ): boolean {
   if (!editor.isActive('table')) return false;
   try {
@@ -79,7 +80,7 @@ export function applyTableCellAlignment(
     if (!transaction.docChanged) return false;
     validateDocumentData({
       schemaVersion: 2,
-      type: 'report',
+      type: documentType,
       metadata: {},
       children: transaction.doc.toJSON().content,
     });

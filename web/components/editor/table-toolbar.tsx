@@ -32,6 +32,7 @@ import {
   type TableBorderPreset,
 } from '@/src/editor/table-commands';
 import type { TableBorderStyle, TableBorderWidth } from '@/src/document/table';
+import type { DocumentType } from '@/src/document/model';
 
 function TableActionButton({
   active,
@@ -108,7 +109,13 @@ function useTableActive(editor: Editor | null): boolean {
   return state.active;
 }
 
-export function TableToolbar({ editor }: { editor: Editor | null }) {
+export function TableToolbar({
+  editor,
+  documentType,
+}: {
+  editor: Editor | null;
+  documentType: DocumentType;
+}) {
   const { copy } = useAppPreferences();
   const tableActive = useTableActive(editor);
   const [borderMode, setBorderMode] = useState<TableBorderMode>('draw');
@@ -224,21 +231,27 @@ export function TableToolbar({ editor }: { editor: Editor | null }) {
         <TableActionButton
           active={cellAlignment === 'left'}
           label={copy.workspace.alignTableLeft}
-          onClick={() => run(() => applyTableCellAlignment(editor, 'left'))}
+          onClick={() =>
+            run(() => applyTableCellAlignment(editor, 'left', documentType))
+          }
         >
           <AlignLeft />
         </TableActionButton>
         <TableActionButton
           active={cellAlignment === 'center'}
           label={copy.workspace.alignTableCenter}
-          onClick={() => run(() => applyTableCellAlignment(editor, 'center'))}
+          onClick={() =>
+            run(() => applyTableCellAlignment(editor, 'center', documentType))
+          }
         >
           <AlignCenter />
         </TableActionButton>
         <TableActionButton
           active={cellAlignment === 'right'}
           label={copy.workspace.alignTableRight}
-          onClick={() => run(() => applyTableCellAlignment(editor, 'right'))}
+          onClick={() =>
+            run(() => applyTableCellAlignment(editor, 'right', documentType))
+          }
         >
           <AlignRight />
         </TableActionButton>

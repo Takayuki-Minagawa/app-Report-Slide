@@ -67,7 +67,7 @@ function selectCells(current: Editor, anchor: number, head = anchor): void {
 function renderToolbar(current: Editor) {
   return render(
     <AppPreferencesProvider>
-      <TableToolbar editor={current} />
+      <TableToolbar editor={current} documentType="report" />
     </AppPreferencesProvider>,
   );
 }
