@@ -6,9 +6,11 @@ import { validateDocumentData } from '@/src/document/validation';
 
 import { createEditorExtensions } from './extensions';
 import {
+  applyTableCellAlignment,
   applyTableBorders,
   hasIncompatibleMergeBorders,
   mergeTableCellsPreservingBorders,
+  selectedTableCellAlignment,
   splitTableCellPreservingBorders,
 } from './table-commands';
 
@@ -70,6 +72,37 @@ function tableJson(current: Editor) {
 }
 
 describe('advanced table commands', () => {
+  it.each(['left', 'center', 'right'] as const)(
+    'aligns all selected cells %s without changing other cells',
+    (alignment) => {
+      const current = createEditor();
+      selectCells(current, 0, 1);
+
+      expect(applyTableCellAlignment(current, alignment)).toBe(true);
+      expect(selectedTableCellAlignment(current)).toBe(alignment);
+      expect(
+        tableJson(current).content[0].content.map((cell) => cell.attrs.align),
+      ).toEqual([alignment, alignment]);
+      expect(
+        tableJson(current).content[1].content.map((cell) => cell.attrs.align),
+      ).toEqual([null, null]);
+      expect(applyTableCellAlignment(current, alignment)).toBe(false);
+    },
+  );
+
+  it('updates a mixed selection even when its anchor is already aligned', () => {
+    const current = createEditor();
+    selectCells(current, 0);
+    expect(applyTableCellAlignment(current, 'center')).toBe(true);
+    selectCells(current, 0, 1);
+    expect(selectedTableCellAlignment(current)).toBeNull();
+
+    expect(applyTableCellAlignment(current, 'center')).toBe(true);
+    expect(
+      tableJson(current).content[0].content.map((cell) => cell.attrs.align),
+    ).toEqual(['center', 'center']);
+  });
+
   it('applies outer borders to a selected range and mirrors a shared edge', () => {
     const current = createEditor();
     selectCells(current, 0, 3);

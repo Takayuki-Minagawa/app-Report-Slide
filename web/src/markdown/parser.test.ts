@@ -571,4 +571,26 @@ describe('Markdown round-trip', () => {
     expect(source).toContain('::: kumi-table');
     expect(withoutNodeIds(recovered)).toEqual(withoutNodeIds(document));
   });
+
+  it('列内で異なるセルの文字揃えをMarkdown往復で保持する', () => {
+    const document = parseMarkdown(reportFixture, {
+      idFactory: idFactory(),
+    }).document;
+    const table = document.children.find((node) => node.type === 'table');
+    if (!table || table.type !== 'table') throw new Error('table expected');
+    expect(serializeDocument(document)).not.toContain('::: kumi-table');
+
+    const body = table.content[1].content;
+    if (!body) throw new Error('body cells expected');
+    body[0].attrs.align = 'center';
+    body[1].attrs.align = 'left';
+    body[2].attrs.align = 'right';
+
+    const source = serializeDocument(document);
+    const recovered = parseMarkdown(source, {
+      idFactory: idFactory(),
+    }).document;
+    expect(source).toContain('::: kumi-table');
+    expect(withoutNodeIds(recovered)).toEqual(withoutNodeIds(document));
+  });
 });

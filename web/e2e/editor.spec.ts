@@ -134,7 +134,7 @@ test('数式と表を挿入してDocumentを編集できる', async ({ page }) =
   await expect(page.getByLabel('未保存')).toBeVisible();
 });
 
-test('表セルから高度表ツールを開き、行と罫線を編集できる', async ({ page }) => {
+test('表セルから高度表ツールを開き、行・罫線・文字揃えを編集できる', async ({ page }) => {
   await page.goto('/');
   await waitForEditor(page);
 
@@ -152,6 +152,9 @@ test('表セルから高度表ツールを開き、行と罫線を編集でき�
     'data-kumi-borders',
     /"top"/,
   );
+
+  await toolbar.getByRole('button', { name: 'セルを右揃え' }).click();
+  await expect(table.locator('th').first()).toHaveCSS('text-align', 'right');
 });
 
 test('Markdown下書きをタブ間で保持し保存時に現在文書へ適用する', async ({

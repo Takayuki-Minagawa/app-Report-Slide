@@ -1,6 +1,9 @@
 'use client';
 
 import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
   Eraser,
   PanelBottom,
   PanelLeft,
@@ -19,9 +22,11 @@ import type { Editor } from '@tiptap/react';
 import { useAppPreferences } from '@/components/app-preferences';
 import { Button } from '@/components/ui/button';
 import {
+  applyTableCellAlignment,
   applyTableBorders,
   hasIncompatibleMergeBorders,
   mergeTableCellsPreservingBorders,
+  selectedTableCellAlignment,
   splitTableCellPreservingBorders,
   type TableBorderMode,
   type TableBorderPreset,
@@ -114,6 +119,7 @@ export function TableToolbar({ editor }: { editor: Editor | null }) {
   if (!editor || !tableActive) return null;
 
   const mergeBorderConflict = hasIncompatibleMergeBorders(editor);
+  const cellAlignment = selectedTableCellAlignment(editor);
 
   const run = (command: () => boolean) => {
     command();
@@ -211,6 +217,30 @@ export function TableToolbar({ editor }: { editor: Editor | null }) {
           onClick={() => run(() => editor.chain().focus().deleteTable().run())}
         >
           <Trash2 />
+        </TableActionButton>
+      </TableToolbarGroup>
+
+      <TableToolbarGroup label={copy.workspace.tableAlignment}>
+        <TableActionButton
+          active={cellAlignment === 'left'}
+          label={copy.workspace.alignTableLeft}
+          onClick={() => run(() => applyTableCellAlignment(editor, 'left'))}
+        >
+          <AlignLeft />
+        </TableActionButton>
+        <TableActionButton
+          active={cellAlignment === 'center'}
+          label={copy.workspace.alignTableCenter}
+          onClick={() => run(() => applyTableCellAlignment(editor, 'center'))}
+        >
+          <AlignCenter />
+        </TableActionButton>
+        <TableActionButton
+          active={cellAlignment === 'right'}
+          label={copy.workspace.alignTableRight}
+          onClick={() => run(() => applyTableCellAlignment(editor, 'right'))}
+        >
+          <AlignRight />
         </TableActionButton>
       </TableToolbarGroup>
 
