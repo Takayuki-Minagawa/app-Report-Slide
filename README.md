@@ -4,7 +4,7 @@
 
 ## 公開版
 
-[GitHub Pages公開版](https://takayuki-minagawa.github.io/app-Report-Slide/) は手動で公開します。リポジトリへのpushやPRだけでは更新されません。
+[GitHub Pages公開版](https://takayuki-minagawa.github.io/app-Report-Slide/) は手動で公開します。通常のブランチpushやPRだけでは更新されません。
 
 ## 公開リポジトリとしての注意
 
