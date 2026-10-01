@@ -121,6 +121,7 @@ export function updateFootnote(
       ? state.doc.nodeAt(position)
       : null;
   if (node?.type.name !== 'footnote' || !normalized) return false;
+  if (node.attrs.text === normalized) return true;
   const transaction = state.tr.setNodeMarkup(position, undefined, {
     text: normalized,
   });

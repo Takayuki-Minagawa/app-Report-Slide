@@ -2,14 +2,31 @@ import MarkdownIt from 'markdown-it';
 
 import { canonicalHardBreakMarker, isEscaped } from './syntax';
 
+interface FootnoteDefinition {
+  source: string;
+  /** Zero-based line in the parsed body. */
+  line: number;
+  /** Plain text, resolved once however many times the note is referenced. */
+  text?: string;
+  used: boolean;
+}
+
 interface KumiEnvironment {
   /** Reference-style footnote definitions collected while parsing one document. */
-  kumiFootnotes?: Map<string, string>;
-  /** Set while reading a footnote's own text, where footnotes do not nest. */
+  kumiFootnotes?: Map<string, FootnoteDefinition>;
+  /** Lines of definitions that repeat an earlier ID and are therefore not read. */
+  kumiDuplicateFootnotes?: Array<{ id: string; line: number }>;
+  /** Set while reading a footnote's label or text, where footnotes do not nest. */
   kumiFootnoteText?: boolean;
 }
 
-const footnoteDefinition = /^\[\^([^\s\]]+)\]:[ \t]+(\S.*)$/;
+const footnoteId = String.raw`[^\s\]]{1,128}`;
+const footnoteDefinition = new RegExp(
+  String.raw`^\[\^(${footnoteId})\]:[ \t]+(\S.*)$`,
+);
+const footnoteReference = new RegExp(String.raw`^\[\^(${footnoteId})\]`);
+/** The content of a `[@label]` cross-reference. */
+const referenceContent = /^@[A-Za-z][A-Za-z0-9:._-]{0,127}$/;
 
 /**
  * Footnotes are plain text: keep the characters and drop inline formatting.
@@ -29,6 +46,19 @@ function footnoteText(markdown: MarkdownIt, source: string): string {
     .trim();
 }
 
+/** Definitions that produced no footnote: never referenced, or a repeated ID. */
+export function ignoredFootnoteDefinitions(
+  env: object,
+): Array<{ id: string; line: number }> {
+  const { kumiFootnotes, kumiDuplicateFootnotes = [] } = env as KumiEnvironment;
+  return [
+    ...[...(kumiFootnotes ?? [])]
+      .filter(([, definition]) => !definition.used)
+      .map(([id, definition]) => ({ id, line: definition.line })),
+    ...kumiDuplicateFootnotes,
+  ].sort((a, b) => a.line - b.line);
+}
+
 export function createMarkdownIt(): MarkdownIt {
   const markdown = new MarkdownIt({
     html: false,
@@ -39,18 +69,38 @@ export function createMarkdownIt(): MarkdownIt {
 
   // Pandoc inline footnote: text^[note]. KUMI saves every footnote this way.
   markdown.inline.ruler.after('image', 'kumi_footnote', (state, silent) => {
+    const env = state.env as KumiEnvironment;
     const start = state.pos;
     if (
       state.src.charCodeAt(start) !== 0x5e /* ^ */ ||
       state.src.charCodeAt(start + 1) !== 0x5b /* [ */ ||
-      (state.env as KumiEnvironment).kumiFootnoteText
+      env.kumiFootnoteText
     )
       return false;
-    const end = state.md.helpers.parseLinkLabel(state, start + 1);
+    // Inner "^[" count as plain brackets here, which keeps the scan linear.
+    env.kumiFootnoteText = true;
+    let end: number;
+    try {
+      end = state.md.helpers.parseLinkLabel(state, start + 1);
+    } finally {
+      env.kumiFootnoteText = false;
+    }
     if (end < 0) return false;
-    const text = footnoteText(state.md, state.src.slice(start + 2, end));
-    if (!text) return false;
-    if (!silent) state.push('kumi_footnote', '', 0).content = text;
+    const inner = state.src.slice(start + 2, end);
+    // Documents saved before footnotes existed may hold a literal "^" directly
+    // before a link or a [@reference]; those keep their meaning.
+    if (
+      state.src.charCodeAt(end + 1) === 0x28 /* ( */ ||
+      referenceContent.test(inner)
+    )
+      return false;
+    if (silent) {
+      if (!inner.trim()) return false;
+    } else {
+      const text = footnoteText(state.md, inner);
+      if (!text) return false;
+      state.push('kumi_footnote', '', 0).content = text;
+    }
     state.pos = end + 1;
     return true;
   });
@@ -64,15 +114,17 @@ export function createMarkdownIt(): MarkdownIt {
       !env.kumiFootnotes
     )
       return false;
-    const match = /^\[\^([^\s\]]+)\]/.exec(
-      state.src.slice(state.pos, state.pos + 256),
+    const match = footnoteReference.exec(
+      state.src.slice(state.pos, state.pos + 132),
     );
-    if (!match) return false;
-    const definition = env.kumiFootnotes.get(match[1]);
-    if (definition === undefined) return false;
-    const text = footnoteText(state.md, definition);
-    if (!text) return false;
-    if (!silent) state.push('kumi_footnote', '', 0).content = text;
+    const definition = match && env.kumiFootnotes.get(match[1]);
+    if (!match || !definition) return false;
+    definition.text ??= footnoteText(state.md, definition.source);
+    if (!definition.text) return false;
+    if (!silent) {
+      definition.used = true;
+      state.push('kumi_footnote', '', 0).content = definition.text;
+    }
     state.pos += match[0].length;
     return true;
   });
@@ -82,26 +134,47 @@ export function createMarkdownIt(): MarkdownIt {
     'kumi_footnote_definition',
     (state, startLine, endLine, silent) => {
       if (state.sCount[startLine] - state.blkIndent >= 4) return false;
-      const lineAt = (index: number) =>
+      const match = footnoteDefinition.exec(
         state.src
-          .slice(state.bMarks[index] + state.tShift[index], state.eMarks[index])
-          .trim();
-      const match = footnoteDefinition.exec(lineAt(startLine));
+          .slice(
+            state.bMarks[startLine] + state.tShift[startLine],
+            state.eMarks[startLine],
+          )
+          .trim(),
+      );
       if (!match) return false;
       if (silent) return true;
-      const lines = [match[2]];
+      // Continue like a paragraph: up to a blank line or anything that may
+      // interrupt a paragraph, so a following block is never absorbed.
+      const terminators = state.md.block.ruler.getRules('paragraph');
+      const parentType = state.parentType;
+      state.parentType = 'paragraph';
       let nextLine = startLine + 1;
-      // A definition continues until a blank line or the next definition.
-      while (nextLine < endLine) {
-        const line = lineAt(nextLine);
-        if (!line || footnoteDefinition.test(line)) break;
-        lines.push(line);
-        nextLine += 1;
+      for (; nextLine < endLine && !state.isEmpty(nextLine); nextLine += 1) {
+        if (state.sCount[nextLine] - state.blkIndent > 3) continue;
+        if (state.sCount[nextLine] < 0) continue;
+        const line = nextLine;
+        if (terminators.some((rule) => rule(state, line, endLine, true))) break;
       }
+      state.parentType = parentType;
+      const continuation = state
+        .getLines(startLine + 1, nextLine, state.blkIndent, false)
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
       const env = state.env as KumiEnvironment;
       env.kumiFootnotes ??= new Map();
-      if (!env.kumiFootnotes.has(match[1]))
-        env.kumiFootnotes.set(match[1], lines.join(' '));
+      if (env.kumiFootnotes.has(match[1]))
+        (env.kumiDuplicateFootnotes ??= []).push({
+          id: match[1],
+          line: startLine,
+        });
+      else
+        env.kumiFootnotes.set(match[1], {
+          source: [match[2], ...continuation].join(' '),
+          line: startLine,
+          used: false,
+        });
       state.line = nextLine;
       return true;
     },

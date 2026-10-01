@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import type { DocumentData } from '@/src/document/model';
+import type { DocumentData, InlineNode } from '@/src/document/model';
 import { collectFootnotes } from '@/src/document/semantics';
 import { documentStatistics } from '@/src/document/statistics';
 import {
@@ -36,16 +36,46 @@ function expectStable(source: string): DocumentData {
   return first;
 }
 
+/** Sources here have no Front Matter; its notice is not under test. */
+const isMarkdownCode = (code: string) => code.startsWith('markdown.');
+
 function diagnosticCodes(source: string): string[] {
   try {
-    parseMarkdown(source);
+    return parseMarkdown(source)
+      .diagnostics.map((diagnostic) => diagnostic.code)
+      .filter(isMarkdownCode);
   } catch (error) {
     if (error instanceof MarkdownImportError)
-      return error.diagnostics.map((diagnostic) => diagnostic.code);
+      return error.diagnostics
+        .map((diagnostic) => diagnostic.code)
+        .filter(isMarkdownCode);
     throw error;
   }
-  return [];
 }
+
+function paragraph(content: InlineNode[]): DocumentData {
+  return {
+    schemaVersion: 2,
+    type: 'report',
+    metadata: { theme: 'latex' },
+    children: [{ type: 'paragraph', attrs: { nodeId: 'p' }, content }],
+  };
+}
+
+const link = (text: string): InlineNode => ({
+  type: 'text',
+  text,
+  marks: [
+    {
+      type: 'link',
+      attrs: {
+        href: 'https://example.com',
+        target: '_blank',
+        rel: 'noopener noreferrer nofollow',
+      },
+    },
+  ],
+});
 
 describe('footnotes', () => {
   it('reads Pandoc inline footnotes as plain text and saves them the same way', () => {
@@ -115,6 +145,114 @@ describe('footnotes', () => {
     expect(() => parseMarkdown(deep)).not.toThrow(RangeError);
   });
 
+  it('keeps a caret before a link or reference as text, in old and new files', () => {
+    // Saved by versions without footnotes: the caret was never escaped.
+    const legacy = parseMarkdown(
+      'a^[b](https://example.com) c と x^[@sec:a]\n\n| A |\n| --- |\n| p^[q](https://example.com) |',
+    ).document;
+    expect(collectFootnotes(legacy.children)).toEqual([]);
+    expect(legacy.children[0]).toMatchObject({
+      content: [
+        { type: 'text', text: 'a^' },
+        { type: 'text', text: 'b', marks: [{ type: 'link' }] },
+        { type: 'text', text: ' c と x^' },
+        { type: 'reference', attrs: { target: 'sec:a' } },
+      ],
+    });
+
+    const documents = [
+      paragraph([{ type: 'text', text: 'a^' }, link('b')]),
+      paragraph([
+        { type: 'text', text: 'x\\^' },
+        { type: 'reference', attrs: { target: 'sec:a' } },
+      ]),
+      paragraph([
+        { type: 'text', text: 'm^2 と ^' },
+        { type: 'footnote', attrs: { text: '@smith' } },
+        { type: 'footnote', attrs: { text: '注' } },
+        link('直後のリンク'),
+        { type: 'text', text: '(括弧)' },
+      ]),
+    ];
+    for (const document of documents) {
+      const canonical = serializeDocument(document);
+      const reparsed = parseMarkdown(canonical).document;
+      expect(normalized(reparsed.children)).toEqual(
+        normalized(document.children),
+      );
+      expect(serializeDocument(reparsed)).toBe(canonical);
+    }
+    expect(body(documents[0])).toContain('a\\^[b](https://example.com)');
+    expect(body(documents[2])).toContain('m^2 と ^^[\\@smith]^[注][直後');
+  });
+
+  it('ends a definition where a paragraph would end and reports unused ones', () => {
+    const { document, diagnostics } = parseMarkdown(
+      [
+        '- 項目[^a]',
+        '',
+        '  [^a]: 注',
+        '  の続き',
+        '- 二つ目',
+        '',
+        '[^b]: 未使用',
+        '# 見出し',
+        '',
+        '[^a]: 重複',
+        '~~~',
+        'code',
+        '~~~',
+        '[^c]: 未使用2',
+        '::: notes',
+        'ノート',
+        ':::',
+      ].join('\n'),
+    );
+    expect(document.children.map((node) => node.type)).toEqual([
+      'bulletList',
+      'heading',
+      'codeBlock',
+      'speakerNotes',
+    ]);
+    const list = document.children[0];
+    if (list.type !== 'bulletList') throw new Error('list expected');
+    expect(list.content).toHaveLength(2);
+    expect(
+      collectFootnotes(document.children).map((note) => note.attrs.text),
+    ).toEqual(['注 の続き']);
+    const ignored = diagnostics.filter(({ code }) => isMarkdownCode(code));
+    expect(
+      ignored.map(({ severity, code, line }) => [severity, code, line]),
+    ).toEqual([
+      ['warning', 'markdown.footnote-definition-ignored', 7],
+      ['warning', 'markdown.footnote-definition-ignored', 10],
+      ['warning', 'markdown.footnote-definition-ignored', 14],
+    ]);
+    expect(localizeMarkdownDiagnostic(ignored[0], 'en')).toMatch(
+      /footnote definition/,
+    );
+  });
+
+  it('reports an over-long footnote and stays fast on repeated or nested notes', () => {
+    expect(diagnosticCodes(`本文^[${'x'.repeat(2001)}]`)).toEqual([
+      'markdown.footnote-too-long',
+    ]);
+    const started = performance.now();
+    // One definition referenced many times is resolved once.
+    expect(
+      diagnosticCodes(
+        `${'[^a]'.repeat(100_000)}\n\n[^a]: ${'y '.repeat(500_000)}`,
+      ),
+    ).toContain('markdown.footnote-too-long');
+    // Nested markers are scanned once instead of once per level.
+    parseMarkdown(`${'^[a'.repeat(90)}${']'.repeat(90)} `.repeat(800));
+    // Many footnotes must not overflow the stack when collected for rendering.
+    const many = parseMarkdown('^[a]'.repeat(120_000)).document;
+    expect(collectFootnotes(many.children)).toHaveLength(120_000);
+    // These took 30 s to 2 min before; the bound only guards the complexity.
+    expect(performance.now() - started).toBeLessThan(10_000);
+  });
+
   it('does not treat math, code or link text as footnotes', () => {
     const document = parseMarkdown('$x^[2]$ と `a^[b]` を使う。').document;
     expect(collectFootnotes(document.children)).toEqual([]);
@@ -151,7 +289,15 @@ describe('footnotes', () => {
       ],
     });
     expect(() => validateDocumentData(withText('注'))).not.toThrow();
-    for (const text of ['', '  ', 'a\nb', 'x'.repeat(2001), 1])
+    for (const text of [
+      '',
+      '  ',
+      ' 注',
+      '注\u00a0',
+      'a\nb',
+      'x'.repeat(2001),
+      1,
+    ])
       expect(() => validateDocumentData(withText(text))).toThrow(
         DocumentValidationError,
       );
@@ -189,6 +335,16 @@ describe('callouts', () => {
     if (quote.type !== 'blockquote') throw new Error('blockquote expected');
     expect(quote.content[0].type).toBe(first);
     expect(JSON.stringify(quote.content)).not.toContain('[!');
+  });
+
+  it('keeps a hard break that belongs to the text rather than to the marker', () => {
+    const document = expectStable('> [!TIP]\n> {.kumi-br}本文');
+    expect(document.children[0]).toMatchObject({
+      attrs: { callout: 'tip' },
+      content: [
+        { content: [{ type: 'hardBreak' }, { type: 'text', text: '本文' }] },
+      ],
+    });
   });
 
   it('leaves escaped, inline and unknown markers as ordinary quotes', () => {

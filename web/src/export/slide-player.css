@@ -186,13 +186,22 @@ button {
 #deck-progress::-moz-progress-bar {
   background: #68c9d0;
 }
+/* Above the slide: the controls below may wrap to several rows. */
 #deck-status {
   position: fixed;
-  bottom: 60px;
-  left: 16px;
-  right: 16px;
+  z-index: 3;
+  top: 8px;
+  left: 50%;
+  max-width: calc(100% - 32px);
+  transform: translateX(-50%);
+  border-radius: 6px;
+  background: #0b1420;
+  padding: 6px 12px;
   text-align: center;
   font-size: 12px;
+}
+#deck-status:empty {
+  display: none;
 }
 .deck-notes {
   flex: none;
@@ -314,9 +323,14 @@ body.presenter {
 }
 .presenter-status {
   display: flex;
+  align-items: baseline;
   gap: 28px;
   font-size: 24px;
   font-variant-numeric: tabular-nums;
+}
+#presenter-status {
+  color: #9fb3c8;
+  font-size: 14px;
 }
 @media (max-width: 620px) {
   .deck-help {
@@ -351,6 +365,9 @@ body.presenter {
   }
   .deck-overview #deck-stage {
     padding: 0;
+  }
+  .deck-blackout body {
+    background: white;
   }
   .deck-blackout #deck-stage {
     visibility: visible;

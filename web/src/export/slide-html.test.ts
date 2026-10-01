@@ -360,7 +360,7 @@ describe('standalone slide HTML', () => {
     );
     // A footnote inside notes is shown in place and is not numbered.
     expect(notes[0].querySelector('.footnote-inline')?.textContent).toBe(
-      '（aside）',
+      ' (aside)',
     );
     expect(result.querySelector('.document-footnotes')).toBeNull();
     expect(notes[1].hasAttribute('data-empty')).toBe(true);

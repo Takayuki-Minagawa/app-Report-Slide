@@ -68,6 +68,27 @@ const identifiedTypes = [
   'tableCell',
 ];
 
+const unmarkedInlineTypes = [
+  'footnote',
+  'reference',
+  'inlineMath',
+  'inlineImage',
+];
+
+/** Tiptap's default shortcuts for block types that notes cannot contain. */
+const blockShortcuts = [
+  'Mod-Alt-1',
+  'Mod-Alt-2',
+  'Mod-Alt-3',
+  'Mod-Alt-4',
+  'Mod-Alt-5',
+  'Mod-Alt-6',
+  'Mod-Alt-c',
+  'Mod-Shift-7',
+  'Mod-Shift-8',
+  'Mod-Shift-b',
+];
+
 const DocumentAttributes = Extension.create({
   name: 'documentAttributes',
 
@@ -217,6 +238,13 @@ const DocumentAttributes = Extension.create({
           const seen = new Set<string>();
           const transaction = newState.tr;
           newState.doc.descendants((node, position) => {
+            // Formatting a range also marks the atoms in it, but the document
+            // model allows marks on text only and would refuse to save.
+            if (unmarkedInlineTypes.includes(node.type.name)) {
+              if (node.marks.length > 0)
+                transaction.setNodeMarkup(position, undefined, node.attrs, []);
+              if (node.type.name !== 'inlineImage') return;
+            }
             if (!identifiedTypes.includes(node.type.name)) return;
             let attributes = node.attrs;
             if (
@@ -526,6 +554,15 @@ export function createEditorExtensions({
       group: 'speakerNotes',
       content: 'paragraph+',
       defining: true,
+      priority: 1000,
+      // Changing the block type would lift the text out of the notes and
+      // show it to the audience, so those shortcuts do nothing here.
+      addKeyboardShortcuts() {
+        const insideNotes = () => this.editor.isActive('speakerNotes');
+        return Object.fromEntries(
+          blockShortcuts.map((shortcut) => [shortcut, insideNotes]),
+        );
+      },
       parseHTML: () => [{ tag: 'aside[data-speaker-notes]' }],
       renderHTML: ({ HTMLAttributes }) => [
         'aside',

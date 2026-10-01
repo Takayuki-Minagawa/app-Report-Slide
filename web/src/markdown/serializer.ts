@@ -129,27 +129,34 @@ function serializeImage(
 
 function serializeInline(nodes: InlineNode[] | undefined): string {
   return (nodes ?? [])
-    .map((node) => {
-      switch (node.type) {
-        case 'reference':
-          return `[@${node.attrs.target}]`;
-        case 'footnote':
-          return `^[${escapeText(node.attrs.text.trim())}]`;
-        case 'text':
-          return serializeText(node.text, node.marks);
-        case 'inlineMath':
-          return serializeInlineMath(node.attrs.latex);
-        case 'inlineImage':
-          return serializeImage(
-            node.attrs.src,
-            node.attrs.alt,
-            node.attrs.title,
-          );
-        case 'hardBreak':
-          return canonicalHardBreakMarker;
-      }
-    })
+    .map(serializeInlineNode)
+    .map((part, index, parts) =>
+      // A literal caret directly before "[" would start a footnote.
+      part.endsWith('^') && parts[index + 1]?.startsWith('[')
+        ? `${part.slice(0, -1)}\\^`
+        : part,
+    )
     .join('');
+}
+
+function serializeInlineNode(node: InlineNode): string {
+  switch (node.type) {
+    case 'reference':
+      return `[@${node.attrs.target}]`;
+    case 'footnote': {
+      const text = escapeText(node.attrs.text);
+      // "^[@label]" keeps its older meaning: a caret before a reference.
+      return `^[${text.startsWith('@') ? '\\' : ''}${text}]`;
+    }
+    case 'text':
+      return serializeText(node.text, node.marks);
+    case 'inlineMath':
+      return serializeInlineMath(node.attrs.latex);
+    case 'inlineImage':
+      return serializeImage(node.attrs.src, node.attrs.alt, node.attrs.title);
+    case 'hardBreak':
+      return canonicalHardBreakMarker;
+  }
 }
 
 function protectParagraphLine(line: string): string {

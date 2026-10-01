@@ -135,12 +135,12 @@ export function splitDocumentPages(document: DocumentData): DocumentNode[][] {
 /** Footnotes in reading order. Speaker notes are not audience output, so theirs are skipped. */
 export function collectFootnotes(
   nodes: readonly DocumentTreeNode[],
+  footnotes: FootnoteNode[] = [],
 ): FootnoteNode[] {
-  const footnotes: FootnoteNode[] = [];
   for (const node of nodes) {
     if (node.type === 'footnote') footnotes.push(node);
     else if (node.type !== 'speakerNotes' && 'content' in node && node.content)
-      footnotes.push(...collectFootnotes(node.content));
+      collectFootnotes(node.content, footnotes);
   }
   return footnotes;
 }

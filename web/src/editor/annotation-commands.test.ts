@@ -77,6 +77,26 @@ describe('annotation schema', () => {
   });
 });
 
+describe('inline atoms under formatting', () => {
+  it('does not keep marks on footnotes, references or math, so saving still works', () => {
+    const document = setup(
+      '前文^[注]と[@sec:a]と$x$の後文\n\n# 見出し\n{#sec:a}',
+    );
+    editor.commands.selectAll();
+    editor.commands.toggleBold();
+    editor.commands.setLink({ href: 'https://example.com' });
+    const atoms: string[] = [];
+    editor.state.doc.descendants((node) => {
+      if (node.isInline && !node.isText)
+        atoms.push(`${node.type.name}:${node.marks.length}`);
+    });
+    expect(atoms).toEqual(['footnote:0', 'reference:0', 'inlineMath:0']);
+    expect(saved(document)).toContain('^[注]');
+    editor.commands.toggleBold();
+    expect(saved(document)).not.toContain('**');
+  });
+});
+
 describe('footnote commands', () => {
   it('inserts a selected footnote after the cursor and updates it in place', () => {
     const document = setup('前後');
@@ -87,6 +107,10 @@ describe('footnote commands', () => {
     expect((selection as NodeSelection).node.attrs.text).toBe('最初の 注');
     expect(saved(document)).toBe('\n前^[最初の 注]後\n');
 
+    // Unchanged text is not an edit and adds no undo step.
+    const before = editor.state.doc;
+    expect(updateFootnote(editor, selection.from, ' 最初の  注 ')).toBe(true);
+    expect(editor.state.doc).toBe(before);
     expect(updateFootnote(editor, selection.from, '更新')).toBe(true);
     expect(editor.state.selection).toBeInstanceOf(NodeSelection);
     expect(saved(document)).toBe('\n前^[更新]後\n');
@@ -154,6 +178,20 @@ describe('speaker notes command', () => {
     expect(saved(document)).toBe(
       '\n# A\n\n本文A\n\n::: slidebreak\n:::\n\n# B\n\n本文B\n\n::: notes\nBのノート\n:::\n',
     );
+  });
+
+  it('ignores block-type shortcuts inside notes instead of lifting the text out', () => {
+    const document = setup(
+      '---\ntype: slide\n---\n\n# A\n\n::: notes\nノート\n:::',
+    );
+    editor.commands.setTextSelection(positionOfText('ノート'));
+    for (const key of ['Mod-Alt-1', 'Mod-Shift-8', 'Mod-Shift-7', 'Mod-Alt-c'])
+      expect(editor.commands.keyboardShortcut(key)).toBe(true);
+    expect(saved(document)).toBe('\n# A\n\n::: notes\nノート\n:::\n');
+    // Outside notes the same shortcut still changes the block.
+    editor.commands.setTextSelection(positionOfText('A'));
+    editor.commands.keyboardShortcut('Mod-Alt-2');
+    expect(saved(document)).toContain('## A');
   });
 
   it('cannot nest notes inside quotes, lists or other notes', () => {

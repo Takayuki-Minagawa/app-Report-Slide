@@ -45,6 +45,9 @@ export function FormatToolbar({
   documentType: DocumentType;
 }) {
   const { copy } = useAppPreferences();
+  // Notes hold paragraphs only: a block command would lift the text out of
+  // them and into the slide.
+  const inNotes = Boolean(editor?.isActive('speakerNotes'));
   const activeCallout: unknown = editor?.isActive('blockquote')
     ? editor.getAttributes('blockquote').callout
     : undefined;
@@ -71,6 +74,7 @@ export function FormatToolbar({
       <Separator orientation="vertical" className="mx-1 h-5 self-center" />
       <FormatButton
         label={copy.workspace.heading1}
+        disabled={inNotes}
         active={editor?.isActive('heading', { level: 1 })}
         onClick={() =>
           editor?.chain().focus().toggleHeading({ level: 1 }).run()
@@ -80,6 +84,7 @@ export function FormatToolbar({
       </FormatButton>
       <FormatButton
         label={copy.workspace.heading2}
+        disabled={inNotes}
         active={editor?.isActive('heading', { level: 2 })}
         onClick={() =>
           editor?.chain().focus().toggleHeading({ level: 2 }).run()
@@ -89,6 +94,7 @@ export function FormatToolbar({
       </FormatButton>
       <FormatButton
         label={copy.workspace.bulletList}
+        disabled={inNotes}
         active={editor?.isActive('bulletList')}
         onClick={() => editor?.chain().focus().toggleBulletList().run()}
       >
@@ -96,6 +102,7 @@ export function FormatToolbar({
       </FormatButton>
       <FormatButton
         label={copy.workspace.orderedList}
+        disabled={inNotes}
         active={editor?.isActive('orderedList')}
         onClick={() => editor?.chain().focus().toggleOrderedList().run()}
       >
@@ -103,6 +110,7 @@ export function FormatToolbar({
       </FormatButton>
       <FormatButton
         label={copy.workspace.quote}
+        disabled={inNotes}
         active={editor?.isActive('blockquote')}
         onClick={() => editor?.chain().focus().toggleBlockquote().run()}
       >
@@ -112,6 +120,7 @@ export function FormatToolbar({
         aria-label={copy.workspace.calloutType}
         title={copy.workspace.calloutType}
         size="sm"
+        disabled={inNotes}
         value={isCalloutType(activeCallout) ? activeCallout : ''}
         onChange={(event) =>
           editor &&
@@ -141,6 +150,7 @@ export function FormatToolbar({
       </FormatButton>
       <FormatButton
         label={copy.workspace.blockMath}
+        disabled={inNotes}
         onClick={() =>
           editor
             ?.chain()
@@ -155,6 +165,7 @@ export function FormatToolbar({
       </FormatButton>
       <FormatButton
         label={copy.workspace.insertTable}
+        disabled={inNotes}
         onClick={() =>
           editor
             ?.chain()
@@ -167,6 +178,7 @@ export function FormatToolbar({
       </FormatButton>
       <FormatButton
         label={copy.workspace.insertChart}
+        disabled={inNotes}
         onClick={() =>
           editor
             ?.chain()
@@ -231,11 +243,13 @@ export function FormatToolbar({
 function FormatButton({
   active,
   children,
+  disabled,
   label,
   onClick,
 }: {
   active?: boolean;
   children: ReactNode;
+  disabled?: boolean;
   label: string;
   onClick: () => void;
 }) {
@@ -243,6 +257,7 @@ function FormatButton({
     <Button
       aria-label={label}
       aria-pressed={active}
+      disabled={disabled}
       size="icon-sm"
       variant={active ? 'secondary' : 'ghost'}
       onClick={onClick}

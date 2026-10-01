@@ -45,7 +45,11 @@ export function FootnoteProperties({
         className="w-full"
         size="sm"
         disabled={disabled || !normalizeFootnoteText(draft)}
-        onClick={() => onApply(draft)}
+        onClick={() => {
+          const normalized = normalizeFootnoteText(draft);
+          setDraft(normalized);
+          onApply(normalized);
+        }}
       >
         {copy.workspace.updateFootnote}
       </Button>

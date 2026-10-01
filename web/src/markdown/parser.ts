@@ -21,14 +21,18 @@ import type {
   TableNode,
   TableRowNode,
 } from '@/src/document/model';
-import { createNodeId, isCalloutType } from '@/src/document/model';
+import {
+  createNodeId,
+  isCalloutType,
+  maximumFootnoteLength,
+} from '@/src/document/model';
 import {
   DocumentValidationError,
   validateDocumentData,
 } from '@/src/document/validation';
 import { isSafeResourceUrl } from '@/src/security/resource-url';
 
-import { createMarkdownIt } from './dialect';
+import { createMarkdownIt, ignoredFootnoteDefinitions } from './dialect';
 import { MarkdownImportError, type MarkdownDiagnostic } from './diagnostics';
 import { parseFrontMatter } from './frontmatter';
 import { parseBlockAttributes } from './attributes';
@@ -150,7 +154,13 @@ function parseInline(token: MarkdownToken, cursor: ParseCursor): InlineNode[] {
         nodes.push({ type: 'reference', attrs: { target: child.content } });
         break;
       case 'kumi_footnote':
-        nodes.push({ type: 'footnote', attrs: { text: child.content } });
+        if (child.content.length > maximumFootnoteLength)
+          cursor.diagnostics.push({
+            severity: 'error',
+            code: 'markdown.footnote-too-long',
+            message: `脚注は${maximumFootnoteLength}文字以内にしてください: ${child.content.slice(0, 40)}…`,
+          });
+        else nodes.push({ type: 'footnote', attrs: { text: child.content } });
         break;
       case 'text':
         if (hasEmptyParagraphMarker) break;
@@ -467,10 +477,13 @@ function extractCallout(
   )
     return;
   blockquote.attrs.callout = type;
-  // parseInline has already turned the soft break after the marker into a space.
-  first.text = first.text.replace(calloutMarker, '').replace(/^ /, '');
+  // parseInline has already turned a soft break after the marker into a space.
+  const rest = first.text.replace(calloutMarker, '');
+  first.text = rest.replace(/^ /, '');
   if (!first.text) paragraph.content!.shift();
-  if (paragraph.content![0]?.type === 'hardBreak') paragraph.content!.shift();
+  // "[!TYPE]" ended by two spaces: that hard break is the marker's line end.
+  if (!rest && paragraph.content![0]?.type === 'hardBreak')
+    paragraph.content!.shift();
   if (paragraph.content!.length > 0) return;
   // Like `{.kumi-empty}`, a quote left without text keeps one empty paragraph.
   if (blockquote.content.length > 1) blockquote.content.shift();
@@ -793,8 +806,9 @@ export function parseMarkdown(
   );
   const markdown = createMarkdownIt();
   const diagnostics = [...frontMatter.diagnostics];
+  const environment = {};
   const cursor: ParseCursor = {
-    tokens: markdown.parse(frontMatter.body, {}),
+    tokens: markdown.parse(frontMatter.body, environment),
     index: 0,
     idFactory,
     diagnostics,
@@ -802,6 +816,13 @@ export function parseMarkdown(
       source.replace(/\r\n?/g, '\n').split('\n').length -
       frontMatter.body.split('\n').length,
   };
+  for (const { id, line } of ignoredFootnoteDefinitions(environment))
+    diagnostics.push({
+      severity: 'warning',
+      code: 'markdown.footnote-definition-ignored',
+      message: `脚注定義 [^${id}] は本文から参照されていないか重複しているため、読み込みませんでした`,
+      line: line + 1 + cursor.lineOffset,
+    });
   const children = parseBlocks(cursor);
 
   if (diagnostics.some((diagnostic) => diagnostic.severity === 'error')) {

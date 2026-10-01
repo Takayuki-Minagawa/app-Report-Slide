@@ -143,7 +143,6 @@ export interface UiMessages {
     replaceOne: string;
     replaceAll: string;
     insertFootnote: string;
-    footnote: string;
     footnoteDefault: string;
     footnoteText: string;
     footnoteHelp: string;
@@ -262,6 +261,7 @@ export interface UiMessages {
     footnotes: string;
     footnoteReference: (number: number) => string;
     footnoteBack: (number: number) => string;
+    footnoteInline: (text: string) => string;
   };
   recovery: {
     foundTitle: string;
@@ -436,7 +436,6 @@ export const messages: Record<AppLocale, UiMessages> = {
       replaceOne: '置換',
       replaceAll: 'すべて置換',
       insertFootnote: '脚注を挿入',
-      footnote: '脚注',
       footnoteDefault: '脚注の本文',
       footnoteText: '脚注の本文',
       footnoteHelp:
@@ -576,6 +575,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       footnotes: '脚注',
       footnoteReference: (number) => `脚注 ${number}`,
       footnoteBack: (number) => `脚注 ${number} の本文位置へ戻る`,
+      footnoteInline: (text) => `（${text}）`,
     },
     recovery: {
       foundTitle: '未保存の作業が見つかりました',
@@ -789,7 +789,6 @@ export const messages: Record<AppLocale, UiMessages> = {
       replaceOne: 'Replace',
       replaceAll: 'Replace all',
       insertFootnote: 'Insert footnote',
-      footnote: 'Footnote',
       footnoteDefault: 'Footnote text',
       footnoteText: 'Footnote text',
       footnoteHelp:
@@ -931,6 +930,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       footnotes: 'Footnotes',
       footnoteReference: (number) => `Footnote ${number}`,
       footnoteBack: (number) => `Back to footnote ${number} in the text`,
+      footnoteInline: (text) => ` (${text})`,
     },
     recovery: {
       foundTitle: 'Unsaved work found',

@@ -205,14 +205,19 @@ describe('standalone slide player', () => {
     expect(byId('deck-status').textContent).toContain('presenter view');
   });
 
+  // The window the deck keeps a reference to, shared by the next two tests.
+  const presenterWindow = {
+    document: document.implementation.createHTMLDocument(''),
+    closed: false,
+    focus: vi.fn(),
+    close: vi.fn(),
+  };
+
   it('fills a presenter window with the current slide, the next slide and notes', () => {
-    const popup = document.implementation.createHTMLDocument('');
-    const open = vi.spyOn(window, 'open').mockReturnValue({
-      document: popup,
-      closed: false,
-      focus: vi.fn(),
-      close: vi.fn(),
-    } as unknown as Window);
+    const popup = presenterWindow.document;
+    const open = vi
+      .spyOn(window, 'open')
+      .mockReturnValue(presenterWindow as unknown as Window);
     byId('deck-presenter').click();
     expect(open).toHaveBeenCalledWith(
       '',
@@ -243,5 +248,63 @@ describe('standalone slide player', () => {
     // Asking again focuses the open window rather than opening another.
     press('s');
     expect(open).toHaveBeenCalledTimes(1);
+
+    // The presenter's own keys and links act on the deck without disturbing
+    // the audience window: no status text, print dialog or second deck.
+    const print = vi.spyOn(window, 'print').mockImplementation(() => {});
+    const key = (value: string) =>
+      popup.body.dispatchEvent(
+        new KeyboardEvent('keydown', { key: value, bubbles: true }),
+      );
+    key('p');
+    expect(print).not.toHaveBeenCalled();
+    key('2');
+    expect(byId('deck-status').textContent).toBe('');
+    expect(text('presenter-status')).toBe(
+      'Go to slide number (press Enter): 2',
+    );
+    key('Enter');
+    expect(visibleSlides()).toEqual(['slide-2']);
+    expect(text('presenter-status')).toBe('');
+    key('Home');
+    const link = popup.querySelector<HTMLAnchorElement>(
+      '#presenter-current a[href="#slide-3"]',
+    )!;
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    link.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+    expect(visibleSlides()).toEqual(['slide-3']);
+    press('Home');
+  });
+
+  it('rebuilds a reloaded presenter window and survives one it may not touch', () => {
+    // A reloaded popup is blank again: the next request fills it anew.
+    const reloaded = document.implementation.createHTMLDocument('');
+    presenterWindow.document = reloaded;
+    const open = vi
+      .spyOn(window, 'open')
+      .mockReturnValue(presenterWindow as unknown as Window);
+    expect(() => press('ArrowRight')).not.toThrow();
+    press('Home');
+    press('s');
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(presenterWindow.focus).toHaveBeenCalledTimes(1);
+    expect(reloaded.getElementById('presenter-current')?.textContent).toContain(
+      'One',
+    );
+
+    // A window that navigated elsewhere throws on access; the deck keeps working.
+    Object.defineProperty(presenterWindow, 'document', {
+      get() {
+        throw new DOMException('cross-origin', 'SecurityError');
+      },
+    });
+    expect(() => press('ArrowRight')).not.toThrow();
+    expect(visibleSlides()).toEqual(['slide-2']);
+    expect(() => vi.advanceTimersByTime(1_000)).not.toThrow();
+    press('s');
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(byId('deck-status').textContent).toContain('presenter view');
+    press('Home');
   });
 });

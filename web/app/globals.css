@@ -757,6 +757,27 @@
   font: 700 0.68rem var(--font-ui);
   letter-spacing: 0.08em;
 }
+/* Editor labels are generated content; follow the interface language. */
+:root:lang(ja) .kumi-speaker-notes::before {
+  content: '発表者ノート（聴衆には表示されません）';
+}
+:root:lang(ja) .kumi-editor-content blockquote[data-callout='note']::before {
+  content: '注記';
+}
+:root:lang(ja) .kumi-editor-content blockquote[data-callout='tip']::before {
+  content: 'ヒント';
+}
+:root:lang(ja)
+  .kumi-editor-content
+  blockquote[data-callout='important']::before {
+  content: '重要';
+}
+:root:lang(ja) .kumi-editor-content blockquote[data-callout='warning']::before {
+  content: '警告';
+}
+:root:lang(ja) .kumi-editor-content blockquote[data-callout='caution']::before {
+  content: '注意';
+}
 
 @media (max-width: 1120px) {
   .workspace-grid {

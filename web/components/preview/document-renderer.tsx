@@ -97,7 +97,11 @@ function FootnoteReference({ node }: { node: FootnoteNode }) {
   const number = useContext(FootnoteContext).get(node);
   // Unlisted footnotes (inside speaker notes) are shown in place.
   if (!number)
-    return <span className="footnote-inline">（{node.attrs.text}）</span>;
+    return (
+      <span className="footnote-inline">
+        {copy.preview.footnoteInline(node.attrs.text)}
+      </span>
+    );
   return (
     <sup className="footnote-ref">
       <a

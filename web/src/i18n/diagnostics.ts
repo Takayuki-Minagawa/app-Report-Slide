@@ -28,6 +28,10 @@ const diagnosticByCode = new Map<string, string>(
       'An element attribute line is invalid. Check its syntax and values.',
     'markdown.break-invalid':
       'A page or slide break must be a top-level ::: pagebreak or ::: slidebreak block.',
+    'markdown.footnote-too-long':
+      'A footnote is longer than 2000 characters. Shorten it and try again.',
+    'markdown.footnote-definition-ignored':
+      'A footnote definition was not imported because nothing refers to it or its ID is repeated.',
     'markdown.notes-invalid':
       'Speaker notes must be a top-level ::: notes block closed by :::, containing only paragraphs.',
     'markdown.token-ignored': 'An unsupported Markdown element was ignored.',

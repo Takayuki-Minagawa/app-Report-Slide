@@ -36,6 +36,11 @@ test('脚注・注記・発表者ノートを編集し、HTMLスライドの一�
           '',
           '::: notes',
           'ここで条件を説明する。',
+          '',
+          ...Array.from({ length: 12 }, (_, index) => [
+            `補足 ${index + 1}: 長いノートでもスライドは画面に収まる。`,
+            '',
+          ]).flat(),
           ':::',
           '',
           '::: slidebreak',
@@ -161,6 +166,15 @@ test('脚注・注記・発表者ノートを編集し、HTMLスライドの一�
     expect(slideBox!.y + slideBox!.height).toBeLessThanOrEqual(notesBox!.y + 1);
     await deck.keyboard.press('ArrowRight');
     await expect(notes).toContainText('このスライドにノートはありません。');
+    // Longer notes take more room: the slide is fitted again for each slide.
+    await deck.keyboard.press('Home');
+    await expect(notes).toContainText('補足 12');
+    const tallNotes = await notes.boundingBox();
+    const fitted = await deck.locator('#slide-1').boundingBox();
+    expect(tallNotes!.height).toBeGreaterThan(notesBox!.height);
+    expect(fitted!.y + fitted!.height).toBeLessThanOrEqual(tallNotes!.y + 1);
+    expect(fitted!.height).toBeLessThan(slideBox!.height);
+    await deck.keyboard.press('End');
     await deck.getByRole('button', { name: 'ノート', exact: true }).click();
     await expect(notes).toBeHidden();
 
@@ -180,9 +194,13 @@ test('脚注・注記・発表者ノートを編集し、HTMLスライドの一�
     await expect(presenter).toHaveTitle('発表者ビュー — 発表テスト');
     await expect(presenter.locator('#presenter-current')).toContainText('概要');
     await expect(presenter.locator('#presenter-next')).toContainText('結果');
-    await expect(presenter.locator('#presenter-notes')).toHaveText(
+    await expect(presenter.locator('#presenter-notes')).toContainText(
       'ここで条件を説明する。',
     );
+    // A footnote link in the presenter window must not load a second deck there.
+    await presenter.locator('#presenter-current .footnote-ref a').click();
+    await expect(presenter).toHaveURL('about:blank');
+    await expect(presenter.locator('#presenter-current')).toContainText('概要');
     await expect(presenter.locator('#presenter-counter')).toHaveText('1 / 3');
     const frame = await presenter.locator('#presenter-current').boundingBox();
     expect(frame!.width).toBeCloseTo(552, 0);

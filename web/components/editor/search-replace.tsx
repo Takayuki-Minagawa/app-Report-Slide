@@ -32,7 +32,8 @@ export function SearchReplace({
     queryInput.current?.focus();
   }, [queryInput]);
   const closeOnEscape = (event: KeyboardEvent) => {
-    if (event.key !== 'Escape') return;
+    // During IME composition Escape cancels the conversion, not the search.
+    if (event.key !== 'Escape' || event.nativeEvent.isComposing) return;
     event.preventDefault();
     onClose();
   };

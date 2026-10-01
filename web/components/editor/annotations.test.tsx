@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AppPreferencesProvider } from '@/components/app-preferences';
 import { EditorWorkspace } from './editor-workspace';
 
@@ -115,6 +115,52 @@ describe('annotation workspace', () => {
     expect(await markdown()).toContain('::: notes\n非公開メモ\n:::');
   });
 
+  it('disables block controls while the cursor is inside speaker notes', async () => {
+    renderWorkspace();
+    await screen.findByText('REPORT');
+    fireEvent.click(screen.getByRole('button', { name: 'Markdownへ切り替え' }));
+    fireEvent.change(
+      await screen.findByRole('textbox', { name: 'Markdown原稿' }),
+      { target: { value: '---\ntype: slide\n---\n\n# 表題\n' } },
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Markdownを適用' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: '発表者ノートを追加' }),
+    );
+    const blockControls = [
+      '見出し1',
+      '見出し2',
+      '箇条書き',
+      '番号付きリスト',
+      '引用',
+      'ブロック数式',
+      '表を挿入',
+      'グラフを挿入',
+    ];
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '見出し1' })).toBeDisabled(),
+    );
+    for (const name of blockControls)
+      expect(screen.getByRole('button', { name })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: '注記の種類' })).toBeDisabled();
+    for (const name of ['太字', 'インライン数式', '脚注を挿入'])
+      expect(screen.getByRole('button', { name })).toBeEnabled();
+  });
+
+  it('opens search with Cmd+F on macOS', async () => {
+    vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel');
+    renderWorkspace();
+    await applySource('本文');
+    fireEvent.keyDown(window, { key: 'f', ctrlKey: true });
+    expect(
+      screen.queryByRole('textbox', { name: '検索語' }),
+    ).not.toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'f', metaKey: true });
+    expect(
+      await screen.findByRole('textbox', { name: '検索語' }),
+    ).toBeInTheDocument();
+  });
+
   it('counts characters and opens search with the keyboard in the visual editor', async () => {
     renderWorkspace();
     await applySource('# 見出し\n\n本文です');
@@ -129,12 +175,32 @@ describe('annotation workspace', () => {
     fireEvent.keyDown(window, { key: 'f', ctrlKey: true });
     const query = await screen.findByRole('textbox', { name: '検索語' });
     await waitFor(() => expect(query).toHaveFocus());
+    // Escape that cancels an IME conversion keeps the bar open.
+    fireEvent.keyDown(query, { key: 'Escape', isComposing: true });
+    expect(screen.getByRole('textbox', { name: '検索語' })).toBeInTheDocument();
     fireEvent.keyDown(query, { key: 'Escape' });
     expect(
       screen.queryByRole('textbox', { name: '検索語' }),
     ).not.toBeInTheDocument();
 
+    // Cmd+F belongs to macOS; elsewhere it is left to the browser.
     fireEvent.keyDown(window, { key: 'f', metaKey: true });
+    expect(
+      screen.queryByRole('textbox', { name: '検索語' }),
+    ).not.toBeInTheDocument();
+    // Not behind a modal dialog either.
+    fireEvent.click(screen.getByRole('button', { name: 'ガイド' }));
+    await screen.findByRole('dialog');
+    fireEvent.keyDown(window, { key: 'f', ctrlKey: true });
+    expect(
+      screen.queryByRole('textbox', { name: '検索語' }),
+    ).not.toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    );
+
+    fireEvent.keyDown(window, { key: 'f', ctrlKey: true });
     fireEvent.click(
       await screen.findByRole('button', { name: '検索を閉じる' }),
     );

@@ -264,12 +264,14 @@ function validateInlineNode(
       const text = attrs?.text;
       if (
         typeof text !== 'string' ||
-        text.trim().length === 0 ||
+        text.length === 0 ||
+        // Markdown cannot keep surrounding whitespace or line breaks in a note.
+        text !== text.trim() ||
         text.length > maximumFootnoteLength ||
         /[\r\n]/.test(text)
       ) {
         issues.push(
-          `${path}.attrs.text: 改行を含まない1から${maximumFootnoteLength}文字の脚注が必要です`,
+          `${path}.attrs.text: 前後の空白と改行を含まない1から${maximumFootnoteLength}文字の脚注が必要です`,
         );
       }
       if (

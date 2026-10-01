@@ -39,7 +39,7 @@ const playerMessages = {
     help: '← → / Space: 移動 · 数字+Enter: 指定スライド · O: 一覧 · N: ノート · S: 発表者ビュー · B: 暗転 · F: 全画面 · P: 印刷',
     fullscreenUnavailable: 'このブラウザでは全画面表示を開始できません。',
     presenterUnavailable:
-      '発表者ビューを開けません。ポップアップを許可するか、N キーでノートを表示してください。',
+      '発表者ビューを開けません。このページのポップアップを許可してください。',
   },
   en: {
     previous: 'Previous',
@@ -63,7 +63,7 @@ const playerMessages = {
     help: '← → / Space: navigate · number+Enter: go to slide · O: overview · N: notes · S: presenter view · B: blackout · F: fullscreen · P: print',
     fullscreenUnavailable: 'Fullscreen is not available in this browser.',
     presenterUnavailable:
-      'The presenter view could not be opened. Allow pop-ups, or press N to show the notes here.',
+      'The presenter view could not be opened. Allow pop-ups for this page.',
   },
 };
 
@@ -230,6 +230,7 @@ export async function exportSlideHtml(
             <output id="presenter-timer" aria-label={copy.elapsed}>
               00:00
             </output>
+            <output id="presenter-status" />
           </footer>
         </template>
         <template id="katex-license">

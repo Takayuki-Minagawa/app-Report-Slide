@@ -23,12 +23,16 @@ export function EditorWorkspace() {
   // Search covers the visual editor only; other views keep the browser's own find.
   useEffect(() => {
     if (!visualView) return;
+    // Ctrl+F moves the cursor in macOS text fields, so use Cmd there.
+    const apple = /Mac|iPhone|iPad/.test(window.navigator.platform);
     const openSearch = (event: KeyboardEvent) => {
       if (
         event.key?.toLowerCase() !== 'f' ||
-        !(event.ctrlKey || event.metaKey) ||
+        (apple ? !event.metaKey || event.ctrlKey : !event.ctrlKey) ||
         event.altKey ||
-        event.shiftKey
+        event.shiftKey ||
+        // The bar would open behind a modal dialog.
+        window.document.querySelector('[role="dialog"], [role="alertdialog"]')
       )
         return;
       event.preventDefault();
