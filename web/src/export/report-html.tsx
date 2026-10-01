@@ -12,8 +12,9 @@ import { analyzeDocument, splitDocumentPages } from '@/src/document/semantics';
 import { migrateDocumentData } from '@/src/document/validation';
 import type { AppLocale } from '@/src/i18n/messages';
 import type { AssetUrls } from '@/src/workspace/files';
-import { bytesToBase64, embedSlideImages } from './embedded-images';
+import { embedSlideImages } from './embedded-images';
 import { offlineMathStyles } from './math-styles';
+import { hashedInlineScript } from './standalone-html';
 
 const reportScript = `const pages = [...document.querySelectorAll('.report-sheet')];
 const warning = document.getElementById('overflow-warning');
@@ -30,6 +31,19 @@ if ('ResizeObserver' in window) {
 updateWarning();
 document.getElementById('print-report')?.addEventListener('click', () => window.print());`;
 
+const reportMessages = {
+  ja: {
+    print: '印刷／PDF保存',
+    overflow:
+      '内容が用紙の高さを超えています。印刷プレビューで自動改ページを確認してください。',
+  },
+  en: {
+    print: 'Print / Save PDF',
+    overflow:
+      'Content exceeds a sheet. Check automatic pagination in print preview.',
+  },
+};
+
 export async function exportReportHtml(
   source: DocumentData,
   assets: AssetUrls,
@@ -45,16 +59,8 @@ export async function exportReportHtml(
   const pages = splitDocumentPages(document);
   const settings = resolvePageSettings(document.metadata);
   const [width, height] = pageDimensions(settings);
-  const script = reportScript.replace(/\r\n?/g, '\n');
-  const hash = bytesToBase64(
-    new Uint8Array(
-      await crypto.subtle.digest('SHA-256', new TextEncoder().encode(script)),
-    ),
-  );
-  const policy =
-    "default-src 'none'; img-src data: https: http:; font-src data:; style-src 'unsafe-inline'; script-src 'sha256-" +
-    hash +
-    "'; base-uri 'none'; form-action 'none'";
+  const { script, policy } = await hashedInlineScript(reportScript);
+  const copy = reportMessages[locale];
   const style =
     `:root{--border:#bdc8d1;--muted-foreground:#596b7b;--font-ui:Arial,sans-serif;--font-code:monospace;color-scheme:light}
 *{box-sizing:border-box}body{margin:0;background:#e8edf2;color:#1f2f3e;font-family:Arial,sans-serif}
@@ -82,12 +88,10 @@ button{font:inherit;cursor:pointer}.report-tools{position:sticky;top:0;z-index:2
         <header className="report-tools">
           <h1>{documentTitle(document)}</h1>
           <button type="button" id="print-report">
-            {locale === 'ja' ? '印刷／PDF保存' : 'Print / Save PDF'}
+            {copy.print}
           </button>
           <p id="overflow-warning" hidden>
-            {locale === 'ja'
-              ? '内容が用紙の高さを超えています。印刷プレビューで自動改ページを確認してください。'
-              : 'Content exceeds a sheet. Check automatic pagination in print preview.'}
+            {copy.overflow}
           </p>
         </header>
         <main className="report-pages">

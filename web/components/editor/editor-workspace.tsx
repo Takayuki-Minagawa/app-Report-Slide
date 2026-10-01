@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAppPreferences } from '@/components/app-preferences';
 import { useDocumentWorkspace } from './use-document-workspace';
 import { WorkspaceHeader } from './workspace-header';
@@ -14,10 +14,36 @@ import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 
 export function EditorWorkspace() {
   const workspace = useDocumentWorkspace();
-  const { copy, locale } = useAppPreferences();
+  const { copy } = useAppPreferences();
   const [navigatorOpen, setNavigatorOpen] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const visualView = workspace.view === 'visual';
+  // Search covers the visual editor only; other views keep the browser's own find.
+  useEffect(() => {
+    if (!visualView) return;
+    // Ctrl+F moves the cursor in macOS text fields, so use Cmd there.
+    const apple = /Mac|iPhone|iPad/.test(window.navigator.platform);
+    const openSearch = (event: KeyboardEvent) => {
+      if (
+        event.key?.toLowerCase() !== 'f' ||
+        (apple ? !event.metaKey || event.ctrlKey : !event.ctrlKey) ||
+        event.altKey ||
+        event.shiftKey ||
+        // The bar would open behind a modal dialog.
+        window.document.querySelector('[role="dialog"], [role="alertdialog"]')
+      )
+        return;
+      event.preventDefault();
+      setSearchOpen(true);
+      // Already open: return to the query. A new bar focuses itself on mount.
+      searchInput.current?.focus();
+      searchInput.current?.select();
+    };
+    window.addEventListener('keydown', openSearch);
+    return () => window.removeEventListener('keydown', openSearch);
+  }, [visualView]);
   const controlsLocked =
     workspace.documentWriteLocked || workspace.projectActions.busy;
   const projectPanel = (overlay: boolean) => (
@@ -59,6 +85,7 @@ export function EditorWorkspace() {
       setMathDraft={workspace.setMathDraft}
       applyMath={workspace.applyMath}
       applyAttributes={workspace.applyAttributes}
+      applyFootnote={workspace.applyFootnote}
       updatePageSettings={workspace.updatePageSettings}
       updateTheme={workspace.updateTheme}
       updateDocumentFlag={workspace.updateDocumentFlag}
@@ -87,7 +114,14 @@ export function EditorWorkspace() {
         <SearchReplace
           editor={workspace.editor}
           locked={controlsLocked}
-          locale={locale}
+          inputRef={searchInput}
+          onClose={() => {
+            setSearchOpen(false);
+            // Return to the text without moving the page under the reader.
+            workspace.editor?.commands.focus(undefined, {
+              scrollIntoView: false,
+            });
+          }}
         />
       )}
       <section className="workspace-grid">

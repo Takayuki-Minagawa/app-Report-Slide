@@ -1,3 +1,4 @@
+import type { CalloutType } from '@/src/document/model';
 import { projectMessages, type ProjectMessages } from './project-messages';
 
 export const supportedLocales = ['ja', 'en'] as const;
@@ -130,8 +131,45 @@ export interface UiMessages {
     table: string;
     code: string;
     exportHtml: string;
+    exportReportHtml: string;
     exportingHtml: string;
+    saveArchive: string;
+    insertChart: string;
+    searchReplace: string;
+    searchText: string;
+    replacementText: string;
+    searchPrevious: string;
+    searchNext: string;
+    replaceOne: string;
+    replaceAll: string;
+    insertFootnote: string;
+    footnoteDefault: string;
+    footnoteText: string;
+    footnoteHelp: string;
+    updateFootnote: string;
+    insertSpeakerNotes: string;
+    calloutType: string;
+    calloutNone: string;
+    statistics: (characters: number, words: number) => string;
+    closeSearch: string;
     replaceConfirmation: string;
+  };
+  callout: Record<CalloutType, string>;
+  chart: {
+    type: string;
+    line: string;
+    scatter: string;
+    bar: string;
+    data: string;
+    dataField: string;
+    invalid: string;
+    xAxis: string;
+    yAxis: string;
+    legend: string;
+    alternativeText: string;
+    caption: string;
+    width: string;
+    update: string;
   };
   status: {
     ready: string;
@@ -168,6 +206,8 @@ export interface UiMessages {
     savedJsonAfterApplying: string;
     savedJson: string;
     unableToSaveJson: string;
+    savedArchive: string;
+    unableToSaveArchive: string;
     invalidDocumentData: string;
     selectMathAgain: string;
     updatedEquation: string;
@@ -218,6 +258,10 @@ export interface UiMessages {
     unresolvedReference: string;
     imageUnavailable: string;
     toc: string;
+    footnotes: string;
+    footnoteReference: (number: number) => string;
+    footnoteBack: (number: number) => string;
+    footnoteInline: (text: string) => string;
   };
   recovery: {
     foundTitle: string;
@@ -380,9 +424,53 @@ export const messages: Record<AppLocale, UiMessages> = {
       table: '表',
       code: 'コード',
       exportHtml: 'HTMLスライドを出力',
+      exportReportHtml: 'Report HTMLを出力',
       exportingHtml: 'HTMLスライドを出力中',
+      saveArchive: '画像を含む編集用ZIP',
+      insertChart: 'グラフを挿入',
+      searchReplace: '検索と置換',
+      searchText: '検索語',
+      replacementText: '置換後の文字列',
+      searchPrevious: '前へ',
+      searchNext: '次へ',
+      replaceOne: '置換',
+      replaceAll: 'すべて置換',
+      insertFootnote: '脚注を挿入',
+      footnoteDefault: '脚注の本文',
+      footnoteText: '脚注の本文',
+      footnoteHelp:
+        '書式なしの1段落です。番号は文書順に自動で付き、ページ／スライドの末尾に一覧表示されます。',
+      updateFootnote: '脚注を更新',
+      insertSpeakerNotes: '発表者ノートを追加',
+      calloutType: '注記の種類',
+      calloutNone: '注記なし',
+      statistics: (characters) => `${characters.toLocaleString('ja-JP')} 文字`,
+      closeSearch: '検索を閉じる',
       replaceConfirmation:
         '未保存の変更があります。別の文書を開いて変更を破棄しますか？',
+    },
+    callout: {
+      note: '注記',
+      tip: 'ヒント',
+      important: '重要',
+      warning: '警告',
+      caution: '注意',
+    },
+    chart: {
+      type: 'グラフ種類',
+      line: '折れ線',
+      scatter: '散布図',
+      bar: '棒',
+      data: 'データ（ラベル,x,y を1行ずつ）',
+      dataField: 'グラフデータ',
+      invalid: '1〜200行のラベルと有限の数値、幅10〜100を入力してください。',
+      xAxis: 'X軸',
+      yAxis: 'Y軸',
+      legend: '凡例',
+      alternativeText: '代替テキスト',
+      caption: 'キャプション',
+      width: '幅（%）',
+      update: 'グラフを更新',
     },
     status: {
       ready: '準備完了',
@@ -423,6 +511,8 @@ export const messages: Record<AppLocale, UiMessages> = {
       savedJsonAfterApplying: 'Markdownを適用してDocument JSONを保存しました',
       savedJson: 'Document JSONを保存しました',
       unableToSaveJson: 'Document JSONを保存できませんでした',
+      savedArchive: 'ZIPを保存しました',
+      unableToSaveArchive: 'ZIPを保存できません',
       invalidDocumentData: '文書データを検証できません',
       selectMathAgain: '数式を選択し直してください',
       updatedEquation: '数式を更新しました',
@@ -482,6 +572,10 @@ export const messages: Record<AppLocale, UiMessages> = {
       unresolvedReference: '参照先が未定義、または重複しています',
       imageUnavailable: '画像を表示できません',
       toc: '目次',
+      footnotes: '脚注',
+      footnoteReference: (number) => `脚注 ${number}`,
+      footnoteBack: (number) => `脚注 ${number} の本文位置へ戻る`,
+      footnoteInline: (text) => `（${text}）`,
     },
     recovery: {
       foundTitle: '未保存の作業が見つかりました',
@@ -520,6 +614,8 @@ export const messages: Record<AppLocale, UiMessages> = {
         '「ビジュアル編集」で本文を直接編集し、上部の書式ボタンで見出し、リスト、引用、表、数式を追加します。',
         '本文直下の段落・見出しを1つまたは複数選び、上部の文字位置ルーラーで左位置・右位置・1行目の字下げを調整します。印はドラッグまたは矢印キーで動かせます。1行目を左位置より前にするとぶら下げ字下げになり、「リセット」で解除できます。',
         'Slideでは「図を配置」を開き、「画像を挿入」で画像を選びます。図をドラッグして移動し、8方向のハンドルで大きさを変えられます。矢印キーは1%、Shift＋矢印キーは5%移動です。',
+        '「注記の種類」で引用を注記・ヒント・重要・警告・注意のブロックにできます。「脚注を挿入」はカーソル位置に脚注を追加し、本文は右のPropertiesで編集します。Slideの「発表者ノートを追加」は、聴衆には見せないノートをスライドごとに追加します。',
+        'ビジュアル編集中は Ctrl／Cmd＋F で検索と置換を開き、Esc で閉じます。編集画面の右上に文字数を表示します。',
         '「Markdown」では原稿を直接編集します。変更後は「Markdownを適用」またはMarkdown／JSON保存を選んでください。',
         '要素を選ぶと右側のPropertiesでテーマ、目次、番号、参照ラベル、図の代替テキストなどを設定できます。',
       ],
@@ -537,6 +633,7 @@ export const messages: Record<AppLocale, UiMessages> = {
         '「完成プレビュー」でReportはA4ページ、Slideは16:9スライドとして確認できます。',
         'ヘッダーのMarkdownまたはJSONでファイルを保存します。Document JSONはMarkdownで表せない構造も保持できます。',
         'Slide文書では「HTML」で閲覧・発表用の単一HTMLファイルを出力できます。前へ／次へボタンや矢印キーで移動し、進捗バーで現在位置を確認できます。Fキーで全画面表示、Pキーまたは「印刷／PDF保存」で全スライドを印刷できます。',
+        'HTMLスライドでは O で一覧、数字＋Enter で番号を指定して移動、B で暗転できます。N は発表者ノートを画面下に、S は現在と次のスライド・ノート・経過時間を別ウィンドウ（発表者ビュー）に表示します。ノートは印刷されません。',
         '数式用フォントと取り込んだ画像はHTMLに含まれます。外部URLの画像には通信が必要です。HTML出力だけでは編集用原稿は保存されないため、MarkdownまたはJSONも保存してください。',
       ],
       preferencesTitle: '5. 表示を切り替える',
@@ -680,9 +777,54 @@ export const messages: Record<AppLocale, UiMessages> = {
       table: 'Table',
       code: 'Code',
       exportHtml: 'Export HTML slides',
+      exportReportHtml: 'Export Report HTML',
       exportingHtml: 'Exporting HTML slides',
+      saveArchive: 'Editable ZIP with images',
+      insertChart: 'Insert chart',
+      searchReplace: 'Search and replace',
+      searchText: 'Search text',
+      replacementText: 'Replacement text',
+      searchPrevious: 'Previous',
+      searchNext: 'Next',
+      replaceOne: 'Replace',
+      replaceAll: 'Replace all',
+      insertFootnote: 'Insert footnote',
+      footnoteDefault: 'Footnote text',
+      footnoteText: 'Footnote text',
+      footnoteHelp:
+        'One unformatted paragraph. Footnotes are numbered in document order and listed at the end of their page or slide.',
+      updateFootnote: 'Update footnote',
+      insertSpeakerNotes: 'Add speaker notes',
+      calloutType: 'Callout type',
+      calloutNone: 'No callout',
+      statistics: (characters, words) =>
+        `${words.toLocaleString('en-US')} word${words === 1 ? '' : 's'} · ${characters.toLocaleString('en-US')} character${characters === 1 ? '' : 's'}`,
+      closeSearch: 'Close search',
       replaceConfirmation:
         'There are unsaved changes. Open another document and discard them?',
+    },
+    callout: {
+      note: 'Note',
+      tip: 'Tip',
+      important: 'Important',
+      warning: 'Warning',
+      caution: 'Caution',
+    },
+    chart: {
+      type: 'Chart type',
+      line: 'Line',
+      scatter: 'Scatter',
+      bar: 'Bar',
+      data: 'Data (label,x,y per line)',
+      dataField: 'Chart data',
+      invalid: 'Enter 1–200 labels and finite numbers; width 10–100.',
+      xAxis: 'X axis',
+      yAxis: 'Y axis',
+      legend: 'Legend',
+      alternativeText: 'Alt text',
+      caption: 'Caption',
+      width: 'Width (%)',
+      update: 'Update chart',
     },
     status: {
       ready: 'Ready',
@@ -723,6 +865,8 @@ export const messages: Record<AppLocale, UiMessages> = {
       savedJsonAfterApplying: 'Applied Markdown and saved Document JSON',
       savedJson: 'Saved Document JSON',
       unableToSaveJson: 'Could not save Document JSON',
+      savedArchive: 'ZIP saved',
+      unableToSaveArchive: 'Could not save ZIP',
       invalidDocumentData: 'Could not validate document data',
       selectMathAgain: 'Select the equation again',
       updatedEquation: 'Updated equation',
@@ -783,6 +927,10 @@ export const messages: Record<AppLocale, UiMessages> = {
       unresolvedReference: 'The reference target is missing or duplicated',
       imageUnavailable: 'Image unavailable',
       toc: 'Table of contents',
+      footnotes: 'Footnotes',
+      footnoteReference: (number) => `Footnote ${number}`,
+      footnoteBack: (number) => `Back to footnote ${number} in the text`,
+      footnoteInline: (text) => ` (${text})`,
     },
     recovery: {
       foundTitle: 'Unsaved work found',
@@ -821,6 +969,8 @@ export const messages: Record<AppLocale, UiMessages> = {
         'Edit directly in the Visual editor. The formatting toolbar adds headings, lists, quotes, tables, and equations.',
         'Select one or more top-level paragraphs or headings, then use the text ruler above the editor to set left and right positions and the first-line indent. Drag a marker or focus it and use the arrow keys. Move the first-line marker before the left marker for a hanging indent; choose Reset to clear these settings.',
         'For Slides, open “Place images” and choose “Insert image”. Drag an image to move it or use its eight handles to resize it. Arrow keys move it by 1%; Shift+Arrow moves it by 5%.',
+        'Use “Callout type” to turn a quote into a Note, Tip, Important, Warning, or Caution block. “Insert footnote” adds a footnote at the cursor; edit its text in Properties. In a Slide, “Add speaker notes” adds notes for each slide that the audience does not see.',
+        'In the visual editor, press Ctrl/Cmd+F to open search and replace and Esc to close it. The character and word counts appear at the top right of the editor.',
         'Use the Markdown tab to edit source directly. Choose “Apply Markdown” or save Markdown/JSON after making changes.',
         'Select an element to configure its theme, table of contents, numbering, reference label, or image alternative text in Properties.',
       ],
@@ -838,6 +988,7 @@ export const messages: Record<AppLocale, UiMessages> = {
         'Use Preview to review Reports as A4 pages and Slides as 16:9 slides.',
         'Save Markdown or JSON from the header. Document JSON preserves structures that Markdown cannot express.',
         'For Slide documents, use HTML to export a standalone file for viewing and presenting. Use Previous/Next or the arrow keys to navigate, and the progress bar to track your place. Press F for fullscreen where supported; press P or Print / Save PDF to print every slide.',
+        'In HTML slides, press O for the overview, type a number and press Enter to go to that slide, and press B to black out the screen. N shows speaker notes below the slide; S opens the presenter view, a separate window with the current and next slides, notes, and elapsed time. Notes are not printed.',
         'Math fonts and imported images are embedded. External image URLs require a network connection. HTML export does not save your editable source, so also save Markdown or JSON.',
       ],
       preferencesTitle: '5. Change the display',

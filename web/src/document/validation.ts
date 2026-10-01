@@ -2,7 +2,11 @@ import { z } from 'zod';
 
 import { isSafeResourceUrl } from '@/src/security/resource-url';
 
-import type { DocumentData } from './model';
+import {
+  isCalloutType,
+  maximumFootnoteLength,
+  type DocumentData,
+} from './model';
 import { booleanMetadataKeys, stringMetadataKeys } from './metadata';
 import { pageSettingsIssues } from './page-settings';
 import { labelPattern, semanticTypes } from './semantics';
@@ -46,6 +50,7 @@ type NodeParent =
   | 'list'
   | 'listItem'
   | 'blockquote'
+  | 'speakerNotes'
   | 'table'
   | 'tableRow'
   | 'tableCell';
@@ -251,6 +256,30 @@ function validateInlineNode(
         node.marks !== undefined
       ) {
         issues.push(`${path}: inlineImageにcontent/text/marksは指定できません`);
+      }
+      break;
+    }
+    case 'footnote': {
+      const attrs = validateAttrs(node, path, issues);
+      const text = attrs?.text;
+      if (
+        typeof text !== 'string' ||
+        text.length === 0 ||
+        // Markdown cannot keep surrounding whitespace or line breaks in a note.
+        text !== text.trim() ||
+        text.length > maximumFootnoteLength ||
+        /[\r\n]/.test(text)
+      ) {
+        issues.push(
+          `${path}.attrs.text: 前後の空白と改行を含まない1から${maximumFootnoteLength}文字の脚注が必要です`,
+        );
+      }
+      if (
+        node.content !== undefined ||
+        node.text !== undefined ||
+        node.marks !== undefined
+      ) {
+        issues.push(`${path}: footnoteにcontent/text/marksは指定できません`);
       }
       break;
     }
@@ -505,12 +534,17 @@ function validateBlockNode(
     (node.type === 'tableHeader' || node.type === 'tableCell');
   const validCellParagraph =
     parent === 'tableCell' && node.type === 'paragraph';
+  const validNotes = parent === 'root' && node.type === 'speakerNotes';
+  const validNotesParagraph =
+    parent === 'speakerNotes' && node.type === 'paragraph';
   if (
     !validForParent &&
     !validListItem &&
     !validRow &&
     !validCell &&
-    !validCellParagraph
+    !validCellParagraph &&
+    !validNotes &&
+    !validNotesParagraph
   ) {
     issues.push(
       `${path}.type: ${parent}の子として${node.type}は使用できません`,
@@ -529,6 +563,14 @@ function validateBlockNode(
           `${path}.attrs.textRuler: left・rightは0〜85、合計85以下、firstLineは0〜(100-right)の有限数値が必要です`,
         );
       }
+    }
+    if (attrs.callout !== undefined && attrs.callout !== null) {
+      if (node.type !== 'blockquote')
+        issues.push(`${path}.attrs.callout: 引用だけに指定できます`);
+      else if (!isCalloutType(attrs.callout))
+        issues.push(
+          `${path}.attrs.callout: note、tip、important、warning、cautionのいずれかが必要です`,
+        );
     }
     for (const key of ['label', 'caption', 'numbered']) {
       const entry = attrs[key];
@@ -617,6 +659,16 @@ function validateBlockNode(
         node.content,
         `${path}.content`,
         'blockquote',
+        issues,
+        nodeIds,
+      );
+      break;
+    case 'speakerNotes':
+      requireNonEmptyContent(node.content, `${path}.content`, issues);
+      validateChildNodes(
+        node.content,
+        `${path}.content`,
+        'speakerNotes',
         issues,
         nodeIds,
       );

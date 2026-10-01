@@ -340,6 +340,93 @@ describe('standalone slide HTML', () => {
     expect(cell.rowSpan).toBe(2);
     expect(result.querySelectorAll('tr')).toHaveLength(2);
   });
+  it('keeps speaker notes out of the slides and in the presenter panel', async () => {
+    const source = slides(
+      'Audience [@sec:two]\n\n::: notes\nSecret **cue** [@sec:two] ^[aside]\n:::\n\n::: slidebreak\n:::\n\n# Two\n{#sec:two}',
+    );
+    const result = readHtml(
+      (await exportSlideHtml(source, new Map(), 'en')).html,
+    );
+    expect(result.querySelector('#deck-stage')?.textContent).not.toContain(
+      'Secret',
+    );
+    const panel = result.querySelector<HTMLElement>('#deck-notes')!;
+    expect(panel.hidden).toBe(true);
+    const notes = [...panel.querySelectorAll('.deck-note')];
+    expect(notes).toHaveLength(2);
+    expect(notes[0].querySelector('strong')?.textContent).toBe('cue');
+    expect(notes[0].querySelector('.preview-reference')?.textContent).toBe(
+      'Two',
+    );
+    // A footnote inside notes is shown in place and is not numbered.
+    expect(notes[0].querySelector('.footnote-inline')?.textContent).toBe(
+      ' (aside)',
+    );
+    expect(result.querySelector('.document-footnotes')).toBeNull();
+    expect(notes[1].hasAttribute('data-empty')).toBe(true);
+    expect(notes[1].textContent).toBe('This slide has no notes.');
+    const template = result.querySelector<HTMLTemplateElement>(
+      '#deck-presenter-template',
+    )!;
+    expect(
+      ['presenter-current', 'presenter-next', 'presenter-notes'].every((id) =>
+        template.content.getElementById(id),
+      ),
+    ).toBe(true);
+    expect(result.querySelector('#deck-help, .deck-help')?.textContent).toMatch(
+      /O: overview.*N: notes.*S: presenter view.*B: blackout/,
+    );
+  });
+
+  it('numbers footnotes across slides and lists them on their own slide', async () => {
+    const source = slides(
+      'First^[one] and second^[two]\n\n> [!WARNING]\n> Careful^[three]\n\n::: slidebreak\n:::\n\nLast^[four <b>&]',
+    );
+    const result = readHtml(
+      (await exportSlideHtml(source, new Map(), 'en')).html,
+    );
+    const references = [...result.querySelectorAll('.footnote-ref a')];
+    expect(references.map((link) => link.textContent)).toEqual([
+      '1',
+      '2',
+      '3',
+      '4',
+    ]);
+    const lists = [...result.querySelectorAll('.document-footnotes')];
+    expect(lists).toHaveLength(2);
+    expect(
+      [...lists[0].querySelectorAll('li')].map((item) => [
+        item.id,
+        item.getAttribute('value'),
+        item.querySelector('.footnote-text')?.textContent,
+      ]),
+    ).toEqual([
+      ['kumi-fn-1', '1', 'one'],
+      ['kumi-fn-2', '2', 'two'],
+      ['kumi-fn-3', '3', 'three'],
+    ]);
+    const last = lists[1].querySelector('li')!;
+    expect(last.closest('.deck-slide')?.id).toBe('slide-2');
+    expect(last.getAttribute('value')).toBe('4');
+    expect(last.querySelector('.footnote-text')?.textContent).toBe('four <b>&');
+    expect(last.querySelector('b')).toBeNull();
+    for (const link of references) {
+      const target = result.getElementById(
+        link.getAttribute('href')!.slice(1),
+      )!;
+      expect(target.closest('.deck-slide')).toBe(link.closest('.deck-slide'));
+      expect(
+        result.getElementById(
+          target.querySelector('a')!.getAttribute('href')!.slice(1),
+        ),
+      ).toBe(link);
+    }
+    const callout = result.querySelector('blockquote[data-callout="warning"]')!;
+    expect(callout.querySelector('.callout-title')?.textContent).toBe(
+      'Warning',
+    );
+  });
+
   it('preserves PowerPoint-style image placement in standalone HTML', async () => {
     const source = slides(
       '![Placed](data:image/png;base64,AA==)\n{slide_layout="12,18,40,30"}',

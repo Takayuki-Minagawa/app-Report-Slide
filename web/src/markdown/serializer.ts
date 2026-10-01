@@ -2,6 +2,7 @@ import { stringify } from 'yaml';
 import { serializeBlockAttributes } from './attributes';
 
 import type {
+  BlockquoteNode,
   DocumentData,
   DocumentNode,
   InlineNode,
@@ -128,25 +129,34 @@ function serializeImage(
 
 function serializeInline(nodes: InlineNode[] | undefined): string {
   return (nodes ?? [])
-    .map((node) => {
-      switch (node.type) {
-        case 'reference':
-          return `[@${node.attrs.target}]`;
-        case 'text':
-          return serializeText(node.text, node.marks);
-        case 'inlineMath':
-          return serializeInlineMath(node.attrs.latex);
-        case 'inlineImage':
-          return serializeImage(
-            node.attrs.src,
-            node.attrs.alt,
-            node.attrs.title,
-          );
-        case 'hardBreak':
-          return canonicalHardBreakMarker;
-      }
-    })
+    .map(serializeInlineNode)
+    .map((part, index, parts) =>
+      // A literal caret directly before "[" would start a footnote.
+      part.endsWith('^') && parts[index + 1]?.startsWith('[')
+        ? `${part.slice(0, -1)}\\^`
+        : part,
+    )
     .join('');
+}
+
+function serializeInlineNode(node: InlineNode): string {
+  switch (node.type) {
+    case 'reference':
+      return `[@${node.attrs.target}]`;
+    case 'footnote': {
+      const text = escapeText(node.attrs.text);
+      // "^[@label]" keeps its older meaning: a caret before a reference.
+      return `^[${text.startsWith('@') ? '\\' : ''}${text}]`;
+    }
+    case 'text':
+      return serializeText(node.text, node.marks);
+    case 'inlineMath':
+      return serializeInlineMath(node.attrs.latex);
+    case 'inlineImage':
+      return serializeImage(node.attrs.src, node.attrs.alt, node.attrs.title);
+    case 'hardBreak':
+      return canonicalHardBreakMarker;
+  }
 }
 
 function protectParagraphLine(line: string): string {
@@ -156,7 +166,11 @@ function protectParagraphLine(line: string): string {
       : `&#32;${line.slice(1)}`;
   }
 
-  if (/^\s*:::\s+(?:pagebreak|slidebreak|kumi-table|kumi-chart)\s*$/.test(line))
+  if (
+    /^\s*:::\s+(?:pagebreak|slidebreak|kumi-table|kumi-chart|notes)\s*$/.test(
+      line,
+    )
+  )
     return line.replace(':', '\\:');
 
   const match = /^( {0,3})(.*)$/.exec(line);
@@ -299,6 +313,18 @@ function serializeTable(table: TableNode): string {
   ].join('\n');
 }
 
+/**
+ * GitHub writes the marker and text in one paragraph. Only do so when the text
+ * starts plainly; otherwise a separate paragraph keeps markers and figures intact.
+ */
+function calloutPrefix(node: BlockquoteNode): string {
+  if (!node.attrs.callout) return '';
+  const first = node.content[0];
+  const compact =
+    first?.type === 'paragraph' && first.content?.[0]?.type === 'text';
+  return `[!${node.attrs.callout.toUpperCase()}]${compact ? '\n' : '\n\n'}`;
+}
+
 function serializeNode(node: DocumentNode): string {
   switch (node.type) {
     case 'heading':
@@ -327,10 +353,12 @@ function serializeNode(node: DocumentNode): string {
     case 'listItem':
       return serializeBlocks(node.content);
     case 'blockquote':
-      return serializeBlocks(node.content)
+      return (calloutPrefix(node) + serializeBlocks(node.content))
         .split('\n')
         .map((line) => `> ${line}`)
         .join('\n');
+    case 'speakerNotes':
+      return ['::: notes', serializeBlocks(node.content), ':::'].join('\n');
     case 'codeBlock': {
       const language = node.attrs.language ?? '';
       const code = node.content?.map((text) => text.text).join('') ?? '';

@@ -7,10 +7,14 @@ import {
 import { Image } from '@tiptap/extension-image';
 import { Mathematics } from '@tiptap/extension-mathematics';
 import { TableKit } from '@tiptap/extension-table';
-import { Plugin } from '@tiptap/pm/state';
+import { NodeSelection, Plugin } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 
-import { createNodeId } from '@/src/document/model';
+import {
+  createNodeId,
+  isCalloutType,
+  normalizeFootnoteText,
+} from '@/src/document/model';
 import { isTextRuler, textRulerStyle } from '@/src/document/text-ruler';
 import { validateDocumentData } from '@/src/document/validation';
 import {
@@ -53,6 +57,7 @@ const identifiedTypes = [
   'horizontalRule',
   'pageBreak',
   'slideBreak',
+  'speakerNotes',
   'inlineImage',
   'figure',
   'blockMath',
@@ -61,6 +66,27 @@ const identifiedTypes = [
   'tableRow',
   'tableHeader',
   'tableCell',
+];
+
+const unmarkedInlineTypes = [
+  'footnote',
+  'reference',
+  'inlineMath',
+  'inlineImage',
+];
+
+/** Tiptap's default shortcuts for block types that notes cannot contain. */
+const blockShortcuts = [
+  'Mod-Alt-1',
+  'Mod-Alt-2',
+  'Mod-Alt-3',
+  'Mod-Alt-4',
+  'Mod-Alt-5',
+  'Mod-Alt-6',
+  'Mod-Alt-c',
+  'Mod-Shift-7',
+  'Mod-Shift-8',
+  'Mod-Shift-b',
 ];
 
 const DocumentAttributes = Extension.create({
@@ -124,6 +150,22 @@ const DocumentAttributes = Extension.create({
             parseHTML: (element) => element.getAttribute('data-caption'),
             renderHTML: (attrs) =>
               attrs.caption != null ? { 'data-caption': attrs.caption } : {},
+          },
+        },
+      },
+      {
+        types: ['blockquote'],
+        attributes: {
+          callout: {
+            default: null,
+            parseHTML: (element) => {
+              const callout = element.getAttribute('data-callout');
+              return isCalloutType(callout) ? callout : null;
+            },
+            renderHTML: (attrs) =>
+              isCalloutType(attrs.callout)
+                ? { 'data-callout': attrs.callout }
+                : {},
           },
         },
       },
@@ -196,6 +238,22 @@ const DocumentAttributes = Extension.create({
           const seen = new Set<string>();
           const transaction = newState.tr;
           newState.doc.descendants((node, position) => {
+            // Formatting a range also marks the atoms in it, but the document
+            // model allows marks on text only and would refuse to save.
+            if (unmarkedInlineTypes.includes(node.type.name)) {
+              if (node.marks.length > 0) {
+                transaction.setNodeMarkup(position, undefined, node.attrs, []);
+                // Replacing a selected atom would otherwise drop its selection.
+                if (
+                  newState.selection instanceof NodeSelection &&
+                  newState.selection.from === position
+                )
+                  transaction.setSelection(
+                    NodeSelection.create(transaction.doc, position),
+                  );
+              }
+              if (node.type.name !== 'inlineImage') return;
+            }
             if (!identifiedTypes.includes(node.type.name)) return;
             let attributes = node.attrs;
             if (
@@ -466,7 +524,71 @@ export function createEditorExtensions({
     Node.create({
       name: 'doc',
       topNode: true,
-      content: '(block | documentBreak)+',
+      content: '(block | documentBreak | speakerNotes)+',
+    }),
+    Node.create({
+      name: 'footnote',
+      group: 'inline',
+      inline: true,
+      atom: true,
+      marks: '',
+      addAttributes: () => ({
+        text: {
+          default: '',
+          parseHTML: (element) =>
+            normalizeFootnoteText(element.getAttribute('data-footnote') ?? ''),
+        },
+      }),
+      parseHTML: () => [
+        {
+          tag: 'sup[data-footnote]',
+          getAttrs: (element) =>
+            element.getAttribute('data-footnote')?.trim() ? null : false,
+        },
+      ],
+      // The number is a CSS counter, so it follows edits without a transaction.
+      renderHTML: ({ node }) => [
+        'sup',
+        {
+          'data-footnote': node.attrs.text,
+          class: 'kumi-footnote',
+          title: node.attrs.text,
+          contenteditable: 'false',
+        },
+      ],
+      renderText: ({ node }) => `^[${node.attrs.text}]`,
+    }),
+    Node.create({
+      name: 'speakerNotes',
+      group: 'speakerNotes',
+      content: 'paragraph+',
+      defining: true,
+      priority: 1000,
+      // Changing the block type would lift the text out of the notes and
+      // show it to the audience, so those shortcuts do nothing here.
+      addKeyboardShortcuts() {
+        const insideNotes = () => {
+          const { doc, selection } = this.editor.state;
+          let found = false;
+          doc.nodesBetween(selection.from, selection.to, (node) => {
+            if (node.type.name === this.name) found = true;
+            return !found;
+          });
+          return found;
+        };
+        return Object.fromEntries(
+          blockShortcuts.map((shortcut) => [shortcut, insideNotes]),
+        );
+      },
+      parseHTML: () => [{ tag: 'aside[data-speaker-notes]' }],
+      renderHTML: ({ HTMLAttributes }) => [
+        'aside',
+        mergeAttributes(HTMLAttributes, {
+          'data-speaker-notes': '',
+          class: 'kumi-speaker-notes',
+        }),
+        0,
+      ],
     }),
     Node.create({
       name: 'reference',
@@ -511,6 +633,8 @@ export function createEditorExtensions({
     ),
     StarterKit.configure({
       document: false,
+      // Notes close a slide, so they need no empty paragraph after them.
+      trailingNode: { notAfter: ['speakerNotes'] },
       link: {
         openOnClick: false,
         autolink: false,

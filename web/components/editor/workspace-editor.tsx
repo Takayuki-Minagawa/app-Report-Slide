@@ -1,5 +1,6 @@
 'use client';
 
+import { useDeferredValue, useMemo } from 'react';
 import { EditorContent, type Editor } from '@tiptap/react';
 import { Braces } from 'lucide-react';
 import { useAppPreferences } from '@/components/app-preferences';
@@ -11,6 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import type { DocumentData } from '@/src/document/model';
 import type { DocumentAnalysis } from '@/src/document/semantics';
+import { documentStatistics } from '@/src/document/statistics';
 import type { DisplayedWorkspaceStatus } from '@/src/workspace/status';
 import type { WorkspaceView } from './use-document-workspace';
 import {
@@ -67,6 +69,12 @@ export function WorkspaceEditor({
 }: WorkspaceEditorProps) {
   const { copy, locale } = useAppPreferences();
   const settings = resolvePageSettings((previewDocument ?? document).metadata);
+  // Counting is not urgent: let typing render first on long documents.
+  const countedNodes = useDeferredValue(document.children);
+  const statistics = useMemo(
+    () => documentStatistics(countedNodes),
+    [countedNodes],
+  );
   const views =
     document.type === 'slide'
       ? ([
@@ -99,6 +107,10 @@ export function WorkspaceEditor({
           ))}
         </div>
         <span className="text-[10px] text-muted-foreground">
+          <span className="document-statistics">
+            {copy.workspace.statistics(statistics.characters, statistics.words)}
+            {' ・ '}
+          </span>
           {document.type === 'report'
             ? `${settings.paper} ・ ${pageSettingsMessages[locale][settings.orientation]}`
             : '16:9'}

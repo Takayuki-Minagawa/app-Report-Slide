@@ -7,6 +7,7 @@ import {
   createDefaultDocument,
   toEditorDocument,
   type DocumentData,
+  type DocumentMetadata,
   type DocumentNode,
   type DocumentType,
 } from '@/src/document/model';
@@ -24,7 +25,7 @@ import {
 import { walkDocumentTree } from '@/src/document/traversal';
 import { createEditorExtensions } from '@/src/editor/extensions';
 import { defaultSlideImagePlacement } from '@/src/document/slide-layout';
-import { parseMarkdown } from '@/src/markdown/parser';
+import { parseMarkdown, type ParseMarkdownResult } from '@/src/markdown/parser';
 import {
   serializeDocument,
   MarkdownSerializationError,
@@ -817,34 +818,47 @@ export function useDocumentWorkspace() {
     }
   };
 
+  /** The document a save or export acts on: an unapplied Markdown draft wins. */
+  const snapshotDocument = (): Pick<
+    ParseMarkdownResult,
+    'document' | 'diagnostics'
+  > =>
+    markdownDirty
+      ? parseMarkdown(markdownDraft, { fallbackType: document.type })
+      : { document: currentDocument(editor, document), diagnostics: [] };
+
+  /** A saved draft becomes the edited document; otherwise only the dirty flag clears. */
+  const finishSave = (
+    snapshot: Pick<ParseMarkdownResult, 'document' | 'diagnostics'>,
+    saved: StatusMessage,
+    savedAfterApplying: StatusMessage,
+  ) => {
+    if (markdownDirty) {
+      markProjectEdited();
+      loadDocument(snapshot.document, savedAfterApplying, {
+        description: snapshot.diagnostics.map(diagnosticStatusMessage),
+      });
+    } else {
+      setDocumentDirty(false);
+      setStatus({ kind: 'success', title: saved });
+    }
+    if (!projectSession) void clearRecovery();
+  };
+
   const saveDocument = (format: DocumentFileFormat) => {
     invalidatePendingImport();
     const json = format === 'json';
     try {
-      const result = markdownDirty
-        ? parseMarkdown(markdownDraft, { fallbackType: document.type })
-        : { document: currentDocument(editor, document), diagnostics: [] };
+      const result = snapshotDocument();
       validateChapterDraft(result.document);
       downloadDocument(result.document, format);
-      if (markdownDirty) {
-        markProjectEdited();
-        loadDocument(
-          result.document,
-          statusMessage(
-            json ? 'savedJsonAfterApplying' : 'savedMarkdownAfterApplying',
-          ),
-          {
-            description: result.diagnostics.map(diagnosticStatusMessage),
-          },
-        );
-      } else {
-        setDocumentDirty(false);
-        setStatus({
-          kind: 'success',
-          title: statusMessage(json ? 'savedJson' : 'savedMarkdown'),
-        });
-      }
-      if (!projectSession) void clearRecovery();
+      finishSave(
+        result,
+        statusMessage(json ? 'savedJson' : 'savedMarkdown'),
+        statusMessage(
+          json ? 'savedJsonAfterApplying' : 'savedMarkdownAfterApplying',
+        ),
+      );
     } catch (error) {
       setStatus({
         kind: 'error',
@@ -862,9 +876,7 @@ export function useDocumentWorkspace() {
   const saveArchive = async () => {
     const revision = ++importRevision.current;
     try {
-      const snapshot = markdownDirty
-        ? parseMarkdown(markdownDraft, { fallbackType: document.type })
-        : { document: currentDocument(editor, document), diagnostics: [] };
+      const snapshot = snapshotDocument();
       validateChapterDraft(snapshot.document);
       const { writeDocumentArchive } =
         await import('@/src/workspace/document-archive');
@@ -876,28 +888,16 @@ export function useDocumentWorkspace() {
         new Uint8Array(content),
         'application/zip',
       );
-      if (markdownDirty) {
-        markProjectEdited();
-        loadDocument(
-          snapshot.document,
-          locale === 'ja' ? 'ZIPを保存しました' : 'ZIP saved',
-          {
-            description: snapshot.diagnostics.map(diagnosticStatusMessage),
-          },
-        );
-      } else {
-        setDocumentDirty(false);
-        setStatus({
-          kind: 'success',
-          title: locale === 'ja' ? 'ZIPを保存しました' : 'ZIP saved',
-        });
-      }
-      if (!projectSession) void clearRecovery();
+      finishSave(
+        snapshot,
+        statusMessage('savedArchive'),
+        statusMessage('savedArchive'),
+      );
     } catch (error) {
       if (revision === importRevision.current)
         setStatus({
           kind: 'error',
-          title: locale === 'ja' ? 'ZIPを保存できません' : 'Could not save ZIP',
+          title: statusMessage('unableToSaveArchive'),
           description: describeWorkspaceError(error, 'unableToSaveJson'),
         });
     }
@@ -909,9 +909,7 @@ export function useDocumentWorkspace() {
     activeHtmlExport.current = revision;
     setHtmlExporting(true);
     try {
-      const snapshot = markdownDirty
-        ? parseMarkdown(markdownDraft, { fallbackType: document.type })
-        : { document: currentDocument(editor, document), diagnostics: [] };
+      const snapshot = snapshotDocument();
       setStatus({ kind: 'idle', title: statusMessage('exportingHtml') });
       // Load the static renderer and embedded fonts only when export is requested.
       const source =
@@ -966,11 +964,9 @@ export function useDocumentWorkspace() {
     }
   };
 
-  const updatePageSettings = (settings: PageSettings) => {
+  /** Document settings are outside Undo; a project keeps them in its manifest. */
+  const updateMetadata = (updates: DocumentMetadata) => {
     if (documentWriteLocked) return;
-    const pageSettings = pageSettingsSchema.safeParse(settings);
-    if (!pageSettings.success) return;
-    const updates = { page_settings: pageSettings.data };
     if (projectSession) {
       projectActions.updateProjectMetadata(updates);
       return;
@@ -983,33 +979,16 @@ export function useDocumentWorkspace() {
     setDocumentDirty(true);
   };
 
-  const updateTheme = (theme: string) => {
-    if (documentWriteLocked) return;
-    if (projectSession) {
-      projectActions.updateProjectMetadata({ theme });
-      return;
-    }
-    invalidatePendingImport();
-    setDocument((current) => ({
-      ...current,
-      metadata: { ...current.metadata, theme },
-    }));
-    setDocumentDirty(true);
+  const updatePageSettings = (settings: PageSettings) => {
+    const pageSettings = pageSettingsSchema.safeParse(settings);
+    if (pageSettings.success)
+      updateMetadata({ page_settings: pageSettings.data });
   };
 
-  const updateDocumentFlag = (key: DocumentFlag, checked: boolean) => {
-    if (documentWriteLocked) return;
-    if (projectSession) {
-      projectActions.updateProjectMetadata({ [key]: checked });
-      return;
-    }
-    invalidatePendingImport();
-    setDocument((current) => ({
-      ...current,
-      metadata: { ...current.metadata, [key]: checked },
-    }));
-    setDocumentDirty(true);
-  };
+  const updateTheme = (theme: string) => updateMetadata({ theme });
+
+  const updateDocumentFlag = (key: DocumentFlag, checked: boolean) =>
+    updateMetadata({ [key]: checked });
 
   return {
     document,
@@ -1037,6 +1016,7 @@ export function useDocumentWorkspace() {
     applyMath: () => selection.applyMath(editor),
     applyAttributes: (nodeId: string, attrs: Record<string, unknown>) =>
       selection.applyAttributes(editor, nodeId, attrs),
+    applyFootnote: (text: string) => selection.applyFootnote(editor, text),
     resolveImageUrl,
     resolvePreviewImageUrl,
     importFiles,

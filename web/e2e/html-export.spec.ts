@@ -128,8 +128,11 @@ test('HTMLスライドを保存し、オフラインで数式・画像・スラ�
     await expect(deck.locator('#slide-2')).toBeVisible();
     await expect(progress).toHaveJSProperty('value', 2);
     await deck.setViewportSize({ width: 390, height: 844 });
+    // The deck refits on the resize event, which follows the viewport change.
+    await expect
+      .poll(async () => (await deck.locator('#slide-2').boundingBox())!.width)
+      .toBeLessThanOrEqual(390);
     const bounds = await deck.locator('#slide-2').boundingBox();
-    expect(bounds!.width).toBeLessThanOrEqual(390);
     expect(bounds!.height).toBeLessThanOrEqual(844);
     await deck.emulateMedia({ media: 'print' });
     await expect(deck.locator('#slide-1')).toBeVisible();

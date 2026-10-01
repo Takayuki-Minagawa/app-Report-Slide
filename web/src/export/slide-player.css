@@ -157,6 +157,17 @@ button {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+.deck-controls button[aria-pressed='true'] {
+  border-color: #68c9d0;
+  background: #1d5560;
+}
+.deck-controls #deck-timer {
+  min-width: 72px;
+  border-color: transparent;
+  background: transparent;
+  color: #bac9d9;
+  font-variant-numeric: tabular-nums;
+}
 #deck-progress {
   display: block;
   width: 100%;
@@ -175,13 +186,151 @@ button {
 #deck-progress::-moz-progress-bar {
   background: #68c9d0;
 }
+/* Above the slide: the controls below may wrap to several rows. */
 #deck-status {
   position: fixed;
-  bottom: 60px;
-  left: 16px;
-  right: 16px;
+  z-index: 3;
+  top: 8px;
+  left: 50%;
+  max-width: calc(100% - 32px);
+  transform: translateX(-50%);
+  border-radius: 6px;
+  background: #0b1420;
+  padding: 6px 12px;
   text-align: center;
   font-size: 12px;
+}
+#deck-status:empty {
+  display: none;
+}
+.deck-notes {
+  flex: none;
+  max-height: 32vh;
+  overflow: auto;
+  border-top: 1px solid #2c4258;
+  background: #0b1420;
+  padding: 10px 20px 12px;
+}
+.deck-notes h2,
+.presenter-pane h2 {
+  margin-bottom: 6px;
+  color: #9fb3c8;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+.deck-note .document-renderer {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.deck-note[data-empty] {
+  color: #8fa3b8;
+  font-size: 13px;
+}
+.deck-note a {
+  color: #8ecbff;
+}
+/* Overview: every slide as a thumbnail. Negative margins collapse the unscaled box. */
+.deck-overview #deck-viewport {
+  display: block;
+  overflow: auto;
+}
+.deck-overview #deck-stage {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 18px;
+  width: auto;
+  height: auto;
+  padding: 18px;
+}
+.deck-overview .deck-slide {
+  flex: none;
+  margin: 0 -690px -388.125px 0;
+  outline: 12px solid transparent;
+  transform: scale(0.25);
+  cursor: pointer;
+}
+.deck-overview .deck-slide[data-current] {
+  outline-color: #68c9d0;
+}
+.deck-overview .deck-slide > * {
+  pointer-events: none;
+}
+.deck-blackout body {
+  background: #000;
+}
+.deck-blackout .deck-heading,
+.deck-blackout #deck-stage,
+.deck-blackout .deck-notes {
+  visibility: hidden;
+}
+.deck-blackout .deck-controls,
+.deck-blackout #deck-progress {
+  opacity: 0.2;
+}
+/* The presenter window is filled by the deck's script and shares this stylesheet. */
+body.presenter {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 20px;
+}
+.presenter-slides {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 20px;
+}
+.presenter-frame {
+  width: calc(920px * var(--presenter-scale));
+  height: calc(517.5px * var(--presenter-scale));
+  overflow: hidden;
+  background: #1b2a3a;
+}
+.presenter-frame:empty::before,
+.presenter-notes:empty::before {
+  display: block;
+  padding: 12px;
+  color: #8fa3b8;
+  content: attr(data-empty);
+  font-size: 13px;
+}
+.presenter-frame .deck-slide {
+  width: 920px;
+  height: 517.5px;
+  margin: 0;
+  overflow: hidden;
+  transform: scale(var(--presenter-scale));
+  transform-origin: top left;
+}
+#presenter-current {
+  --presenter-scale: 0.6;
+}
+#presenter-next {
+  --presenter-scale: 0.36;
+}
+.presenter-pane-notes {
+  flex: 1;
+  border-top: 1px solid #2c4258;
+  padding-top: 10px;
+}
+.presenter-notes .document-renderer {
+  font-size: 19px;
+  line-height: 1.6;
+}
+.presenter-status {
+  display: flex;
+  align-items: baseline;
+  gap: 28px;
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+#presenter-status {
+  color: #9fb3c8;
+  font-size: 14px;
 }
 @media (max-width: 620px) {
   .deck-help {
@@ -209,9 +358,19 @@ button {
   }
   .deck-heading,
   .deck-controls,
+  .deck-notes,
   #deck-progress,
   #deck-status {
     display: none !important;
+  }
+  .deck-overview #deck-stage {
+    padding: 0;
+  }
+  .deck-blackout body {
+    background: white;
+  }
+  .deck-blackout #deck-stage {
+    visibility: visible;
   }
   .deck-ready #deck-viewport,
   .deck-ready #deck-stage {
@@ -226,6 +385,7 @@ button {
     height: auto;
     min-height: 180mm;
     margin: 0;
+    outline: none;
     transform: none;
     overflow: visible;
     box-shadow: none;

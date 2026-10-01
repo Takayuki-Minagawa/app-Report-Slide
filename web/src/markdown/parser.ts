@@ -15,19 +15,24 @@ import type {
   Mark,
   OrderedListNode,
   ParagraphNode,
+  SpeakerNotesNode,
   TableCellNode,
   TableHeaderNode,
   TableNode,
   TableRowNode,
 } from '@/src/document/model';
-import { createNodeId } from '@/src/document/model';
+import {
+  createNodeId,
+  isCalloutType,
+  maximumFootnoteLength,
+} from '@/src/document/model';
 import {
   DocumentValidationError,
   validateDocumentData,
 } from '@/src/document/validation';
 import { isSafeResourceUrl } from '@/src/security/resource-url';
 
-import { createMarkdownIt } from './dialect';
+import { createMarkdownIt, ignoredFootnoteDefinitions } from './dialect';
 import { MarkdownImportError, type MarkdownDiagnostic } from './diagnostics';
 import { parseFrontMatter } from './frontmatter';
 import { parseBlockAttributes } from './attributes';
@@ -147,6 +152,15 @@ function parseInline(token: MarkdownToken, cursor: ParseCursor): InlineNode[] {
     switch (child.type) {
       case 'kumi_reference':
         nodes.push({ type: 'reference', attrs: { target: child.content } });
+        break;
+      case 'kumi_footnote':
+        if (child.content.length > maximumFootnoteLength)
+          cursor.diagnostics.push({
+            severity: 'error',
+            code: 'markdown.footnote-too-long',
+            message: `脚注は${maximumFootnoteLength}文字以内にしてください: ${child.content.slice(0, 40)}…`,
+          });
+        else nodes.push({ type: 'footnote', attrs: { text: child.content } });
         break;
       case 'text':
         if (hasEmptyParagraphMarker) break;
@@ -436,6 +450,45 @@ function assignAdvancedTableNodeIds(
   }
 }
 
+const invalidNotesMessage =
+  '発表者ノートは文書直下に ::: notes と終了行の ::: で囲み、段落だけを記述してください';
+
+const calloutMarker = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/i;
+
+/**
+ * GitHub alert: the first line of a quote is exactly `[!TYPE]`. The marker is
+ * presentation, so remove it from the first paragraph once it is an attribute.
+ */
+function extractCallout(
+  firstInline: MarkdownToken | undefined,
+  blockquote: BlockquoteNode,
+): void {
+  const type = /^\[!([A-Za-z]+)\][ \t]*(?:\n|$)/
+    .exec(firstInline?.content ?? '')?.[1]
+    .toLowerCase();
+  const paragraph = blockquote.content[0];
+  const first = paragraph?.type === 'paragraph' && paragraph.content?.[0];
+  if (
+    !isCalloutType(type) ||
+    !first ||
+    first.type !== 'text' ||
+    first.marks ||
+    !calloutMarker.test(first.text)
+  )
+    return;
+  blockquote.attrs.callout = type;
+  // parseInline has already turned a soft break after the marker into a space.
+  const rest = first.text.replace(calloutMarker, '');
+  first.text = rest.replace(/^ /, '');
+  if (!first.text) paragraph.content!.shift();
+  // "[!TYPE]" ended by two spaces: that hard break is the marker's line end.
+  if (!rest && paragraph.content![0]?.type === 'hardBreak')
+    paragraph.content!.shift();
+  if (paragraph.content!.length > 0) return;
+  // Like `{.kumi-empty}`, a quote left without text keeps one empty paragraph.
+  if (blockquote.content.length > 1) blockquote.content.shift();
+}
+
 function parseList(
   cursor: ParseCursor,
   ordered: boolean,
@@ -618,6 +671,10 @@ function parseBlocks(
         break;
       case 'blockquote_open': {
         cursor.index += 1;
+        const firstInline =
+          cursor.tokens[cursor.index]?.type === 'paragraph_open'
+            ? cursor.tokens[cursor.index + 1]
+            : undefined;
         const content = parseBlocks(cursor, new Set(['blockquote_close']));
         if (cursor.tokens[cursor.index]?.type === 'blockquote_close')
           cursor.index += 1;
@@ -626,9 +683,55 @@ function parseBlocks(
           attrs: { nodeId: cursor.idFactory() },
           content,
         };
+        extractCallout(firstInline, blockquote);
         nodes.push(blockquote);
         break;
       }
+      case 'kumi_notes_open': {
+        const line = (token.map?.[0] ?? 0) + 1 + cursor.lineOffset;
+        cursor.index += 1;
+        const content = parseBlocks(cursor, new Set(['kumi_notes_close']));
+        if (cursor.tokens[cursor.index]?.type === 'kumi_notes_close')
+          cursor.index += 1;
+        if (
+          stopTypes.size ||
+          content.some((child) => child.type !== 'paragraph')
+        ) {
+          cursor.diagnostics.push({
+            severity: 'error',
+            code: 'markdown.notes-invalid',
+            message: invalidNotesMessage,
+            line,
+          });
+          break;
+        }
+        const notes: SpeakerNotesNode = {
+          type: 'speakerNotes',
+          attrs: { nodeId: cursor.idFactory() },
+          content:
+            content.length > 0
+              ? (content as ParagraphNode[])
+              : [
+                  // Same shape as a `{.kumi-empty}` paragraph, so saving is stable.
+                  {
+                    type: 'paragraph',
+                    attrs: { nodeId: cursor.idFactory() },
+                    content: [],
+                  },
+                ],
+        };
+        nodes.push(notes);
+        break;
+      }
+      case 'kumi_invalid_notes':
+        cursor.diagnostics.push({
+          severity: 'error',
+          code: 'markdown.notes-invalid',
+          message: invalidNotesMessage,
+          line: (token.map?.[0] ?? 0) + 1 + cursor.lineOffset,
+        });
+        cursor.index++;
+        break;
       case 'fence':
       case 'code_block': {
         const code: CodeBlockNode = {
@@ -703,8 +806,9 @@ export function parseMarkdown(
   );
   const markdown = createMarkdownIt();
   const diagnostics = [...frontMatter.diagnostics];
+  const environment = {};
   const cursor: ParseCursor = {
-    tokens: markdown.parse(frontMatter.body, {}),
+    tokens: markdown.parse(frontMatter.body, environment),
     index: 0,
     idFactory,
     diagnostics,
@@ -712,6 +816,13 @@ export function parseMarkdown(
       source.replace(/\r\n?/g, '\n').split('\n').length -
       frontMatter.body.split('\n').length,
   };
+  for (const { id, line } of ignoredFootnoteDefinitions(environment))
+    diagnostics.push({
+      severity: 'warning',
+      code: 'markdown.footnote-definition-ignored',
+      message: `脚注定義 [^${id}] は本文から参照されていないか重複しているため、読み込みませんでした`,
+      line: line + 1 + cursor.lineOffset,
+    });
   const children = parseBlocks(cursor);
 
   if (diagnostics.some((diagnostic) => diagnostic.severity === 'error')) {

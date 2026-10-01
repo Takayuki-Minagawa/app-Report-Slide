@@ -687,6 +687,98 @@
   padding: 0 3px;
 }
 
+.kumi-editor-content {
+  counter-reset: kumi-footnote;
+}
+.kumi-footnote {
+  cursor: pointer;
+  border-radius: 3px;
+  background: #e8f0f7;
+  color: #27608b;
+  padding: 0 3px;
+  font-family: var(--font-ui);
+  font-weight: 600;
+}
+.kumi-footnote::after {
+  counter-increment: kumi-footnote;
+  content: counter(kumi-footnote);
+}
+/* Notes are not audience output, so their footnotes are not numbered. */
+.kumi-speaker-notes .kumi-footnote::after {
+  counter-increment: none;
+  content: '*';
+}
+
+.kumi-editor-content blockquote[data-callout] {
+  --callout: #3b82b8;
+  border-left: 4px solid var(--callout);
+}
+.kumi-editor-content blockquote[data-callout]::before {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--callout);
+  content: attr(data-callout);
+  font: 700 0.72rem var(--font-ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.kumi-editor-content blockquote[data-callout='tip'] {
+  --callout: #2f8f5b;
+  background: #ecf7f0;
+}
+.kumi-editor-content blockquote[data-callout='important'] {
+  --callout: #7a56c2;
+  background: #f3effb;
+}
+.kumi-editor-content blockquote[data-callout='warning'] {
+  --callout: #b7791f;
+  background: #fdf6e3;
+}
+.kumi-editor-content blockquote[data-callout='caution'] {
+  --callout: #c0392b;
+  background: #fdeeee;
+}
+
+.kumi-speaker-notes {
+  border: 1px dashed #8aa2b8;
+  border-radius: 4px;
+  background: #f6f8fa;
+  padding: 0.6rem 0.9rem;
+  color: #44586b;
+  font-family: var(--font-ui);
+  font-size: 0.85em;
+  line-height: 1.6;
+}
+.kumi-speaker-notes::before {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: #6b7f92;
+  content: 'SPEAKER NOTES';
+  font: 700 0.68rem var(--font-ui);
+  letter-spacing: 0.08em;
+}
+/* Editor labels are generated content; follow the interface language. */
+:root:lang(ja) .kumi-speaker-notes::before {
+  content: '発表者ノート（聴衆には表示されません）';
+}
+:root:lang(ja) .kumi-editor-content blockquote[data-callout='note']::before {
+  content: '注記';
+}
+:root:lang(ja) .kumi-editor-content blockquote[data-callout='tip']::before {
+  content: 'ヒント';
+}
+:root:lang(ja)
+  .kumi-editor-content
+  blockquote[data-callout='important']::before {
+  content: '重要';
+}
+:root:lang(ja) .kumi-editor-content blockquote[data-callout='warning']::before {
+  content: '警告';
+}
+:root:lang(ja) .kumi-editor-content blockquote[data-callout='caution']::before {
+  content: '注意';
+}
+
 @media (max-width: 1120px) {
   .workspace-grid {
     grid-template-columns: 210px minmax(520px, 1fr);

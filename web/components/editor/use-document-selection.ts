@@ -6,7 +6,10 @@ import type { Editor } from '@tiptap/react';
 import type { MathSelection } from '@/src/editor/extensions';
 import type { DocumentType } from '@/src/document/model';
 import { semanticTypes } from '@/src/document/semantics';
-import { updateDocumentNode } from '@/src/editor/document-commands';
+import {
+  updateDocumentNode,
+  updateFootnote,
+} from '@/src/editor/document-commands';
 import {
   WorkspaceStatusError,
   statusMessage,
@@ -59,6 +62,14 @@ export function useDocumentSelection(
       setMathDraft(String(updatedSelection.node.attrs.latex ?? ''));
     }
     setSelectedNode((previous) => {
+      if (previous && !previous.nodeId) {
+        // Nodes without an ID (footnotes) are tracked by their selected position.
+        return updatedSelection instanceof NodeSelection &&
+          updatedSelection.from === previous.position &&
+          updatedSelection.node.type.name === previous.type
+          ? { ...previous, attrs: updatedSelection.node.attrs }
+          : previous;
+      }
       if (!previous?.nodeId) return previous;
       let next: SelectedNode | null = null;
       updatedEditor.state.doc.descendants((node, position) => {
@@ -232,6 +243,19 @@ export function useDocumentSelection(
     }
   };
 
+  const applyFootnote = (editor: Editor | null, text: string) => {
+    if (!editor || documentWriteLocked || selectedNode?.type !== 'footnote')
+      return;
+    if (updateFootnote(editor, selectedNode.position, text))
+      setStatus({ kind: 'success', title: statusMessage('updatedAttributes') });
+    else
+      setStatus({
+        kind: 'error',
+        title: statusMessage('unableToUpdateAttributes'),
+        description: statusMessage('selectedElementRemoved'),
+      });
+  };
+
   const clearSelection = useCallback(() => {
     setSelectedNode(null);
     setMathSelection(null);
@@ -248,6 +272,7 @@ export function useDocumentSelection(
     focusNode,
     applyMath,
     applyAttributes,
+    applyFootnote,
     clearSelection,
   };
 }

@@ -16,15 +16,17 @@ import { ChartGraphic } from './chart-graphic';
 
 import { messages, type AppLocale } from '@/src/i18n/messages';
 import { formatSemanticReference } from '@/src/i18n/diagnostics';
-import type {
-  DocumentData,
-  DocumentNode,
-  InlineNode,
-  SlideImagePlacement,
-  Mark,
-  TableCellNode,
-  TableHeaderNode,
-  TableNode,
+import {
+  isCalloutType,
+  type DocumentData,
+  type DocumentNode,
+  type FootnoteNode,
+  type InlineNode,
+  type SlideImagePlacement,
+  type Mark,
+  type TableCellNode,
+  type TableHeaderNode,
+  type TableNode,
 } from '@/src/document/model';
 import { tableCellBorderStyle } from '@/src/document/table';
 import { textRulerStyle } from '@/src/document/text-ruler';
@@ -35,6 +37,7 @@ import {
 } from '@/src/security/resource-url';
 import {
   analyzeDocument,
+  collectFootnotes,
   type DocumentAnalysis,
 } from '@/src/document/semantics';
 import {
@@ -56,7 +59,13 @@ const SlideContext = createContext(false);
 const FigureInteractionContext = createContext<FigureInteraction | undefined>(
   undefined,
 );
+/** Numbers of the footnotes that are listed in the audience output. */
+const FootnoteContext = createContext<ReadonlyMap<FootnoteNode, number>>(
+  new Map(),
+);
 const anchorId = (nodeId: string) => `kumi-${nodeId}`;
+const footnoteId = (number: number) => `kumi-fn-${number}`;
+const footnoteReferenceId = (number: number) => `kumi-fnref-${number}`;
 
 function useDocumentCopy() {
   const locale = useContext(LocaleContext);
@@ -83,6 +92,29 @@ function Reference({ target }: { target: string }) {
   );
 }
 
+function FootnoteReference({ node }: { node: FootnoteNode }) {
+  const { copy } = useDocumentCopy();
+  const number = useContext(FootnoteContext).get(node);
+  // Unlisted footnotes (inside speaker notes) are shown in place.
+  if (!number)
+    return (
+      <span className="footnote-inline">
+        {copy.preview.footnoteInline(node.attrs.text)}
+      </span>
+    );
+  return (
+    <sup className="footnote-ref">
+      <a
+        id={footnoteReferenceId(number)}
+        href={`#${footnoteId(number)}`}
+        aria-label={copy.preview.footnoteReference(number)}
+      >
+        {number}
+      </a>
+    </sup>
+  );
+}
+
 function Caption({ node }: { node: DocumentNode }) {
   const { locale } = useDocumentCopy();
   const target = useContext(AnalysisContext)?.targets.get(node.attrs.nodeId);
@@ -105,6 +137,8 @@ interface DocumentRendererProps {
   analysis?: DocumentAnalysis;
   showToc?: boolean;
   figureInteraction?: FigureInteraction;
+  /** Render only the presenter notes of these nodes instead of the audience content. */
+  speakerNotes?: boolean;
 }
 
 function MathContent({ display, latex }: { display: boolean; latex: string }) {
@@ -203,6 +237,8 @@ function renderInline(
     switch (node.type) {
       case 'reference':
         return <Reference key={key} target={node.attrs.target} />;
+      case 'footnote':
+        return <FootnoteReference key={key} node={node} />;
       case 'hardBreak':
         return <br key={key} />;
       case 'inlineMath':
@@ -575,6 +611,7 @@ function BlockNode({
   resolveImageUrl: ImageUrlResolver;
 }) {
   const key = node.attrs.nodeId;
+  const { copy } = useDocumentCopy();
   const target = useContext(AnalysisContext)?.targets.get(key);
   switch (node.type) {
     case 'heading': {
@@ -636,9 +673,13 @@ function BlockNode({
           ))}
         </li>
       );
-    case 'blockquote':
+    case 'blockquote': {
+      const callout = isCalloutType(node.attrs.callout)
+        ? node.attrs.callout
+        : undefined;
       return (
-        <blockquote>
+        <blockquote data-callout={callout}>
+          {callout && <p className="callout-title">{copy.callout[callout]}</p>}
           {node.content.map((child) => (
             <BlockNode
               key={child.attrs.nodeId}
@@ -648,6 +689,7 @@ function BlockNode({
           ))}
         </blockquote>
       );
+    }
     case 'codeBlock':
       return (
         <pre data-language={node.attrs.language ?? undefined}>
@@ -682,6 +724,7 @@ function BlockNode({
       );
     case 'pageBreak':
     case 'slideBreak':
+    case 'speakerNotes':
       return null;
     case 'horizontalRule':
       return <hr />;
@@ -759,50 +802,94 @@ export function DocumentRenderer({
   analysis,
   showToc = true,
   figureInteraction,
+  speakerNotes = false,
 }: DocumentRendererProps) {
   const copy = messages[locale];
   const computed = useMemo(
     () => analysis ?? analyzeDocument(document),
     [analysis, document],
   );
+  const footnoteNumbers = useMemo(
+    () =>
+      new Map(
+        collectFootnotes(document.children).map(
+          (footnote, index) => [footnote, index + 1] as const,
+        ),
+      ),
+    [document.children],
+  );
+  const pageNodes = nodes ?? document.children;
+  const blocks = speakerNotes
+    ? pageNodes.flatMap((node) =>
+        node.type === 'speakerNotes' ? node.content : [],
+      )
+    : pageNodes;
+  const footnotes = speakerNotes ? [] : collectFootnotes(pageNodes);
   return (
     <LocaleContext.Provider value={locale}>
       <AnalysisContext.Provider value={computed}>
         <SlideContext.Provider value={document.type === 'slide'}>
           <FigureInteractionContext.Provider value={figureInteraction}>
-            <div className="document-renderer">
-              {showToc &&
-                document.metadata.toc === true &&
-                computed.outline.length > 0 && (
-                  <nav className="document-toc" aria-label={copy.preview.toc}>
-                    <h2>{copy.preview.toc}</h2>
-                    <ol>
-                      {computed.outline.map((entry) => (
-                        <li
-                          key={entry.nodeId}
-                          style={{
-                            paddingLeft: `${((entry.level ?? 1) - 1) * 16}px`,
-                          }}
-                        >
-                          <a
-                            href={`#${encodeURIComponent(anchorId(entry.nodeId))}`}
+            <FootnoteContext.Provider value={footnoteNumbers}>
+              <div className="document-renderer">
+                {showToc &&
+                  !speakerNotes &&
+                  document.metadata.toc === true &&
+                  computed.outline.length > 0 && (
+                    <nav className="document-toc" aria-label={copy.preview.toc}>
+                      <h2>{copy.preview.toc}</h2>
+                      <ol>
+                        {computed.outline.map((entry) => (
+                          <li
+                            key={entry.nodeId}
+                            style={{
+                              paddingLeft: `${((entry.level ?? 1) - 1) * 16}px`,
+                            }}
                           >
-                            {entry.number ? `${entry.number} ` : ''}
-                            {entry.title}
+                            <a
+                              href={`#${encodeURIComponent(anchorId(entry.nodeId))}`}
+                            >
+                              {entry.number ? `${entry.number} ` : ''}
+                              {entry.title}
+                            </a>
+                          </li>
+                        ))}
+                      </ol>
+                    </nav>
+                  )}
+                {blocks.map((node) => (
+                  <BlockNode
+                    key={node.attrs.nodeId}
+                    node={node}
+                    resolveImageUrl={resolveImageUrl}
+                  />
+                ))}
+                {footnotes.length > 0 && (
+                  <ol
+                    className="document-footnotes"
+                    aria-label={copy.preview.footnotes}
+                  >
+                    {footnotes.map((footnote) => {
+                      const number = footnoteNumbers.get(footnote) ?? 0;
+                      return (
+                        <li key={number} id={footnoteId(number)} value={number}>
+                          <span className="footnote-text">
+                            {footnote.attrs.text}
+                          </span>{' '}
+                          <a
+                            className="footnote-back"
+                            href={`#${footnoteReferenceId(number)}`}
+                            aria-label={copy.preview.footnoteBack(number)}
+                          >
+                            ↩
                           </a>
                         </li>
-                      ))}
-                    </ol>
-                  </nav>
+                      );
+                    })}
+                  </ol>
                 )}
-              {(nodes ?? document.children).map((node) => (
-                <BlockNode
-                  key={node.attrs.nodeId}
-                  node={node}
-                  resolveImageUrl={resolveImageUrl}
-                />
-              ))}
-            </div>
+              </div>
+            </FootnoteContext.Provider>
           </FigureInteractionContext.Provider>
         </SlideContext.Provider>
       </AnalysisContext.Provider>
