@@ -8,20 +8,18 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from '@/components/ui/native-select';
+import { useAppPreferences } from '@/components/app-preferences';
 import type { ChartNode } from '@/src/document/model';
-import type { AppLocale } from '@/src/i18n/messages';
 
 export function ChartProperties({
   attrs,
   nodeId,
   disabled,
-  locale,
   onApply,
 }: {
   attrs: ChartNode['attrs'];
   nodeId: string;
   disabled: boolean;
-  locale: AppLocale;
   onApply: (nodeId: string, attrs: Record<string, unknown>) => void;
 }) {
   const [chartType, setChartType] = useState(attrs.chartType);
@@ -57,51 +55,41 @@ export function ChartProperties({
     ) &&
     Number(width) >= 10 &&
     Number(width) <= 100;
-  const ja = locale === 'ja';
+  const copy = useAppPreferences().copy.chart;
   return (
     <fieldset disabled={disabled} className="space-y-2">
       <label className="property-field">
-        {ja ? 'グラフ種類' : 'Chart type'}
+        {copy.type}
         <NativeSelect
           value={chartType}
           onChange={(event) =>
             setChartType(event.target.value as ChartNode['attrs']['chartType'])
           }
         >
-          <NativeSelectOption value="line">
-            {ja ? '折れ線' : 'Line'}
-          </NativeSelectOption>
+          <NativeSelectOption value="line">{copy.line}</NativeSelectOption>
           <NativeSelectOption value="scatter">
-            {ja ? '散布図' : 'Scatter'}
+            {copy.scatter}
           </NativeSelectOption>
-          <NativeSelectOption value="bar">
-            {ja ? '棒' : 'Bar'}
-          </NativeSelectOption>
+          <NativeSelectOption value="bar">{copy.bar}</NativeSelectOption>
         </NativeSelect>
       </label>
       <label className="property-field">
-        {ja ? 'データ（ラベル,x,y を1行ずつ）' : 'Data (label,x,y per line)'}
+        {copy.data}
         <Textarea
-          aria-label={ja ? 'グラフデータ' : 'Chart data'}
+          aria-label={copy.dataField}
           className="min-h-28 font-mono"
           value={data}
           onChange={(event) => setData(event.target.value)}
         />
       </label>
-      {!valid && (
-        <p className="text-xs text-destructive">
-          {ja
-            ? '1〜200行のラベルと有限の数値、幅10〜100を入力してください。'
-            : 'Enter 1–200 labels and finite numbers; width 10–100.'}
-        </p>
-      )}
+      {!valid && <p className="text-xs text-destructive">{copy.invalid}</p>}
       {(
         [
-          [ja ? 'X軸' : 'X axis', xLabel, setXLabel],
-          [ja ? 'Y軸' : 'Y axis', yLabel, setYLabel],
-          [ja ? '凡例' : 'Legend', series, setSeries],
-          [ja ? '代替テキスト' : 'Alt text', alt, setAlt],
-          [ja ? 'キャプション' : 'Caption', caption, setCaption],
+          [copy.xAxis, xLabel, setXLabel],
+          [copy.yAxis, yLabel, setYLabel],
+          [copy.legend, series, setSeries],
+          [copy.alternativeText, alt, setAlt],
+          [copy.caption, caption, setCaption],
         ] as const
       ).map(([label, value, setter]) => (
         <label key={label} className="property-field">
@@ -113,7 +101,7 @@ export function ChartProperties({
         </label>
       ))}
       <label className="property-field">
-        {ja ? '幅（%）' : 'Width (%)'}
+        {copy.width}
         <Input
           type="number"
           min="10"
@@ -139,7 +127,7 @@ export function ChartProperties({
           })
         }
       >
-        {ja ? 'グラフを更新' : 'Update chart'}
+        {copy.update}
       </Button>
     </fieldset>
   );

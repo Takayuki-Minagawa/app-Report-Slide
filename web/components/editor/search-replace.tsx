@@ -4,18 +4,17 @@ import { useEffect, useState } from 'react';
 import type { Editor } from '@tiptap/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useAppPreferences } from '@/components/app-preferences';
 import { findTextMatches, replaceTextMatches } from '@/src/editor/search';
-import type { AppLocale } from '@/src/i18n/messages';
 
 export function SearchReplace({
   editor,
   locked,
-  locale,
 }: {
   editor: Editor | null;
   locked: boolean;
-  locale: AppLocale;
 }) {
+  const { copy } = useAppPreferences();
   const [query, setQuery] = useState('');
   const [replacement, setReplacement] = useState('');
   const [, setRevision] = useState(0);
@@ -47,12 +46,11 @@ export function SearchReplace({
     setActive(0);
     editor.commands.focus();
   };
-  const ja = locale === 'ja';
   return (
     <search className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
       <Input
         className="h-8 w-48"
-        aria-label={ja ? '検索語' : 'Search text'}
+        aria-label={copy.workspace.searchText}
         value={query}
         onChange={(event) => {
           setQuery(event.target.value);
@@ -68,7 +66,7 @@ export function SearchReplace({
         disabled={!matches.length}
         onClick={() => jump(current - 1)}
       >
-        {ja ? '前へ' : 'Previous'}
+        {copy.workspace.searchPrevious}
       </Button>
       <Button
         size="sm"
@@ -76,11 +74,11 @@ export function SearchReplace({
         disabled={!matches.length}
         onClick={() => jump(current + 1)}
       >
-        {ja ? '次へ' : 'Next'}
+        {copy.workspace.searchNext}
       </Button>
       <Input
         className="h-8 w-48"
-        aria-label={ja ? '置換後の文字列' : 'Replacement text'}
+        aria-label={copy.workspace.replacementText}
         value={replacement}
         onChange={(event) => setReplacement(event.target.value)}
       />
@@ -90,7 +88,7 @@ export function SearchReplace({
         disabled={locked || !matches.length}
         onClick={replaceOne}
       >
-        {ja ? '置換' : 'Replace'}
+        {copy.workspace.replaceOne}
       </Button>
       <Button
         size="sm"
@@ -98,7 +96,7 @@ export function SearchReplace({
         disabled={locked || !matches.length}
         onClick={replaceAll}
       >
-        {ja ? 'すべて置換' : 'Replace all'}
+        {copy.workspace.replaceAll}
       </Button>
     </search>
   );

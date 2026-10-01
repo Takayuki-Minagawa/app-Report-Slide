@@ -130,8 +130,34 @@ export interface UiMessages {
     table: string;
     code: string;
     exportHtml: string;
+    exportReportHtml: string;
     exportingHtml: string;
+    saveArchive: string;
+    insertChart: string;
+    searchReplace: string;
+    searchText: string;
+    replacementText: string;
+    searchPrevious: string;
+    searchNext: string;
+    replaceOne: string;
+    replaceAll: string;
     replaceConfirmation: string;
+  };
+  chart: {
+    type: string;
+    line: string;
+    scatter: string;
+    bar: string;
+    data: string;
+    dataField: string;
+    invalid: string;
+    xAxis: string;
+    yAxis: string;
+    legend: string;
+    alternativeText: string;
+    caption: string;
+    width: string;
+    update: string;
   };
   status: {
     ready: string;
@@ -168,6 +194,8 @@ export interface UiMessages {
     savedJsonAfterApplying: string;
     savedJson: string;
     unableToSaveJson: string;
+    savedArchive: string;
+    unableToSaveArchive: string;
     invalidDocumentData: string;
     selectMathAgain: string;
     updatedEquation: string;
@@ -380,9 +408,35 @@ export const messages: Record<AppLocale, UiMessages> = {
       table: '表',
       code: 'コード',
       exportHtml: 'HTMLスライドを出力',
+      exportReportHtml: 'Report HTMLを出力',
       exportingHtml: 'HTMLスライドを出力中',
+      saveArchive: '画像を含む編集用ZIP',
+      insertChart: 'グラフを挿入',
+      searchReplace: '検索と置換',
+      searchText: '検索語',
+      replacementText: '置換後の文字列',
+      searchPrevious: '前へ',
+      searchNext: '次へ',
+      replaceOne: '置換',
+      replaceAll: 'すべて置換',
       replaceConfirmation:
         '未保存の変更があります。別の文書を開いて変更を破棄しますか？',
+    },
+    chart: {
+      type: 'グラフ種類',
+      line: '折れ線',
+      scatter: '散布図',
+      bar: '棒',
+      data: 'データ（ラベル,x,y を1行ずつ）',
+      dataField: 'グラフデータ',
+      invalid: '1〜200行のラベルと有限の数値、幅10〜100を入力してください。',
+      xAxis: 'X軸',
+      yAxis: 'Y軸',
+      legend: '凡例',
+      alternativeText: '代替テキスト',
+      caption: 'キャプション',
+      width: '幅（%）',
+      update: 'グラフを更新',
     },
     status: {
       ready: '準備完了',
@@ -423,6 +477,8 @@ export const messages: Record<AppLocale, UiMessages> = {
       savedJsonAfterApplying: 'Markdownを適用してDocument JSONを保存しました',
       savedJson: 'Document JSONを保存しました',
       unableToSaveJson: 'Document JSONを保存できませんでした',
+      savedArchive: 'ZIPを保存しました',
+      unableToSaveArchive: 'ZIPを保存できません',
       invalidDocumentData: '文書データを検証できません',
       selectMathAgain: '数式を選択し直してください',
       updatedEquation: '数式を更新しました',
@@ -680,9 +736,35 @@ export const messages: Record<AppLocale, UiMessages> = {
       table: 'Table',
       code: 'Code',
       exportHtml: 'Export HTML slides',
+      exportReportHtml: 'Export Report HTML',
       exportingHtml: 'Exporting HTML slides',
+      saveArchive: 'Editable ZIP with images',
+      insertChart: 'Insert chart',
+      searchReplace: 'Search and replace',
+      searchText: 'Search text',
+      replacementText: 'Replacement text',
+      searchPrevious: 'Previous',
+      searchNext: 'Next',
+      replaceOne: 'Replace',
+      replaceAll: 'Replace all',
       replaceConfirmation:
         'There are unsaved changes. Open another document and discard them?',
+    },
+    chart: {
+      type: 'Chart type',
+      line: 'Line',
+      scatter: 'Scatter',
+      bar: 'Bar',
+      data: 'Data (label,x,y per line)',
+      dataField: 'Chart data',
+      invalid: 'Enter 1–200 labels and finite numbers; width 10–100.',
+      xAxis: 'X axis',
+      yAxis: 'Y axis',
+      legend: 'Legend',
+      alternativeText: 'Alt text',
+      caption: 'Caption',
+      width: 'Width (%)',
+      update: 'Update chart',
     },
     status: {
       ready: 'Ready',
@@ -723,6 +805,8 @@ export const messages: Record<AppLocale, UiMessages> = {
       savedJsonAfterApplying: 'Applied Markdown and saved Document JSON',
       savedJson: 'Saved Document JSON',
       unableToSaveJson: 'Could not save Document JSON',
+      savedArchive: 'ZIP saved',
+      unableToSaveArchive: 'Could not save ZIP',
       invalidDocumentData: 'Could not validate document data',
       selectMathAgain: 'Select the equation again',
       updatedEquation: 'Updated equation',

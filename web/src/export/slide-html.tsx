@@ -9,10 +9,11 @@ import { analyzeDocument, splitDocumentPages } from '@/src/document/semantics';
 import type { AppLocale } from '@/src/i18n/messages';
 import type { AssetUrls } from '@/src/workspace/files';
 import { WorkspaceStatusError, statusMessage } from '@/src/workspace/status';
-import { bytesToBase64, embedSlideImages } from './embedded-images';
+import { embedSlideImages } from './embedded-images';
 import { offlineMathStyles } from './math-styles';
 import playerStyles from './slide-player.css?raw';
 import playerSource from './slide-player.js?raw';
+import { hashedInlineScript } from './standalone-html';
 
 const playerMessages = {
   ja: {
@@ -60,17 +61,7 @@ export async function exportSlideHtml(
   const analysis = analyzeDocument(document);
   const pages = splitDocumentPages(document);
   const copy = playerMessages[locale];
-  // HTML parsing normalizes line endings; hash exactly the bytes the browser sees.
-  const script = playerSource.replace(/\r\n?/g, '\n');
-  const hash = bytesToBase64(
-    new Uint8Array(
-      await crypto.subtle.digest('SHA-256', new TextEncoder().encode(script)),
-    ),
-  );
-  const policy =
-    "default-src 'none'; img-src data: https: http:; font-src data:; style-src 'unsafe-inline'; script-src 'sha256-" +
-    hash +
-    "'; base-uri 'none'; form-action 'none'";
+  const { script, policy } = await hashedInlineScript(playerSource);
   const styles =
     playerStyles + '\n' + documentStyles + '\n' + offlineMathStyles;
 

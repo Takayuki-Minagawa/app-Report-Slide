@@ -14,7 +14,7 @@ import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 
 export function EditorWorkspace() {
   const workspace = useDocumentWorkspace();
-  const { copy, locale } = useAppPreferences();
+  const { copy } = useAppPreferences();
   const [navigatorOpen, setNavigatorOpen] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -84,11 +84,7 @@ export function EditorWorkspace() {
         toggleSearch={() => setSearchOpen((open) => !open)}
       />
       {searchOpen && (
-        <SearchReplace
-          editor={workspace.editor}
-          locked={controlsLocked}
-          locale={locale}
-        />
+        <SearchReplace editor={workspace.editor} locked={controlsLocked} />
       )}
       <section className="workspace-grid">
         {navigator()}

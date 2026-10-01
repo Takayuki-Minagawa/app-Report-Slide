@@ -125,7 +125,7 @@ export function FormatToolbar({
         <Table2 />
       </FormatButton>
       <FormatButton
-        label="Chart"
+        label={copy.workspace.insertChart}
         onClick={() =>
           editor
             ?.chain()

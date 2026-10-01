@@ -272,7 +272,6 @@ export function WorkspaceProperties({
                     attrs={selectedNode.attrs as unknown as ChartNode['attrs']}
                     nodeId={selectedNode.nodeId}
                     disabled={documentWriteLocked}
-                    locale={locale}
                     onApply={applyAttributes}
                   />
                 )}

@@ -61,6 +61,10 @@ export function WorkspaceHeader({
     toggleLocale,
     toggleTheme,
   } = useAppPreferences();
+  const exportHtmlLabel =
+    document.type === 'slide'
+      ? copy.workspace.exportHtml
+      : copy.workspace.exportReportHtml;
   return (
     <header className="workspace-header">
       <div className="workspace-brand flex min-w-56 items-center gap-2.5">
@@ -152,8 +156,8 @@ export function WorkspaceHeader({
         </Button>
         <UserManualDialog />
         <Button
-          aria-label={locale === 'ja' ? '検索と置換' : 'Search and replace'}
-          title={locale === 'ja' ? '検索と置換' : 'Search and replace'}
+          aria-label={copy.workspace.searchReplace}
+          title={copy.workspace.searchReplace}
           size="icon-sm"
           variant="ghost"
           type="button"
@@ -186,11 +190,7 @@ export function WorkspaceHeader({
             size="sm"
             variant="outline"
             onClick={() => void saveArchive()}
-            title={
-              locale === 'ja'
-                ? '画像を含む編集用ZIP'
-                : 'Editable ZIP with images'
-            }
+            title={copy.workspace.saveArchive}
           >
             <FolderArchive data-icon="inline-start" /> ZIP
           </Button>
@@ -207,21 +207,9 @@ export function WorkspaceHeader({
           size="sm"
           variant="outline"
           aria-label={
-            htmlExporting
-              ? copy.workspace.exportingHtml
-              : document.type === 'slide'
-                ? copy.workspace.exportHtml
-                : locale === 'ja'
-                  ? 'Report HTMLを出力'
-                  : 'Export Report HTML'
+            htmlExporting ? copy.workspace.exportingHtml : exportHtmlLabel
           }
-          title={
-            document.type === 'slide'
-              ? copy.workspace.exportHtml
-              : locale === 'ja'
-                ? 'Report HTMLを出力'
-                : 'Export Report HTML'
-          }
+          title={exportHtmlLabel}
           aria-busy={htmlExporting}
           disabled={htmlExporting}
           onClick={() => void exportHtml()}
