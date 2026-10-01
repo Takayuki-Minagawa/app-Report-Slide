@@ -2,6 +2,7 @@ import { Editor } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  normalizeFootnoteText,
   toEditorDocument,
   type DocumentData,
   type DocumentNode,
@@ -12,6 +13,7 @@ import { serializeDocument } from '@/src/markdown/serializer';
 import {
   insertFootnote,
   insertSpeakerNotes,
+  selectionTouchesSpeakerNotes,
   setCallout,
   updateFootnote,
 } from './document-commands';
@@ -78,9 +80,9 @@ describe('annotation schema', () => {
 });
 
 describe('inline atoms under formatting', () => {
-  it('does not keep marks on footnotes, references or math, so saving still works', () => {
+  it('does not keep marks on inline atoms, so saving still works', () => {
     const document = setup(
-      '前文^[注]と[@sec:a]と$x$の後文\n\n# 見出し\n{#sec:a}',
+      '前文^[注]と[@sec:a]と$x$と![図](a.png)の後文\n\n# 見出し\n{#sec:a}',
     );
     editor.commands.selectAll();
     editor.commands.toggleBold();
@@ -90,10 +92,28 @@ describe('inline atoms under formatting', () => {
       if (node.isInline && !node.isText)
         atoms.push(`${node.type.name}:${node.marks.length}`);
     });
-    expect(atoms).toEqual(['footnote:0', 'reference:0', 'inlineMath:0']);
+    expect(atoms).toEqual([
+      'footnote:0',
+      'reference:0',
+      'inlineMath:0',
+      'inlineImage:0',
+    ]);
     expect(saved(document)).toContain('^[注]');
     editor.commands.toggleBold();
     expect(saved(document)).not.toContain('**');
+  });
+
+  it('keeps a selected footnote selected when formatting is applied to it', () => {
+    setup('前文^[注]後文');
+    let position = -1;
+    editor.state.doc.descendants((node, at) => {
+      if (node.type.name === 'footnote') position = at;
+    });
+    editor.commands.setNodeSelection(position);
+    editor.commands.toggleBold();
+    const { selection } = editor.state;
+    expect(selection).toBeInstanceOf(NodeSelection);
+    expect((selection as NodeSelection).node.marks).toHaveLength(0);
   });
 });
 
@@ -121,6 +141,10 @@ describe('footnote commands', () => {
   it('refuses blank text, stale positions and places without inline content', () => {
     const document = setup('本文\n\n~~~\ncode\n~~~\n\n![図](a.png)');
     expect(insertFootnote(editor, '   ')).toBe(false);
+    // Truncation must not leave a trailing space, which validation rejects.
+    expect(normalizeFootnoteText(`${'x'.repeat(1999)} yyy`)).toBe(
+      'x'.repeat(1999),
+    );
     expect(updateFootnote(editor, 1, '注')).toBe(false);
     expect(updateFootnote(editor, 9999, '注')).toBe(false);
     editor.commands.setTextSelection(positionOfText('code'));
@@ -188,8 +212,19 @@ describe('speaker notes command', () => {
     for (const key of ['Mod-Alt-1', 'Mod-Shift-8', 'Mod-Shift-7', 'Mod-Alt-c'])
       expect(editor.commands.keyboardShortcut(key)).toBe(true);
     expect(saved(document)).toBe('\n# A\n\n::: notes\nノート\n:::\n');
+    // A selection that only reaches into the notes is protected as well.
+    editor.commands.setTextSelection({
+      from: positionOfText('A'),
+      to: positionOfText('ノート') + 1,
+    });
+    expect(selectionTouchesSpeakerNotes(editor)).toBe(true);
+    expect(editor.commands.keyboardShortcut('Mod-Shift-8')).toBe(true);
+    editor.commands.selectAll();
+    expect(editor.commands.keyboardShortcut('Mod-Shift-7')).toBe(true);
+    expect(saved(document)).toBe('\n# A\n\n::: notes\nノート\n:::\n');
     // Outside notes the same shortcut still changes the block.
     editor.commands.setTextSelection(positionOfText('A'));
+    expect(selectionTouchesSpeakerNotes(editor)).toBe(false);
     editor.commands.keyboardShortcut('Mod-Alt-2');
     expect(saved(document)).toContain('## A');
   });

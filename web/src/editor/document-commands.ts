@@ -47,6 +47,17 @@ export function insertDocumentBreak(
     .run();
 }
 
+/** True when any part of the selection is inside a speaker-notes block. */
+export function selectionTouchesSpeakerNotes(editor: Editor): boolean {
+  const { doc, selection } = editor.state;
+  let found = false;
+  doc.nodesBetween(selection.from, selection.to, (node) => {
+    if (node.type.name === 'speakerNotes') found = true;
+    return !found;
+  });
+  return found;
+}
+
 const isDocumentBreak = (name: string) =>
   name === 'pageBreak' || name === 'slideBreak';
 

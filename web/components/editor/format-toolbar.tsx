@@ -34,6 +34,7 @@ import {
   insertDocumentBreak,
   insertFootnote,
   insertSpeakerNotes,
+  selectionTouchesSpeakerNotes,
   setCallout,
 } from '@/src/editor/document-commands';
 
@@ -47,7 +48,7 @@ export function FormatToolbar({
   const { copy } = useAppPreferences();
   // Notes hold paragraphs only: a block command would lift the text out of
   // them and into the slide.
-  const inNotes = Boolean(editor?.isActive('speakerNotes'));
+  const inNotes = Boolean(editor && selectionTouchesSpeakerNotes(editor));
   const activeCallout: unknown = editor?.isActive('blockquote')
     ? editor.getAttributes('blockquote').callout
     : undefined;

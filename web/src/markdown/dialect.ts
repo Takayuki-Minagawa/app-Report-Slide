@@ -36,14 +36,18 @@ function footnoteText(markdown: MarkdownIt, source: string): string {
   const tokens: Parameters<MarkdownIt['inline']['parse']>[3] = [];
   const env: KumiEnvironment = { kumiFootnoteText: true };
   markdown.inline.parse(source, markdown, env, tokens);
-  return tokens
-    .map((token) =>
-      token.type === 'softbreak' || token.type === 'hardbreak'
-        ? ' '
-        : token.content,
-    )
-    .join('')
-    .trim();
+  return (
+    tokens
+      .map((token) =>
+        token.type === 'softbreak' || token.type === 'hardbreak'
+          ? ' '
+          : token.content,
+      )
+      .join('')
+      // An entity such as &#10; can still carry a line break into the text.
+      .replace(/[\r\n]+/g, ' ')
+      .trim()
+  );
 }
 
 /** Definitions that produced no footnote: never referenced, or a repeated ID. */

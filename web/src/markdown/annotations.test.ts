@@ -130,6 +130,13 @@ describe('footnotes', () => {
     expectStable('未定義[^zzz]、空^[]、エスケープ^\\[x\\]。');
   });
 
+  it('keeps a line break written as an entity out of the footnote text', () => {
+    const document = expectStable('本文^[一行目&#10;二行目]');
+    expect(
+      collectFootnotes(document.children).map((note) => note.attrs.text),
+    ).toEqual(['一行目 二行目']);
+  });
+
   it('does not nest or recurse through footnote text', () => {
     const selfReference = parseMarkdown(
       '本文[^a]と[^b]\n\n[^a]: 自分[^a]と相手[^b]\n[^b]: 戻る[^a]',
@@ -251,7 +258,7 @@ describe('footnotes', () => {
     expect(collectFootnotes(many.children)).toHaveLength(120_000);
     // These took 30 s to 2 min before; the bound only guards the complexity.
     expect(performance.now() - started).toBeLessThan(10_000);
-  });
+  }, 20_000);
 
   it('does not treat math, code or link text as footnotes', () => {
     const document = parseMarkdown('$x^[2]$ と `a^[b]` を使う。').document;

@@ -74,7 +74,11 @@ export const maximumFootnoteLength = 2000;
 
 /** Footnote text is one line: collapse whitespace and enforce the stored limit. */
 export function normalizeFootnoteText(text: string): string {
-  return text.replace(/\s+/g, ' ').trim().slice(0, maximumFootnoteLength);
+  return text
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maximumFootnoteLength)
+    .trim();
 }
 
 export const calloutTypes = [

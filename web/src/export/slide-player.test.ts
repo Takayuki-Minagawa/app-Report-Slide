@@ -258,6 +258,8 @@ describe('standalone slide player', () => {
       );
     key('p');
     expect(print).not.toHaveBeenCalled();
+    key('n');
+    expect(byId('deck-notes').hidden).toBe(true);
     key('2');
     expect(byId('deck-status').textContent).toBe('');
     expect(text('presenter-status')).toBe(

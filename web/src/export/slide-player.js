@@ -244,7 +244,7 @@
     const key = event.key;
     const letter = key.toLowerCase();
     const pendingJump = jump;
-    // Fullscreen and printing need the audience window itself to be active.
+    // Fullscreen, printing and the notes panel belong to the audience window.
     const remote = event.currentTarget !== document;
     // A focused control keeps its own Space/Enter, except to confirm a typed number.
     if (
@@ -273,7 +273,7 @@
     else if (key === 'Home') show(0);
     else if (key === 'End') show(slides.length - 1);
     else if (letter === 'o') setOverview(!inOverview());
-    else if (letter === 'n' && !notesToggle.hidden) toggleNotes();
+    else if (letter === 'n' && !notesToggle.hidden && !remote) toggleNotes();
     else if (letter === 's') openPresenter();
     else if ((letter === 'b' || key === '.') && !inOverview())
       root.classList.toggle('deck-blackout');

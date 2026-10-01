@@ -7,7 +7,7 @@ import {
 import { Image } from '@tiptap/extension-image';
 import { Mathematics } from '@tiptap/extension-mathematics';
 import { TableKit } from '@tiptap/extension-table';
-import { Plugin } from '@tiptap/pm/state';
+import { NodeSelection, Plugin } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 
 import {
@@ -241,8 +241,17 @@ const DocumentAttributes = Extension.create({
             // Formatting a range also marks the atoms in it, but the document
             // model allows marks on text only and would refuse to save.
             if (unmarkedInlineTypes.includes(node.type.name)) {
-              if (node.marks.length > 0)
+              if (node.marks.length > 0) {
                 transaction.setNodeMarkup(position, undefined, node.attrs, []);
+                // Replacing a selected atom would otherwise drop its selection.
+                if (
+                  newState.selection instanceof NodeSelection &&
+                  newState.selection.from === position
+                )
+                  transaction.setSelection(
+                    NodeSelection.create(transaction.doc, position),
+                  );
+              }
               if (node.type.name !== 'inlineImage') return;
             }
             if (!identifiedTypes.includes(node.type.name)) return;
@@ -558,7 +567,15 @@ export function createEditorExtensions({
       // Changing the block type would lift the text out of the notes and
       // show it to the audience, so those shortcuts do nothing here.
       addKeyboardShortcuts() {
-        const insideNotes = () => this.editor.isActive('speakerNotes');
+        const insideNotes = () => {
+          const { doc, selection } = this.editor.state;
+          let found = false;
+          doc.nodesBetween(selection.from, selection.to, (node) => {
+            if (node.type.name === this.name) found = true;
+            return !found;
+          });
+          return found;
+        };
         return Object.fromEntries(
           blockShortcuts.map((shortcut) => [shortcut, insideNotes]),
         );
