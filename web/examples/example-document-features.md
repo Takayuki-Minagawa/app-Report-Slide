@@ -11,7 +11,10 @@ number_sections: true
 
 {#sec:overview}
 
-式 [@eq:motion] を用いて解析する。結果は [@table:response] に示す。
+式 [@eq:motion] を用いて解析する^[減衰はレイリー型とした。]。結果は [@table:response] に示す。
+
+> [!NOTE]
+> 入力地震動は告示波3波を使用した。
 
 ## 基本式
 

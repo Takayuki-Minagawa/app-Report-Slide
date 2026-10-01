@@ -11,6 +11,8 @@ KUMI is a browser application for editing and reviewing technical reports and sl
 ## 2. Edit
 
 - Edit text directly in the **Visual editor**. The formatting toolbar adds headings, lists, quotes, tables, equations, and page or slide breaks.
+- **Callout type** turns a quote into a Note, Tip, Important, Warning, or Caution block. **Insert footnote** adds a footnote at the cursor; edit its text in Properties. In a Slide, **Add speaker notes** adds notes for each slide that the audience does not see.
+- In the visual editor, press `Ctrl`/`Cmd`+`F` to open search and replace and `Esc` to close it. The character and word counts appear at the top right of the editor.
 - Select one or more top-level paragraphs or headings, then use the **Text ruler** above the editor to set the left and right positions and first-line indent. Drag a marker or focus it and use the arrow keys. Move the first-line marker before the left marker for a hanging indent; choose **Reset** to clear these settings.
 - Use the **Markdown** tab to edit source. Choose **Apply Markdown**, or save **Markdown/JSON** from the header when you finish. While a Markdown draft is unapplied, KUMI prevents a return to the visual editor to avoid conflicting changes.
 - Unfinished content, chapter structure, unapplied Markdown, and imported images are temporarily kept as a recovery copy in this browser. When you return, choose whether to restore or remove it. This is device-local help only, so keep Markdown, JSON, or a project ZIP as the source of record.
@@ -41,8 +43,10 @@ KUMI is a browser application for editing and reviewing technical reports and sl
 
 1. Create or import a **Slide** document and insert slide breaks where needed.
 2. Select **HTML** in the header to download a single `.html` file.
-3. Open the file in a browser. Use **Previous/Next**, ←/→, or Space to navigate. The progress bar at the bottom shows your position in the deck. Home/End jumps to the first/last slide, and F or **Fullscreen** works in supported browsers. Table-of-contents and cross-reference links open the target slide.
-4. Select **Print / Save PDF** or press P to open the browser's print dialog for all slides. To create a PDF, choose a destination such as **Save as PDF**.
+3. Open the file in a browser. Use **Previous/Next**, ←/→, or Space to navigate. The progress bar at the bottom shows your position in the deck. Home/End jumps to the first/last slide, and F or **Fullscreen** works in supported browsers. Table-of-contents and cross-reference links open the target slide. On a touch screen, swipe left or right to navigate.
+4. Use **Overview** (O) to choose from all slides, or type a number and press Enter to go to that slide. Press B or . to black out the screen. The elapsed time is shown at the right; select it to reset it.
+5. **Notes** (N) shows the current slide's speaker notes below the slide. **Presenter view** (S) opens a separate window with the current and next slides, the notes, and the elapsed time. Put the deck fullscreen on the external display and keep the presenter view on your own screen. If the pop-up is blocked, allow it or use N instead.
+6. Select **Print / Save PDF** or press P to open the browser's print dialog for all slides; speaker notes are not printed. To create a PDF, choose a destination such as **Save as PDF**.
 
 The slide frame scales to fit the screen. Overflowing content can be scrolled within the slide; add more slide breaks before presenting if needed.
 
@@ -50,7 +54,7 @@ Math fonts and imported images, including local images added through **Place ima
 
 HTML is for viewing and presenting; it cannot be re-imported into KUMI. Unapplied Markdown drafts are included in the export, but are not applied to the editable document or marked as saved. **Also save an editable ZIP, or Markdown/JSON with the images.**
 
-For a single Report or Slide, use **ZIP** in the header to save the editable document with imported images, then reopen it from the document panel. Report **HTML** can be printed or saved as PDF in a browser. Chapter projects use the separate **Save project ZIP** action. Use the header search button to find and replace text, and the Chart toolbar button to add an editable chart.
+For a single Report or Slide, use **ZIP** in the header to save the editable document with imported images, then reopen it from the document panel. Report **HTML** can be printed or saved as PDF in a browser. Chapter projects use the separate **Save project ZIP** action. Use the header search button to find and replace text, and the **Insert chart** toolbar button to add an editable chart.
 
 ## 5. Change display and language
 
