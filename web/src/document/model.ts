@@ -64,6 +64,32 @@ export interface ReferenceNode {
   attrs: { target: string };
 }
 
+/** Plain-text note, numbered in document order and listed at the end of its page. */
+export interface FootnoteNode {
+  type: 'footnote';
+  attrs: { text: string };
+}
+
+export const maximumFootnoteLength = 2000;
+
+/** Footnote text is one line: collapse whitespace and enforce the stored limit. */
+export function normalizeFootnoteText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().slice(0, maximumFootnoteLength);
+}
+
+export const calloutTypes = [
+  'note',
+  'tip',
+  'important',
+  'warning',
+  'caution',
+] as const;
+export type CalloutType = (typeof calloutTypes)[number];
+
+export function isCalloutType(value: unknown): value is CalloutType {
+  return calloutTypes.includes(value as CalloutType);
+}
+
 export interface SemanticAttributes {
   label?: string | null;
   caption?: string | null;
@@ -75,6 +101,7 @@ export type InlineNode =
   | InlineMathNode
   | InlineImageNode
   | ReferenceNode
+  | FootnoteNode
   | HardBreakNode;
 
 interface IdentifiedNode {
@@ -119,6 +146,8 @@ export interface ListItemNode extends IdentifiedNode {
 
 export interface BlockquoteNode extends IdentifiedNode {
   type: 'blockquote';
+  /** A GitHub-style alert (`> [!NOTE]`); a plain quote when absent. */
+  attrs: IdentifiedNode['attrs'] & { callout?: CalloutType | null };
   content: DocumentNode[];
 }
 
@@ -179,6 +208,12 @@ export interface DocumentBreakNode extends IdentifiedNode {
   type: 'pageBreak' | 'slideBreak';
 }
 
+/** Presenter-only text for the slide it is on; never part of the audience output. */
+export interface SpeakerNotesNode extends IdentifiedNode {
+  type: 'speakerNotes';
+  content: ParagraphNode[];
+}
+
 export interface TableNode extends IdentifiedNode {
   type: 'table';
   content: TableRowNode[];
@@ -227,6 +262,7 @@ export type DocumentNode =
   | ChartNode
   | HorizontalRuleNode
   | DocumentBreakNode
+  | SpeakerNotesNode
   | TableNode
   | TableRowNode
   | TableHeaderNode
@@ -307,6 +343,7 @@ export function inlineText(content: InlineNode[] | undefined): string {
       if (node.type === 'inlineMath') return node.attrs.latex;
       if (node.type === 'inlineImage') return node.attrs.alt;
       if (node.type === 'reference') return `@${node.attrs.target}`;
+      if (node.type === 'footnote') return '';
       return '\n';
     })
     .join('');

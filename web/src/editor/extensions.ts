@@ -10,7 +10,11 @@ import { TableKit } from '@tiptap/extension-table';
 import { Plugin } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 
-import { createNodeId } from '@/src/document/model';
+import {
+  createNodeId,
+  isCalloutType,
+  normalizeFootnoteText,
+} from '@/src/document/model';
 import { isTextRuler, textRulerStyle } from '@/src/document/text-ruler';
 import { validateDocumentData } from '@/src/document/validation';
 import {
@@ -53,6 +57,7 @@ const identifiedTypes = [
   'horizontalRule',
   'pageBreak',
   'slideBreak',
+  'speakerNotes',
   'inlineImage',
   'figure',
   'blockMath',
@@ -124,6 +129,22 @@ const DocumentAttributes = Extension.create({
             parseHTML: (element) => element.getAttribute('data-caption'),
             renderHTML: (attrs) =>
               attrs.caption != null ? { 'data-caption': attrs.caption } : {},
+          },
+        },
+      },
+      {
+        types: ['blockquote'],
+        attributes: {
+          callout: {
+            default: null,
+            parseHTML: (element) => {
+              const callout = element.getAttribute('data-callout');
+              return isCalloutType(callout) ? callout : null;
+            },
+            renderHTML: (attrs) =>
+              isCalloutType(attrs.callout)
+                ? { 'data-callout': attrs.callout }
+                : {},
           },
         },
       },
@@ -466,7 +487,54 @@ export function createEditorExtensions({
     Node.create({
       name: 'doc',
       topNode: true,
-      content: '(block | documentBreak)+',
+      content: '(block | documentBreak | speakerNotes)+',
+    }),
+    Node.create({
+      name: 'footnote',
+      group: 'inline',
+      inline: true,
+      atom: true,
+      marks: '',
+      addAttributes: () => ({
+        text: {
+          default: '',
+          parseHTML: (element) =>
+            normalizeFootnoteText(element.getAttribute('data-footnote') ?? ''),
+        },
+      }),
+      parseHTML: () => [
+        {
+          tag: 'sup[data-footnote]',
+          getAttrs: (element) =>
+            element.getAttribute('data-footnote')?.trim() ? null : false,
+        },
+      ],
+      // The number is a CSS counter, so it follows edits without a transaction.
+      renderHTML: ({ node }) => [
+        'sup',
+        {
+          'data-footnote': node.attrs.text,
+          class: 'kumi-footnote',
+          title: node.attrs.text,
+          contenteditable: 'false',
+        },
+      ],
+      renderText: ({ node }) => `^[${node.attrs.text}]`,
+    }),
+    Node.create({
+      name: 'speakerNotes',
+      group: 'speakerNotes',
+      content: 'paragraph+',
+      defining: true,
+      parseHTML: () => [{ tag: 'aside[data-speaker-notes]' }],
+      renderHTML: ({ HTMLAttributes }) => [
+        'aside',
+        mergeAttributes(HTMLAttributes, {
+          'data-speaker-notes': '',
+          class: 'kumi-speaker-notes',
+        }),
+        0,
+      ],
     }),
     Node.create({
       name: 'reference',
@@ -511,6 +579,8 @@ export function createEditorExtensions({
     ),
     StarterKit.configure({
       document: false,
+      // Notes close a slide, so they need no empty paragraph after them.
+      trailingNode: { notAfter: ['speakerNotes'] },
       link: {
         openOnClick: false,
         autolink: false,

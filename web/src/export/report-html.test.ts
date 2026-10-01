@@ -41,6 +41,31 @@ describe('standalone Report HTML', () => {
     expect(parsed.querySelector('link, script[src]')).toBeNull();
   });
 
+  it('lists footnotes per page, localizes callouts and omits speaker notes', async () => {
+    const source = parseMarkdown(
+      '---\ntype: report\n---\n\n本文^[一つ目]\n\n> [!CAUTION]\n> 注意事項\n\n::: notes\n非公開メモ\n:::\n\n::: pagebreak\n:::\n\n続き^[二つ目]',
+    ).document;
+    const { html } = await exportReportHtml(source, new Map(), 'ja');
+    const parsed = new DOMParser().parseFromString(html, 'text/html');
+    expect(html).not.toContain('非公開メモ');
+    const sheets = [...parsed.querySelectorAll('.report-sheet')];
+    expect(
+      sheets.map((sheet) =>
+        [...sheet.querySelectorAll('.document-footnotes li')].map(
+          (item) =>
+            `${item.getAttribute('value')}:${item.querySelector('.footnote-text')?.textContent}`,
+        ),
+      ),
+    ).toEqual([['1:一つ目'], ['2:二つ目']]);
+    expect(
+      parsed.querySelector('.document-footnotes')?.getAttribute('aria-label'),
+    ).toBe('脚注');
+    expect(
+      parsed.querySelector('blockquote[data-callout="caution"] .callout-title')
+        ?.textContent,
+    ).toBe('注意');
+  });
+
   it('keeps resized table columns in a standalone report', async () => {
     const source = parseMarkdown(
       '---\ntype: report\n---\n\n| A | B |\n| --- | --- |\n| 1 | 2 |',

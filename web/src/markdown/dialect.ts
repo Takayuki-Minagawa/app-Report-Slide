@@ -2,6 +2,33 @@ import MarkdownIt from 'markdown-it';
 
 import { canonicalHardBreakMarker, isEscaped } from './syntax';
 
+interface KumiEnvironment {
+  /** Reference-style footnote definitions collected while parsing one document. */
+  kumiFootnotes?: Map<string, string>;
+  /** Set while reading a footnote's own text, where footnotes do not nest. */
+  kumiFootnoteText?: boolean;
+}
+
+const footnoteDefinition = /^\[\^([^\s\]]+)\]:[ \t]+(\S.*)$/;
+
+/**
+ * Footnotes are plain text: keep the characters and drop inline formatting.
+ * A separate environment stops a note from expanding another note (or itself).
+ */
+function footnoteText(markdown: MarkdownIt, source: string): string {
+  const tokens: Parameters<MarkdownIt['inline']['parse']>[3] = [];
+  const env: KumiEnvironment = { kumiFootnoteText: true };
+  markdown.inline.parse(source, markdown, env, tokens);
+  return tokens
+    .map((token) =>
+      token.type === 'softbreak' || token.type === 'hardbreak'
+        ? ' '
+        : token.content,
+    )
+    .join('')
+    .trim();
+}
+
 export function createMarkdownIt(): MarkdownIt {
   const markdown = new MarkdownIt({
     html: false,
@@ -9,6 +36,77 @@ export function createMarkdownIt(): MarkdownIt {
     typographer: false,
     breaks: false,
   });
+
+  // Pandoc inline footnote: text^[note]. KUMI saves every footnote this way.
+  markdown.inline.ruler.after('image', 'kumi_footnote', (state, silent) => {
+    const start = state.pos;
+    if (
+      state.src.charCodeAt(start) !== 0x5e /* ^ */ ||
+      state.src.charCodeAt(start + 1) !== 0x5b /* [ */ ||
+      (state.env as KumiEnvironment).kumiFootnoteText
+    )
+      return false;
+    const end = state.md.helpers.parseLinkLabel(state, start + 1);
+    if (end < 0) return false;
+    const text = footnoteText(state.md, state.src.slice(start + 2, end));
+    if (!text) return false;
+    if (!silent) state.push('kumi_footnote', '', 0).content = text;
+    state.pos = end + 1;
+    return true;
+  });
+
+  // GitHub-style [^id] with a "[^id]: note" definition is read as the same node.
+  markdown.inline.ruler.before('link', 'kumi_footnote_ref', (state, silent) => {
+    const env = state.env as KumiEnvironment;
+    if (
+      state.src.charCodeAt(state.pos) !== 0x5b /* [ */ ||
+      state.src.charCodeAt(state.pos + 1) !== 0x5e /* ^ */ ||
+      !env.kumiFootnotes
+    )
+      return false;
+    const match = /^\[\^([^\s\]]+)\]/.exec(
+      state.src.slice(state.pos, state.pos + 256),
+    );
+    if (!match) return false;
+    const definition = env.kumiFootnotes.get(match[1]);
+    if (definition === undefined) return false;
+    const text = footnoteText(state.md, definition);
+    if (!text) return false;
+    if (!silent) state.push('kumi_footnote', '', 0).content = text;
+    state.pos += match[0].length;
+    return true;
+  });
+
+  markdown.block.ruler.before(
+    'reference',
+    'kumi_footnote_definition',
+    (state, startLine, endLine, silent) => {
+      if (state.sCount[startLine] - state.blkIndent >= 4) return false;
+      const lineAt = (index: number) =>
+        state.src
+          .slice(state.bMarks[index] + state.tShift[index], state.eMarks[index])
+          .trim();
+      const match = footnoteDefinition.exec(lineAt(startLine));
+      if (!match) return false;
+      if (silent) return true;
+      const lines = [match[2]];
+      let nextLine = startLine + 1;
+      // A definition continues until a blank line or the next definition.
+      while (nextLine < endLine) {
+        const line = lineAt(nextLine);
+        if (!line || footnoteDefinition.test(line)) break;
+        lines.push(line);
+        nextLine += 1;
+      }
+      const env = state.env as KumiEnvironment;
+      env.kumiFootnotes ??= new Map();
+      if (!env.kumiFootnotes.has(match[1]))
+        env.kumiFootnotes.set(match[1], lines.join(' '));
+      state.line = nextLine;
+      return true;
+    },
+    { alt: ['paragraph', 'reference'] },
+  );
 
   markdown.inline.ruler.after('link', 'kumi_reference', (state, silent) => {
     // Link-label scanning uses silent mode; do not pretend a reference is a nested link.
@@ -42,9 +140,39 @@ export function createMarkdownIt(): MarkdownIt {
       const pageBreak = /^:::\s+(pagebreak|slidebreak)\s*$/.exec(line);
       const advancedTable = /^:::\s+kumi-table\s*$/.test(line);
       const advancedChart = /^:::\s+kumi-chart\s*$/.test(line);
-      if (!attributes && !pageBreak && !advancedTable && !advancedChart)
+      const notes = /^:::\s+notes\s*$/.test(line);
+      if (
+        !attributes &&
+        !pageBreak &&
+        !advancedTable &&
+        !advancedChart &&
+        !notes
+      )
         return false;
       if (silent) return true;
+      if (notes) {
+        let closingLine = startLine + 1;
+        while (closingLine < endLine && lineAt(closingLine) !== ':::') {
+          closingLine += 1;
+        }
+        if (closingLine >= endLine) {
+          const token = state.push('kumi_invalid_notes', '', 0);
+          token.map = [startLine, endLine];
+          token.block = true;
+          state.line = endLine;
+          return true;
+        }
+        const open = state.push('kumi_notes_open', 'aside', 1);
+        open.map = [startLine, closingLine + 1];
+        open.block = true;
+        const lineMax = state.lineMax;
+        state.lineMax = closingLine;
+        state.md.block.tokenize(state, startLine + 1, closingLine);
+        state.lineMax = lineMax;
+        state.push('kumi_notes_close', 'aside', -1).block = true;
+        state.line = closingLine + 1;
+        return true;
+      }
       if (advancedTable || advancedChart) {
         let closingLine = startLine + 1;
         while (closingLine < endLine && lineAt(closingLine) !== ':::') {

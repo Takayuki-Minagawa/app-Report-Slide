@@ -35,6 +35,7 @@ import {
 } from '@/src/document/page-settings';
 import { SemanticProperties } from './semantic-properties';
 import { ChartProperties } from './chart-properties';
+import { FootnoteProperties } from './footnote-properties';
 import type { ChartNode } from '@/src/document/model';
 
 interface WorkspacePropertiesProps {
@@ -50,6 +51,7 @@ interface WorkspacePropertiesProps {
   setMathDraft: (value: string) => void;
   applyMath: () => void;
   applyAttributes: (nodeId: string, attrs: Record<string, unknown>) => void;
+  applyFootnote: (text: string) => void;
   updateTheme: (theme: string) => void;
   updatePageSettings: (settings: PageSettings) => void;
   updateDocumentFlag: (flag: DocumentFlag, checked: boolean) => void;
@@ -70,6 +72,7 @@ export function WorkspaceProperties({
   setMathDraft,
   applyMath,
   applyAttributes,
+  applyFootnote,
   updateTheme,
   updatePageSettings,
   updateDocumentFlag,
@@ -89,6 +92,8 @@ export function WorkspaceProperties({
   const flagOptions = documentFlags
     .filter((key) => key !== 'slide_number' || document.type === 'slide')
     .map((key) => [key, flagLabels[key]] as const);
+  const footnoteText =
+    typeof selectedNode?.attrs.text === 'string' ? selectedNode.attrs.text : '';
   const [selectElementTitle, selectElementDescription] =
     copy.workspace.selectElementHint.split('\n');
   return (
@@ -264,6 +269,15 @@ export function WorkspaceProperties({
                     node={selectedSemantic}
                     disabled={documentWriteLocked}
                     onApply={applyAttributes}
+                  />
+                )}
+                {selectedNode.type === 'footnote' && (
+                  <FootnoteProperties
+                    key={`${selectedNode.position}:${footnoteText}`}
+                    id={`${idPrefix}-footnote-text`}
+                    text={footnoteText}
+                    disabled={documentWriteLocked}
+                    onApply={applyFootnote}
                   />
                 )}
                 {selectedNode.type === 'chart' && selectedNode.nodeId && (

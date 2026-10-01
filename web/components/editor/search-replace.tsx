@@ -1,6 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type RefObject,
+} from 'react';
+import { X } from 'lucide-react';
 import type { Editor } from '@tiptap/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,11 +17,25 @@ import { findTextMatches, replaceTextMatches } from '@/src/editor/search';
 export function SearchReplace({
   editor,
   locked,
+  inputRef,
+  onClose,
 }: {
   editor: Editor | null;
   locked: boolean;
+  inputRef?: RefObject<HTMLInputElement | null>;
+  onClose: () => void;
 }) {
   const { copy } = useAppPreferences();
+  const ownInput = useRef<HTMLInputElement>(null);
+  const queryInput = inputRef ?? ownInput;
+  useEffect(() => {
+    queryInput.current?.focus();
+  }, [queryInput]);
+  const closeOnEscape = (event: KeyboardEvent) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    onClose();
+  };
   const [query, setQuery] = useState('');
   const [replacement, setReplacement] = useState('');
   const [, setRevision] = useState(0);
@@ -49,7 +70,9 @@ export function SearchReplace({
   return (
     <search className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
       <Input
+        ref={queryInput}
         className="h-8 w-48"
+        onKeyDown={closeOnEscape}
         aria-label={copy.workspace.searchText}
         value={query}
         onChange={(event) => {
@@ -79,6 +102,7 @@ export function SearchReplace({
       <Input
         className="h-8 w-48"
         aria-label={copy.workspace.replacementText}
+        onKeyDown={closeOnEscape}
         value={replacement}
         onChange={(event) => setReplacement(event.target.value)}
       />
@@ -97,6 +121,16 @@ export function SearchReplace({
         onClick={replaceAll}
       >
         {copy.workspace.replaceAll}
+      </Button>
+      <Button
+        className="ml-auto"
+        size="icon-sm"
+        variant="ghost"
+        aria-label={copy.workspace.closeSearch}
+        title={copy.workspace.closeSearch}
+        onClick={onClose}
+      >
+        <X />
       </Button>
     </search>
   );

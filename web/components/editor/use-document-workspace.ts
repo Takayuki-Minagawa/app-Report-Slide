@@ -1016,6 +1016,7 @@ export function useDocumentWorkspace() {
     applyMath: () => selection.applyMath(editor),
     applyAttributes: (nodeId: string, attrs: Record<string, unknown>) =>
       selection.applyAttributes(editor, nodeId, attrs),
+    applyFootnote: (text: string) => selection.applyFootnote(editor, text),
     resolveImageUrl,
     resolvePreviewImageUrl,
     importFiles,

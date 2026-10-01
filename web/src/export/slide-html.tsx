@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server.browser';
 import katexLicense from 'katex/LICENSE?raw';
 import documentStyles from '@/components/preview/document.css?raw';
 import { DocumentPage } from '@/components/preview/document-page';
+import { DocumentRenderer } from '@/components/preview/document-renderer';
 import { documentTitle, type DocumentData } from '@/src/document/model';
 import { migrateDocumentData } from '@/src/document/validation';
 import { analyzeDocument, splitDocumentPages } from '@/src/document/semantics';
@@ -19,24 +20,50 @@ const playerMessages = {
   ja: {
     previous: '前へ',
     next: '次へ',
+    overview: '一覧',
+    notes: 'ノート',
+    presenter: '発表者ビュー',
     fullscreen: '全画面',
     print: '印刷／PDF保存',
     navigation: 'スライド操作',
     counter: '表示中のスライド',
     progress: '発表の進捗',
-    help: '← → / Space で移動 · F で全画面 · P で印刷',
+    timer: '経過時間（クリックでリセット）',
+    speakerNotes: '発表者ノート',
+    noNotes: 'このスライドにノートはありません。',
+    currentSlide: '現在のスライド',
+    nextSlide: '次のスライド',
+    lastSlide: '最後のスライドです。',
+    elapsed: '経過時間',
+    jump: '移動先のスライド番号（Enterで移動）:',
+    help: '← → / Space: 移動 · 数字+Enter: 指定スライド · O: 一覧 · N: ノート · S: 発表者ビュー · B: 暗転 · F: 全画面 · P: 印刷',
     fullscreenUnavailable: 'このブラウザでは全画面表示を開始できません。',
+    presenterUnavailable:
+      '発表者ビューを開けません。ポップアップを許可するか、N キーでノートを表示してください。',
   },
   en: {
     previous: 'Previous',
     next: 'Next',
+    overview: 'Overview',
+    notes: 'Notes',
+    presenter: 'Presenter view',
     fullscreen: 'Fullscreen',
     print: 'Print / Save PDF',
     navigation: 'Slide controls',
     counter: 'Current slide',
     progress: 'Presentation progress',
-    help: '← → / Space to navigate · F for fullscreen · P to print',
+    timer: 'Elapsed time (click to reset)',
+    speakerNotes: 'Speaker notes',
+    noNotes: 'This slide has no notes.',
+    currentSlide: 'Current slide',
+    nextSlide: 'Next slide',
+    lastSlide: 'This is the last slide.',
+    elapsed: 'Elapsed time',
+    jump: 'Go to slide number (press Enter):',
+    help: '← → / Space: navigate · number+Enter: go to slide · O: overview · N: notes · S: presenter view · B: blackout · F: fullscreen · P: print',
     fullscreenUnavailable: 'Fullscreen is not available in this browser.',
+    presenterUnavailable:
+      'The presenter view could not be opened. Allow pop-ups, or press N to show the notes here.',
   },
 };
 
@@ -98,6 +125,32 @@ export async function exportSlideHtml(
             ))}
           </div>
         </main>
+        <section
+          id="deck-notes"
+          className="deck-notes"
+          aria-label={copy.speakerNotes}
+          hidden
+        >
+          <h2>{copy.speakerNotes}</h2>
+          {pages.map((nodes, index) =>
+            nodes.some((node) => node.type === 'speakerNotes') ? (
+              <div key={index} className="deck-note">
+                <DocumentRenderer
+                  document={document}
+                  nodes={nodes}
+                  analysis={analysis}
+                  locale={locale}
+                  resolveImageUrl={resolveImageUrl}
+                  speakerNotes
+                />
+              </div>
+            ) : (
+              <div key={index} className="deck-note" data-empty="">
+                {copy.noNotes}
+              </div>
+            ),
+          )}
+        </section>
         <nav
           id="deck-controls"
           className="deck-controls"
@@ -118,6 +171,19 @@ export async function exportSlideHtml(
           <button id="deck-next" type="button">
             {copy.next}
           </button>
+          <button id="deck-overview" type="button" aria-pressed="false">
+            {copy.overview}
+          </button>
+          <button id="deck-notes-toggle" type="button" aria-pressed="false">
+            {copy.notes}
+          </button>
+          <button
+            id="deck-presenter"
+            type="button"
+            data-unavailable={copy.presenterUnavailable}
+          >
+            {copy.presenter}
+          </button>
           <button
             id="deck-fullscreen"
             type="button"
@@ -128,6 +194,9 @@ export async function exportSlideHtml(
           <button id="deck-print" type="button">
             {copy.print}
           </button>
+          <button id="deck-timer" type="button" title={copy.timer}>
+            00:00
+          </button>
         </nav>
         <progress
           id="deck-progress"
@@ -136,7 +205,33 @@ export async function exportSlideHtml(
           max={pages.length}
           hidden
         />
-        <output id="deck-status" />
+        <output id="deck-status" data-jump={copy.jump} />
+        <template id="deck-presenter-template">
+          <div className="presenter-slides">
+            <section className="presenter-pane">
+              <h2>{copy.currentSlide}</h2>
+              <div id="presenter-current" className="presenter-frame" />
+            </section>
+            <section className="presenter-pane">
+              <h2>{copy.nextSlide}</h2>
+              <div
+                id="presenter-next"
+                className="presenter-frame"
+                data-empty={copy.lastSlide}
+              />
+            </section>
+          </div>
+          <section className="presenter-pane presenter-pane-notes">
+            <h2>{copy.speakerNotes}</h2>
+            <div id="presenter-notes" className="presenter-notes" />
+          </section>
+          <footer className="presenter-status">
+            <output id="presenter-counter" aria-label={copy.counter} />
+            <output id="presenter-timer" aria-label={copy.elapsed}>
+              00:00
+            </output>
+          </footer>
+        </template>
         <template id="katex-license">
           <pre>{katexLicense}</pre>
         </template>

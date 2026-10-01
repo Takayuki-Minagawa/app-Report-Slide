@@ -28,6 +28,8 @@ const diagnosticByCode = new Map<string, string>(
       'An element attribute line is invalid. Check its syntax and values.',
     'markdown.break-invalid':
       'A page or slide break must be a top-level ::: pagebreak or ::: slidebreak block.',
+    'markdown.notes-invalid':
+      'Speaker notes must be a top-level ::: notes block closed by :::, containing only paragraphs.',
     'markdown.token-ignored': 'An unsupported Markdown element was ignored.',
     'markdown.inline-math-delimiter':
       'Escape dollar signs inside inline math as \\$.',

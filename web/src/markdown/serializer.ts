@@ -2,6 +2,7 @@ import { stringify } from 'yaml';
 import { serializeBlockAttributes } from './attributes';
 
 import type {
+  BlockquoteNode,
   DocumentData,
   DocumentNode,
   InlineNode,
@@ -132,6 +133,8 @@ function serializeInline(nodes: InlineNode[] | undefined): string {
       switch (node.type) {
         case 'reference':
           return `[@${node.attrs.target}]`;
+        case 'footnote':
+          return `^[${escapeText(node.attrs.text.trim())}]`;
         case 'text':
           return serializeText(node.text, node.marks);
         case 'inlineMath':
@@ -156,7 +159,11 @@ function protectParagraphLine(line: string): string {
       : `&#32;${line.slice(1)}`;
   }
 
-  if (/^\s*:::\s+(?:pagebreak|slidebreak|kumi-table|kumi-chart)\s*$/.test(line))
+  if (
+    /^\s*:::\s+(?:pagebreak|slidebreak|kumi-table|kumi-chart|notes)\s*$/.test(
+      line,
+    )
+  )
     return line.replace(':', '\\:');
 
   const match = /^( {0,3})(.*)$/.exec(line);
@@ -299,6 +306,18 @@ function serializeTable(table: TableNode): string {
   ].join('\n');
 }
 
+/**
+ * GitHub writes the marker and text in one paragraph. Only do so when the text
+ * starts plainly; otherwise a separate paragraph keeps markers and figures intact.
+ */
+function calloutPrefix(node: BlockquoteNode): string {
+  if (!node.attrs.callout) return '';
+  const first = node.content[0];
+  const compact =
+    first?.type === 'paragraph' && first.content?.[0]?.type === 'text';
+  return `[!${node.attrs.callout.toUpperCase()}]${compact ? '\n' : '\n\n'}`;
+}
+
 function serializeNode(node: DocumentNode): string {
   switch (node.type) {
     case 'heading':
@@ -327,10 +346,12 @@ function serializeNode(node: DocumentNode): string {
     case 'listItem':
       return serializeBlocks(node.content);
     case 'blockquote':
-      return serializeBlocks(node.content)
+      return (calloutPrefix(node) + serializeBlocks(node.content))
         .split('\n')
         .map((line) => `> ${line}`)
         .join('\n');
+    case 'speakerNotes':
+      return ['::: notes', serializeBlocks(node.content), ':::'].join('\n');
     case 'codeBlock': {
       const language = node.attrs.language ?? '';
       const code = node.content?.map((text) => text.text).join('') ?? '';

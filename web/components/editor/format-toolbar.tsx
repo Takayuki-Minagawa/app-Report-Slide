@@ -11,15 +11,31 @@ import {
   Italic,
   List,
   ListOrdered,
+  NotebookPen,
   Quote,
   Sigma,
+  Superscript,
   Table2,
 } from 'lucide-react';
 import { useAppPreferences } from '@/components/app-preferences';
 import { Button } from '@/components/ui/button';
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from '@/components/ui/native-select';
 import { Separator } from '@/components/ui/separator';
-import { createNodeId, type DocumentType } from '@/src/document/model';
-import { insertDocumentBreak } from '@/src/editor/document-commands';
+import {
+  calloutTypes,
+  createNodeId,
+  isCalloutType,
+  type DocumentType,
+} from '@/src/document/model';
+import {
+  insertDocumentBreak,
+  insertFootnote,
+  insertSpeakerNotes,
+  setCallout,
+} from '@/src/editor/document-commands';
 
 export function FormatToolbar({
   editor,
@@ -29,6 +45,9 @@ export function FormatToolbar({
   documentType: DocumentType;
 }) {
   const { copy } = useAppPreferences();
+  const activeCallout: unknown = editor?.isActive('blockquote')
+    ? editor.getAttributes('blockquote').callout
+    : undefined;
   return (
     <div
       className="format-toolbar"
@@ -89,6 +108,28 @@ export function FormatToolbar({
       >
         <Quote />
       </FormatButton>
+      <NativeSelect
+        aria-label={copy.workspace.calloutType}
+        title={copy.workspace.calloutType}
+        size="sm"
+        value={isCalloutType(activeCallout) ? activeCallout : ''}
+        onChange={(event) =>
+          editor &&
+          setCallout(
+            editor,
+            isCalloutType(event.target.value) ? event.target.value : null,
+          )
+        }
+      >
+        <NativeSelectOption value="">
+          {copy.workspace.calloutNone}
+        </NativeSelectOption>
+        {calloutTypes.map((type) => (
+          <NativeSelectOption key={type} value={type}>
+            {copy.callout[type]}
+          </NativeSelectOption>
+        ))}
+      </NativeSelect>
       <Separator orientation="vertical" className="mx-1 h-5 self-center" />
       <FormatButton
         label={copy.workspace.inlineMath}
@@ -152,6 +193,22 @@ export function FormatToolbar({
       >
         <ChartNoAxesCombined />
       </FormatButton>
+      <FormatButton
+        label={copy.workspace.insertFootnote}
+        onClick={() =>
+          editor && insertFootnote(editor, copy.workspace.footnoteDefault)
+        }
+      >
+        <Superscript />
+      </FormatButton>
+      {documentType === 'slide' && (
+        <FormatButton
+          label={copy.workspace.insertSpeakerNotes}
+          onClick={() => editor && insertSpeakerNotes(editor)}
+        >
+          <NotebookPen />
+        </FormatButton>
+      )}
       <Button
         size="sm"
         variant="ghost"

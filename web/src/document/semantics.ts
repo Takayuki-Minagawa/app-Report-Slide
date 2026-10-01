@@ -1,4 +1,9 @@
-import { inlineText, type DocumentData, type DocumentNode } from './model';
+import {
+  inlineText,
+  type DocumentData,
+  type DocumentNode,
+  type FootnoteNode,
+} from './model';
 import { walkDocumentTree, type DocumentTreeNode } from './traversal';
 
 export const labelPattern = /^[A-Za-z][A-Za-z0-9:._-]{0,127}$/;
@@ -125,4 +130,17 @@ export function splitDocumentPages(document: DocumentData): DocumentNode[][] {
     else pages[pages.length - 1].push(node);
   }
   return pages;
+}
+
+/** Footnotes in reading order. Speaker notes are not audience output, so theirs are skipped. */
+export function collectFootnotes(
+  nodes: readonly DocumentTreeNode[],
+): FootnoteNode[] {
+  const footnotes: FootnoteNode[] = [];
+  for (const node of nodes) {
+    if (node.type === 'footnote') footnotes.push(node);
+    else if (node.type !== 'speakerNotes' && 'content' in node && node.content)
+      footnotes.push(...collectFootnotes(node.content));
+  }
+  return footnotes;
 }
