@@ -132,6 +132,9 @@ export interface UiMessages {
     code: string;
     exportHtml: string;
     exportReportHtml: string;
+    exportWord: string;
+    exportPowerPoint: string;
+    exportPdf: string;
     exportingHtml: string;
     saveArchive: string;
     insertChart: string;
@@ -226,6 +229,11 @@ export interface UiMessages {
     htmlExternalImages: string;
     htmlExportDescription: string;
     htmlExportCancelled: string;
+    exportingFile: (format: string) => string;
+    exportedFile: (format: string) => string;
+    unableToExportFile: (format: string) => string;
+    binaryExportDescription: string;
+    binaryExportCancelled: string;
     recoveredDraft: string;
     unableToRecover: string;
     recoveryUnavailable: string;
@@ -425,6 +433,9 @@ export const messages: Record<AppLocale, UiMessages> = {
       code: 'コード',
       exportHtml: 'HTMLスライドを出力',
       exportReportHtml: 'Report HTMLを出力',
+      exportWord: 'Word（.docx）を出力',
+      exportPowerPoint: 'PowerPoint（.pptx）を出力',
+      exportPdf: 'PDFを出力',
       exportingHtml: 'HTMLスライドを出力中',
       saveArchive: '画像を含む編集用ZIP',
       insertChart: 'グラフを挿入',
@@ -526,6 +537,13 @@ export const messages: Record<AppLocale, UiMessages> = {
         '適用または保存するまで下書きとして保持されます',
       exportingHtml: 'HTMLスライドを生成しています',
       exportedHtml: 'HTMLスライドを出力しました',
+      exportingFile: (format) => `${format}ファイルを生成しています`,
+      exportedFile: (format) => `${format}ファイルを出力しました`,
+      unableToExportFile: (format) => `${format}ファイルを出力できませんでした`,
+      binaryExportDescription:
+        '編集を再開するために、ZIPまたはMarkdown／JSONも保存してください。',
+      binaryExportCancelled:
+        '文書が変更されたため出力を中止しました。もう一度出力してください。',
       htmlExportCancelled:
         'HTML出力を中止しました。現在の文書でもう一度出力してください。',
       unableToExportHtml: 'HTMLスライドを出力できませんでした',
@@ -631,6 +649,8 @@ export const messages: Record<AppLocale, UiMessages> = {
       exportTitle: '4. 確認・保存する',
       exportSteps: [
         '「完成プレビュー」でReportはA4ページ、Slideは16:9スライドとして確認できます。',
+        'Reportは「Word」で.docx、Slideは「PPTX」で.pptxを出力できます。「PDF」は両方に対応し、章別プロジェクトでは有効な章をまとめて出力します。未適用のMarkdown下書きも対象になります。',
+        'Word／PowerPointの数式はLaTeXテキスト、Wordのグラフはデータ表になります。PDFは紙面を画像化するため文字を選択・検索できません。長いReportの分割位置を確認してください。外部URLの画像はローカル画像として取り込んでから出力します。',
         'ヘッダーのMarkdownまたはJSONでファイルを保存します。Document JSONはMarkdownで表せない構造も保持できます。',
         'Slide文書では「HTML」で閲覧・発表用の単一HTMLファイルを出力できます。前へ／次へボタンや矢印キーで移動し、進捗バーで現在位置を確認できます。Fキーで全画面表示、Pキーまたは「印刷／PDF保存」で全スライドを印刷できます。',
         'HTMLスライドでは O で一覧、数字＋Enter で番号を指定して移動、B で暗転できます。N は発表者ノートを画面下に、S は現在と次のスライド・ノート・経過時間を別ウィンドウ（発表者ビュー）に表示します。ノートは印刷されません。',
@@ -778,6 +798,9 @@ export const messages: Record<AppLocale, UiMessages> = {
       code: 'Code',
       exportHtml: 'Export HTML slides',
       exportReportHtml: 'Export Report HTML',
+      exportWord: 'Export Word (.docx)',
+      exportPowerPoint: 'Export PowerPoint (.pptx)',
+      exportPdf: 'Export PDF',
       exportingHtml: 'Exporting HTML slides',
       saveArchive: 'Editable ZIP with images',
       insertChart: 'Insert chart',
@@ -880,6 +903,13 @@ export const messages: Record<AppLocale, UiMessages> = {
         'The draft is kept until you apply or save it',
       exportingHtml: 'Generating HTML slides',
       exportedHtml: 'Exported HTML slides',
+      exportingFile: (format) => `Generating ${format} file`,
+      exportedFile: (format) => `Exported ${format} file`,
+      unableToExportFile: (format) => `Could not export ${format} file`,
+      binaryExportDescription:
+        'Also save ZIP or Markdown/JSON to resume editing in KUMI.',
+      binaryExportCancelled:
+        'Export cancelled because the document changed. Export again.',
       htmlExportCancelled:
         'HTML export was cancelled. Export the current document again.',
       unableToExportHtml: 'Could not export HTML slides',
@@ -986,6 +1016,8 @@ export const messages: Record<AppLocale, UiMessages> = {
       exportTitle: '4. Review and save',
       exportSteps: [
         'Use Preview to review Reports as A4 pages and Slides as 16:9 slides.',
+        'Use Word to export Reports as .docx, PPTX to export Slides as .pptx, and PDF for either type. Chapter projects export all enabled chapters together. Unapplied Markdown drafts are included.',
+        'Office equations become LaTeX text and Word charts become data tables. PDF pages are images, so text cannot be selected or searched; check page splits in long Reports. Import external images locally before exporting.',
         'Save Markdown or JSON from the header. Document JSON preserves structures that Markdown cannot express.',
         'For Slide documents, use HTML to export a standalone file for viewing and presenting. Use Previous/Next or the arrow keys to navigate, and the progress bar to track your place. Press F for fullscreen where supported; press P or Print / Save PDF to print every slide.',
         'In HTML slides, press O for the overview, type a number and press Enter to go to that slide, and press B to black out the screen. N shows speaker notes below the slide; S opens the presenter view, a separate window with the current and next slides, notes, and elapsed time. Notes are not printed.',

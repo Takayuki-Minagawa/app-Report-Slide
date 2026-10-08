@@ -106,6 +106,9 @@ export function EditorWorkspace() {
         saveArchive={workspace.saveArchive}
         exportHtml={workspace.exportHtml}
         htmlExporting={workspace.htmlExporting}
+        exportOffice={workspace.exportOffice}
+        exportPdf={workspace.exportPdf}
+        binaryExporting={workspace.binaryExporting}
         openNavigator={() => setNavigatorOpen(true)}
         openProperties={() => setPropertiesOpen(true)}
         toggleSearch={() => setSearchOpen((open) => !open)}

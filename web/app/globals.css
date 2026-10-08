@@ -779,6 +779,28 @@
   content: '注意';
 }
 
+@media (max-width: 1280px) {
+  .workspace-header {
+    height: auto;
+    min-height: 56px;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-block: 8px;
+  }
+
+  .workspace-header-actions {
+    flex-basis: 100%;
+    min-width: 0;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .workspace-header-actions > * {
+    flex-shrink: 0;
+  }
+}
+
 @media (max-width: 1120px) {
   .workspace-grid {
     grid-template-columns: 210px minmax(520px, 1fr);

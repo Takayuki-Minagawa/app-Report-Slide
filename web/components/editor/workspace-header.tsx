@@ -5,6 +5,8 @@ import {
   FileCode2,
   FileJson,
   FileText,
+  FileDown,
+  Presentation,
   FolderArchive,
   Languages,
   Moon,
@@ -34,6 +36,9 @@ interface WorkspaceHeaderProps {
   saveArchive: () => Promise<void>;
   exportHtml: () => Promise<void>;
   htmlExporting: boolean;
+  exportOffice: () => Promise<void>;
+  exportPdf: () => Promise<void>;
+  binaryExporting: 'office' | 'pdf' | null;
   openNavigator: () => void;
   openProperties: () => void;
   toggleSearch: () => void;
@@ -49,6 +54,9 @@ export function WorkspaceHeader({
   saveArchive,
   exportHtml,
   htmlExporting,
+  exportOffice,
+  exportPdf,
+  binaryExporting,
   openNavigator,
   openProperties,
   toggleSearch,
@@ -65,6 +73,11 @@ export function WorkspaceHeader({
     document.type === 'slide'
       ? copy.workspace.exportHtml
       : copy.workspace.exportReportHtml;
+  const officeLabel =
+    document.type === 'slide'
+      ? copy.workspace.exportPowerPoint
+      : copy.workspace.exportWord;
+  const exporting = htmlExporting || binaryExporting !== null;
   return (
     <header className="workspace-header">
       <div className="workspace-brand flex min-w-56 items-center gap-2.5">
@@ -211,10 +224,37 @@ export function WorkspaceHeader({
           }
           title={exportHtmlLabel}
           aria-busy={htmlExporting}
-          disabled={htmlExporting}
+          disabled={exporting}
           onClick={() => void exportHtml()}
         >
           <FileCode2 data-icon="inline-start" /> HTML
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          aria-label={officeLabel}
+          title={officeLabel}
+          aria-busy={binaryExporting === 'office'}
+          disabled={exporting}
+          onClick={() => void exportOffice()}
+        >
+          {document.type === 'slide' ? (
+            <Presentation data-icon="inline-start" />
+          ) : (
+            <FileText data-icon="inline-start" />
+          )}
+          {document.type === 'slide' ? 'PPTX' : 'Word'}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          aria-label={copy.workspace.exportPdf}
+          title={copy.workspace.exportPdf}
+          aria-busy={binaryExporting === 'pdf'}
+          disabled={exporting}
+          onClick={() => void exportPdf()}
+        >
+          <FileDown data-icon="inline-start" /> PDF
         </Button>
         <Button size="sm" onClick={() => saveDocument('markdown')}>
           <Save data-icon="inline-start" />{' '}

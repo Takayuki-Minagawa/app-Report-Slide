@@ -281,7 +281,7 @@ export function downloadDocument(
 export function downloadFile(
   document: DocumentData,
   extension: string,
-  content: string | Uint8Array<ArrayBuffer>,
+  content: string | Uint8Array<ArrayBuffer> | Blob,
   type: string,
 ): void {
   const url = URL.createObjectURL(new Blob([content], { type }));

@@ -66,7 +66,14 @@ export default defineConfig(async () => {
       client: {
         // Avoid a first-export dependency discovery reload that would discard edits.
         optimizeDeps: {
-          include: ['react-dom/server.browser', '@zip.js/zip.js'],
+          include: [
+            'react-dom/server.browser',
+            '@zip.js/zip.js',
+            'docx',
+            'pptxgenjs',
+            'jspdf',
+            'html-to-image',
+          ],
         },
       },
     },

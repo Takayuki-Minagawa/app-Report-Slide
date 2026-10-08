@@ -194,6 +194,10 @@ export function useDocumentWorkspace() {
   const recoveryFailureReported = useRef(false);
   const [htmlExporting, setHtmlExporting] = useState(false);
   const activeHtmlExport = useRef<number | null>(null);
+  const [binaryExporting, setBinaryExporting] = useState<
+    'office' | 'pdf' | null
+  >(null);
+  const activeBinaryExport = useRef<number | null>(null);
   const importRevision = useRef(0);
   const invalidatePendingImport = useCallback(() => {
     importRevision.current++;
@@ -203,6 +207,7 @@ export function useDocumentWorkspace() {
   useEffect(
     () => () => {
       activeHtmlExport.current = null;
+      activeBinaryExport.current = null;
     },
     [],
   );
@@ -904,7 +909,11 @@ export function useDocumentWorkspace() {
   };
 
   const exportHtml = async () => {
-    if (activeHtmlExport.current !== null) return;
+    if (
+      activeHtmlExport.current !== null ||
+      activeBinaryExport.current !== null
+    )
+      return;
     const revision = ++importRevision.current;
     activeHtmlExport.current = revision;
     setHtmlExporting(true);
@@ -960,6 +969,91 @@ export function useDocumentWorkspace() {
               : current,
           );
         }
+      }
+    }
+  };
+
+  const exportBinary = async (format: 'office' | 'pdf') => {
+    if (
+      activeBinaryExport.current !== null ||
+      activeHtmlExport.current !== null
+    )
+      return;
+    const revision = ++importRevision.current;
+    activeBinaryExport.current = revision;
+    setBinaryExporting(format);
+    let label =
+      format === 'pdf'
+        ? 'PDF'
+        : document.type === 'slide'
+          ? 'PowerPoint'
+          : 'Word';
+    try {
+      const snapshot = snapshotDocument();
+      validateChapterDraft(snapshot.document);
+      const source =
+        snapshot.document.type === 'report' && projectSession
+          ? assembleReportProject(
+              projectWithDocument(projectSession, snapshot.document),
+            )
+          : snapshot.document;
+      const extension =
+        format === 'pdf' ? 'pdf' : source.type === 'slide' ? 'pptx' : 'docx';
+      label =
+        extension === 'pdf'
+          ? 'PDF'
+          : extension === 'pptx'
+            ? 'PowerPoint'
+            : 'Word';
+      setStatus({ kind: 'idle', title: statusMessage('exportingFile', label) });
+      const result =
+        format === 'pdf'
+          ? await (
+              await import('@/src/export/document-pdf')
+            ).exportDocumentPdf(source, assets, locale)
+          : source.type === 'slide'
+            ? await (
+                await import('@/src/export/slide-pptx')
+              ).exportSlidePptx(source, assets, locale)
+            : await (
+                await import('@/src/export/report-docx')
+              ).exportReportDocx(source, assets, locale);
+      if (revision !== importRevision.current) return;
+      const mime =
+        extension === 'pdf'
+          ? 'application/pdf'
+          : extension === 'pptx'
+            ? 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+            : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      downloadFile(source, extension, result.blob, mime);
+      setStatus({
+        kind: 'success',
+        title: statusMessage('exportedFile', label),
+        description: [
+          ...snapshot.diagnostics.map(diagnosticStatusMessage),
+          statusMessage('binaryExportDescription'),
+          ...result.warnings,
+        ],
+      });
+    } catch (error) {
+      if (revision === importRevision.current)
+        setStatus({
+          kind: 'error',
+          title: statusMessage('unableToExportFile', label),
+          description: describeWorkspaceError(error, 'invalidDocumentData'),
+        });
+    } finally {
+      if (activeBinaryExport.current === revision) {
+        activeBinaryExport.current = null;
+        setBinaryExporting(null);
+        if (revision !== importRevision.current)
+          setStatus((current) =>
+            typeof current.title === 'object' &&
+            'key' in current.title &&
+            current.title.key === 'exportingFile'
+              ? { kind: 'idle', title: statusMessage('binaryExportCancelled') }
+              : current,
+          );
       }
     }
   };
@@ -1030,6 +1124,9 @@ export function useDocumentWorkspace() {
     saveArchive,
     exportHtml,
     htmlExporting,
+    exportOffice: () => exportBinary('office'),
+    exportPdf: () => exportBinary('pdf'),
+    binaryExporting,
     updatePageSettings,
     updateTheme,
     updateDocumentFlag,

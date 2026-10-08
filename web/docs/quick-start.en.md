@@ -78,3 +78,9 @@ Apply or discard Markdown and return to the visual editor before changing the ch
 ## Published app and your data
 
 GitHub Pages publishes the app and its bundled sample. Imported documents and images and your edits stay in this browser; they are not automatically sent to or published on GitHub Pages or in the repository. Images linked by external URLs are requested from their hosts when displayed. You control any files you save or share.
+
+## Word, PowerPoint and PDF
+
+Use **Word** in the header for Report `.docx` files, **PPTX** for Slide `.pptx` files, and **PDF** for either type. Chapter projects combine all enabled chapters. Unapplied Markdown drafts are included without changing your source or save state.
+
+Office equations become LaTeX text; Word charts become data tables. PDF pages are images, so text cannot be selected or searched. Check page splits in long Reports. Import external images as local files alongside the source. Also save ZIP or Markdown/JSON to resume editing.
