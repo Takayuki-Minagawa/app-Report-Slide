@@ -130,7 +130,7 @@ npm run build
 
 ### GitHub Pagesの運用
 
-GitHub Actionsの利用制限に合わせ、通常のCIは行いません。品質検証はローカルの `npm run check` と必要なE2Eで行います。公開時だけActionsを一時的に有効化し、Actions → `Publish GitHub Pages` → `Run workflow` で `main` を選んで手動起動します。デプロイを確認したらActionsを無効に戻します。通常のブランチpush、タグのpush、PRでは起動しません。`github-pages` 環境は `main` からの公開だけを許可しています。GitHub Pagesのブランチ公開もGitHub内部でActionsを使用するため、Actionsを使わない公開手段として扱いません。
+GitHub Actionsは有効のまま運用し、公開後も無効に戻しません。通常のCIは行わず、品質検証はローカルの `npm run check` と必要なE2Eで行います。公開時はActions → `Publish GitHub Pages` → `Run workflow` で `main` を選んで手動起動します。通常のブランチpush、タグのpush、PRでは起動しません。`github-pages` 環境は `main` からの公開だけを許可しています。GitHub Pagesのブランチ公開もGitHub内部でActionsを使用するため、Actionsを使わない公開手段として扱いません。
 
 ## 設計
 
