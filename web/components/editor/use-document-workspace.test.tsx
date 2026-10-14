@@ -6,6 +6,8 @@ import type { FigureNode } from '@/src/document/model';
 import type { ExtractionResult } from '@/src/document/extraction';
 import type { PdfFigureImport } from './pdf-import-dialog';
 import { useDocumentWorkspace } from './use-document-workspace';
+import { exportSlideHtml } from '@/src/export/slide-html';
+import { writeDocumentArchive } from '@/src/workspace/document-archive';
 
 function wrapper({ children }: { children: ReactNode }) {
   return <AppPreferencesProvider>{children}</AppPreferencesProvider>;
@@ -841,5 +843,172 @@ describe('normal image insertion', () => {
     expect(result.current.document).toEqual(lockedDocument);
     expect(revokeUrl).toHaveBeenCalledExactlyOnceWith('blob:rejected-image');
     unmount();
+  });
+});
+
+describe('restored image history', () => {
+  it.each(['Markdown', 'HTML', 'ZIP'] as const)(
+    'keeps a Slide image available to deletion Undo/Redo after %s starts a new editing session',
+    async (format) => {
+      let serial = 0;
+      const revokeUrl = vi.fn();
+      vi.stubGlobal(
+        'URL',
+        Object.assign(class extends URL {}, {
+          createObjectURL: () => `blob:restored-history-${++serial}`,
+          revokeObjectURL: revokeUrl,
+        }),
+      );
+      vi.stubGlobal('confirm', () => true);
+      const imageBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          async () =>
+            new Response(imageBytes, {
+              headers: { 'content-type': 'image/png' },
+            }),
+        ),
+      );
+      const { result, unmount } = await workspace();
+      act(() => result.current.createDocument('slide'));
+      act(() => {
+        expect(
+          result.current.insertImage(
+            new File([imageBytes], 'restored.png', { type: 'image/png' }),
+            'after-block',
+          ).ok,
+        ).toBe(true);
+      });
+      const original = result.current.document.children.find(
+        (node): node is FigureNode => node.type === 'figure',
+      )!;
+      const assets = new Map([
+        [
+          original.attrs.src,
+          result.current.resolveImageUrl(original.attrs.src),
+        ],
+      ]);
+      if (format === 'Markdown') {
+        act(() => result.current.changeView('markdown'));
+        act(() =>
+          result.current.updateMarkdown(
+            result.current.markdownDraft + '\n\nApplied source',
+          ),
+        );
+        act(() => result.current.applyMarkdown());
+      } else if (format === 'HTML') {
+        const saved = await exportSlideHtml(
+          result.current.document,
+          assets,
+          'ja',
+        );
+        await act(async () =>
+          result.current.importFiles([sourceFile('restored.html', saved.html)]),
+        );
+        expect(result.current.pendingHtmlImport).not.toBeNull();
+        act(() => result.current.confirmHtmlImport());
+      } else {
+        const bytes = await writeDocumentArchive(
+          result.current.document,
+          assets,
+        );
+        const file = new File([Uint8Array.from(bytes).buffer], 'restored.zip', {
+          type: 'application/zip',
+        });
+        Object.defineProperty(file, 'arrayBuffer', {
+          value: async () => Uint8Array.from(bytes).buffer,
+        });
+        await act(async () => result.current.importFiles([file]));
+      }
+      await waitFor(() => expect(result.current.view).toBe('visual'));
+      const figure = result.current.document.children.find(
+        (node): node is FigureNode => node.type === 'figure',
+      )!;
+      const url = result.current.resolveImageUrl(figure.attrs.src);
+      expect(url).toMatch(/^blob:restored-history-/);
+      act(() => result.current.focusNode(figure.attrs.nodeId));
+      act(() => {
+        expect(result.current.editor!.commands.deleteSelection()).toBe(true);
+      });
+      expect(
+        result.current.document.children.some((node) => node.type === 'figure'),
+      ).toBe(false);
+      expect(result.current.resolveImageUrl(figure.attrs.src)).toBe(url);
+      expect(revokeUrl).not.toHaveBeenCalledWith(url);
+      act(() => {
+        expect(result.current.editor!.commands.undo()).toBe(true);
+      });
+      expect(
+        result.current.document.children.find(
+          (node) => node.attrs.nodeId === figure.attrs.nodeId,
+        ),
+      ).toMatchObject(figure);
+      expect(result.current.resolveImageUrl(figure.attrs.src)).toBe(url);
+      act(() => {
+        expect(result.current.editor!.commands.redo()).toBe(true);
+      });
+      expect(
+        result.current.document.children.some((node) => node.type === 'figure'),
+      ).toBe(false);
+      expect(revokeUrl).not.toHaveBeenCalledWith(url);
+      act(() => result.current.createDocument('slide'));
+      expect(revokeUrl).toHaveBeenCalledWith(url);
+      unmount();
+      expect(
+        revokeUrl.mock.calls.filter(([revoked]) => revoked === url),
+      ).toHaveLength(1);
+    },
+  );
+
+  it('counts retained Undo images in the 50 MB limit and releases them when an empty source replaces the history', async () => {
+    let serial = 0;
+    const revokeUrl = vi.fn();
+    vi.stubGlobal(
+      'URL',
+      Object.assign(class extends URL {}, {
+        createObjectURL: () => `blob:retained-budget-${++serial}`,
+        revokeObjectURL: revokeUrl,
+      }),
+    );
+    const { result, unmount } = await workspace();
+    const image = (name: string) => {
+      const file = new File(['image'], name, { type: 'image/png' });
+      Object.defineProperty(file, 'size', { value: 20 * 1024 * 1024 });
+      return file;
+    };
+    act(() => result.current.createDocument('slide'));
+    for (const name of ['first.png', 'second.png'])
+      act(() => {
+        expect(result.current.insertImage(image(name), 'after-block').ok).toBe(
+          true,
+        );
+      });
+    act(() => {
+      result.current.editor!.commands.clearContent();
+    });
+    expect(revokeUrl).not.toHaveBeenCalled();
+    act(() => {
+      expect(
+        result.current.insertImage(image('over-budget.png'), 'after-block').ok,
+      ).toBe(false);
+    });
+    act(() => result.current.changeView('markdown'));
+    act(() =>
+      result.current.updateMarkdown('---\ntype: slide\n---\n\n# Fresh source'),
+    );
+    act(() => result.current.applyMarkdown());
+    expect(revokeUrl.mock.calls.map(([url]) => url)).toEqual([
+      'blob:retained-budget-1',
+      'blob:retained-budget-2',
+    ]);
+    act(() => {
+      expect(
+        result.current.insertImage(image('new-session.png'), 'after-block').ok,
+      ).toBe(true);
+    });
+    expect(serial).toBe(3);
+    unmount();
+    expect(revokeUrl).toHaveBeenCalledTimes(3);
   });
 });

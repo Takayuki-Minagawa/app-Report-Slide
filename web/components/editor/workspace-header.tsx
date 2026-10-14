@@ -103,32 +103,38 @@ export function WorkspaceHeader({
         </div>
       </div>
 
-      <div className="workspace-document-title flex min-w-0 flex-1 items-center justify-center gap-2">
-        <FileText className="size-4 text-muted-foreground" />
-        <span className="truncate text-sm font-semibold">
-          {documentTitle(document)}
-        </span>
-        {dirty && (
+      <div className="workspace-document-title flex flex-1 flex-col items-center gap-1">
+        <div className="flex w-full min-w-0 items-center justify-center gap-2">
+          <FileText className="size-4 shrink-0 text-muted-foreground" />
           <span
-            className="size-1.5 rounded-full bg-amber-500"
-            aria-label={copy.workspace.unsaved}
-          />
-        )}
-        <Badge
-          variant="outline"
-          className="document-type-badge border-blue-200 bg-blue-50 text-[10px] text-blue-700"
-        >
-          {project ? copy.project.projectBadge : document.type.toUpperCase()}
-        </Badge>
+            className="min-w-0 truncate text-sm font-semibold"
+            title={documentTitle(document)}
+          >
+            {documentTitle(document)}
+          </span>
+          {dirty && (
+            <span
+              className="size-1.5 shrink-0 rounded-full bg-amber-500"
+              aria-label={copy.workspace.unsaved}
+            />
+          )}
+          <Badge
+            variant="outline"
+            className="document-type-badge shrink-0 whitespace-nowrap border-blue-200 bg-blue-50 text-[10px] text-blue-700"
+          >
+            {project ? copy.project.projectBadge : document.type.toUpperCase()}
+          </Badge>
+        </div>
         <output
           aria-label={locale === 'ja' ? '保存状態' : 'Save status'}
-          className="hidden text-[10px] text-muted-foreground xl:block"
+          className="max-w-full truncate whitespace-nowrap text-[10px] text-muted-foreground"
+          title={saveState}
         >
           {saveState}
         </output>
       </div>
 
-      <div className="workspace-header-actions flex min-w-72 justify-end gap-1.5">
+      <div className="workspace-header-actions flex flex-wrap items-center justify-end gap-1.5">
         {project && setExportScope && (
           <select
             aria-label={locale === 'ja' ? '出力範囲' : 'Export scope'}

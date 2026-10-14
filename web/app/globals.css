@@ -139,8 +139,21 @@
 }
 
 .workspace-header {
-  @apply flex h-14 shrink-0 items-center border-b bg-card px-3;
+  @apply flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b bg-card px-3 py-2;
   box-shadow: 0 1px 0 rgb(15 23 42 / 4%);
+}
+
+.workspace-document-title {
+  min-width: min(100%, 20rem);
+}
+
+.workspace-header-actions {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.workspace-header-actions > * {
+  flex-shrink: 0;
 }
 
 .workspace-header-navigator-toggle,
@@ -779,25 +792,10 @@
   content: '注意';
 }
 
-@media (max-width: 1280px) {
-  .workspace-header {
-    height: auto;
-    min-height: 56px;
-    flex-wrap: wrap;
-    gap: 6px;
-    padding-block: 8px;
-  }
-
+@media (max-width: 1600px) {
   .workspace-header-actions {
     flex-basis: 100%;
-    min-width: 0;
     justify-content: flex-start;
-    overflow-x: auto;
-    padding-bottom: 2px;
-  }
-
-  .workspace-header-actions > * {
-    flex-shrink: 0;
   }
 }
 
@@ -830,9 +828,5 @@
 
   .workspace-brand {
     min-width: auto;
-  }
-
-  .workspace-header-actions {
-    min-width: 0;
   }
 }

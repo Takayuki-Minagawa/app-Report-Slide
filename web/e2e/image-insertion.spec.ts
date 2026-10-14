@@ -37,6 +37,28 @@ async function ready(page: Page) {
   return editor;
 }
 
+async function expectOcrSnapshot(page: Page, raw: string) {
+  await page
+    .locator('[contenteditable="true"][aria-label="文書本文"] img')
+    .click();
+  await page
+    .getByRole('button', { name: '画像の文字をOCRで読み取る', exact: true })
+    .click();
+  const dialog = page.getByRole('dialog', {
+    name: '画像の文字を読み取る',
+    exact: true,
+  });
+  await expect(
+    dialog.getByLabel('画像OCRの認識結果', { exact: true }),
+  ).toHaveValue('確認した値は25.0です。');
+  await dialog.getByText('読み取り時の原文', { exact: true }).click();
+  await expect(dialog.locator('pre')).toHaveText(raw);
+  await dialog
+    .getByRole('button', { name: '画像OCRを閉じる', exact: true })
+    .click();
+  await expect(dialog).toBeHidden();
+}
+
 test('Reportの段落後へPNGを挿入し、そのままOCRで読み取り、HTMLとZIPから再編集できる', async ({
   page,
   browser,
@@ -90,6 +112,7 @@ test('Reportの段落後へPNGを挿入し、そのままOCRで読み取り、HT
   const result = ocr.getByLabel('画像OCRの認識結果', { exact: true });
   await expect(result).toBeEnabled({ timeout: 90_000 });
   await expect(result).toHaveValue(/Sample\s*25\.0/);
+  const rawRecognition = await result.inputValue();
   await result.fill('確認した値は25.0です。');
   await ocr
     .getByRole('button', { name: '確認した本文を図の後に挿入', exact: true })
@@ -144,6 +167,61 @@ test('Reportの段落後へPNGを挿入し、そのままOCRで読み取り、HT
             ),
         )
         .toBe(1000);
+      await expectOcrSnapshot(restored, rawRecognition);
+      await restoredEditor
+        .getByText('確認した値は25.0です。', { exact: true })
+        .fill('再確認した値は25.0です。');
+      await expect(restoredEditor.locator('p')).toHaveText([
+        '検査メモ',
+        '再確認した値は25.0です。',
+        '既存の結論',
+      ]);
+      const redownload = restored.waitForEvent('download');
+      await restored
+        .getByRole('button', {
+          name: '編集できるReport HTMLを保存',
+          exact: true,
+        })
+        .click();
+      const revisedHtml = await downloadBytes(await redownload);
+      const reopenedContext = await browser.newContext({
+        viewport: { width: 1366, height: 900 },
+      });
+      try {
+        const reopened = await reopenedContext.newPage();
+        const reopenedEditor = await ready(reopened);
+        await reopened
+          .getByLabel('HTML・Markdown・JSONファイル')
+          .setInputFiles({
+            name: `revised-from-${format}.html`,
+            mimeType: 'text/html',
+            buffer: revisedHtml,
+          });
+        await reopened
+          .getByRole('dialog', { name: 'HTML取込の確認' })
+          .getByRole('button', { name: '確認して取り込む', exact: true })
+          .click();
+        await expect(reopenedEditor.locator('p')).toHaveText([
+          '検査メモ',
+          '再確認した値は25.0です。',
+          '既存の結論',
+        ]);
+        await expect(reopenedEditor.locator('img')).toHaveCount(1);
+        await expect
+          .poll(() =>
+            reopenedEditor
+              .locator('img')
+              .evaluate(
+                (element: HTMLImageElement) =>
+                  element.complete && element.naturalWidth,
+              ),
+          )
+          .toBe(1000);
+        // Editing document prose must not rewrite the original reviewed OCR snapshot.
+        await expectOcrSnapshot(reopened, rawRecognition);
+      } finally {
+        await reopenedContext.close();
+      }
     } finally {
       await context.close();
     }

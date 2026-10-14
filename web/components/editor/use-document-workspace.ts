@@ -144,16 +144,6 @@ function imageSources(
   return new Set(referencedAssets(nodes, metadata).map(({ source }) => source));
 }
 
-function pdfFigureAssets(nodes: readonly DocumentNode[]): Set<string> {
-  const sources = new Set<string>();
-  for (const node of walkDocumentTree(nodes)) {
-    if (node.type !== 'figure' || !node.attrs.figureEdit?.pdfSource) continue;
-    sources.add(node.attrs.src);
-    sources.add(node.attrs.figureEdit.pdfSource.asset);
-  }
-  return sources;
-}
-
 function retainedAssetsForSources(
   assets: AssetUrls,
   sources: ReadonlySet<string>,
@@ -246,8 +236,12 @@ export function useDocumentWorkspace() {
   const [markdownDirty, setMarkdownDirty] = useState(false);
   const [assetStore] = useState(() => new ImageAssetStore());
   const [assets, setAssets] = useState<AssetUrls>(() => assetStore.assets);
-  // PDF edits can replace rendered pages. Keep those blobs until the editor history is replaced.
-  const pdfHistoryAssets = useRef(pdfFigureAssets(initialDocument.children));
+  // Retain assets reachable from the initial history state as well as newly
+  // inserted images/PDF pages. Deletion must not revoke a blob Undo can restore.
+  // A new source resets this set so assets from expired histories can be freed.
+  const pdfHistoryAssets = useRef(
+    imageSources(initialDocument.children, initialDocument.metadata),
+  );
   const [recoveryCandidates, setRecoveryCandidates] = useState<
     WorkspaceRecovery[]
   >([]);
@@ -535,7 +529,7 @@ export function useDocumentWorkspace() {
       }
 
       invalidatePendingImport();
-      pdfHistoryAssets.current = pdfFigureAssets(next.children);
+      pdfHistoryAssets.current = imageSources(next.children, next.metadata);
       const sourceAssets = options.assets ?? assetStore.assets;
       if (next.type === 'slide' && !options.projectAssets) {
         replaceAssets(
@@ -769,7 +763,10 @@ export function useDocumentWorkspace() {
       editor.schema.nodeFromJSON(toEditorDocument(restoredDocument));
       restoredAssets = restoreRecoveryAssets(pendingRecovery.assets);
       invalidatePendingImport();
-      pdfHistoryAssets.current = pdfFigureAssets(restoredDocument.children);
+      pdfHistoryAssets.current = imageSources(
+        restoredDocument.children,
+        restoredDocument.metadata,
+      );
       replaceAssets(restoredAssets);
       restoredAssets = undefined;
       setDocument(restoredDocument);
