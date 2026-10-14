@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { documentTitle, type DocumentData } from '@/src/document/model';
 import type { DocumentFileFormat } from '@/src/workspace/files';
+import { SaveFormatDialog } from './save-format-dialog';
 
 interface WorkspaceHeaderProps {
   project?: boolean;
@@ -122,6 +123,7 @@ export function WorkspaceHeader({
       </div>
 
       <div className="workspace-header-actions flex min-w-72 justify-end gap-1.5">
+        <SaveFormatDialog document={document} project={project} />
         <Button
           aria-label={copy.workspace.showDocumentPanel}
           title={copy.workspace.showDocumentPanel}

@@ -65,7 +65,7 @@ interface WorkspaceNavigatorProps {
   focusNode: (nodeId: string) => void;
   importFiles: (files: readonly File[]) => Promise<void>;
   createDocument: (type: DocumentType) => void;
-  loadSample: (type: DocumentType) => void;
+  loadSample: (type: DocumentType | 'figures') => void;
   openRecovery: () => void;
   children?: ReactNode;
 }
@@ -193,7 +193,7 @@ export function WorkspaceNavigator({
           <summary className="cursor-pointer py-1 text-muted-foreground">
             {locale === 'ja' ? 'サンプルを開く' : 'Open an example'}
           </summary>
-          <div className="flex gap-2 pt-2">
+          <div className="flex flex-wrap gap-2 pt-2">
             <Button
               size="sm"
               variant="outline"
@@ -209,6 +209,16 @@ export function WorkspaceNavigator({
               onClick={() => loadSample('slide')}
             >
               {locale === 'ja' ? 'Slideサンプル' : 'Slide example'}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={documentWriteLocked}
+              onClick={() => loadSample('figures')}
+            >
+              {locale === 'ja'
+                ? '図表サンプル（5ページ）'
+                : 'Figure examples (5 pages)'}
             </Button>
           </div>
         </details>

@@ -13,8 +13,17 @@ import {
 } from 'react';
 import katex from 'katex';
 import { ChartGraphic } from './chart-graphic';
+import { FigureGraphic, resolveFigureGraphicSource } from './figure-graphic';
+import {
+  figureReferences,
+  figureSourceText,
+  readFigureEdit,
+  type FigureReference,
+} from '@/src/document/figure-edit';
 import {
   groupSlideDesignNodes,
+  groupSlideCompositeNodes,
+  createSlideComposite,
   type SlideDesign,
 } from '@/src/document/slide-design';
 
@@ -59,6 +68,7 @@ export interface FigureInteraction {
 
 const AnalysisContext = createContext<DocumentAnalysis | null>(null);
 const LocaleContext = createContext<AppLocale>('ja');
+const FigureReferencesContext = createContext<FigureReference[]>([]);
 const SlideContext = createContext(false);
 const FigureInteractionContext = createContext<FigureInteraction | undefined>(
   undefined,
@@ -133,6 +143,32 @@ function Caption({ node }: { node: DocumentNode }) {
   );
 }
 
+function FigureSource({
+  node,
+}: {
+  node: Extract<DocumentNode, { type: 'figure' }>;
+}) {
+  const references = useContext(FigureReferencesContext);
+  const edit = readFigureEdit(node.attrs.figureEdit);
+  const text = figureSourceText(edit, references);
+  if (!text) return null;
+  const reference = references.find(
+    (entry) => entry.id === edit?.source?.referenceId,
+  );
+  const url = safeResourceUrl(reference?.url ?? '', 'link');
+  return (
+    <small className="figure-source" style={{ display: 'block' }}>
+      {url ? (
+        <a href={url} target="_blank" rel="noopener noreferrer">
+          {text}
+        </a>
+      ) : (
+        text
+      )}
+    </small>
+  );
+}
+
 interface DocumentRendererProps {
   document: DocumentData;
   locale?: AppLocale;
@@ -144,6 +180,7 @@ interface DocumentRendererProps {
   /** Render only the presenter notes of these nodes instead of the audience content. */
   speakerNotes?: boolean;
   slideLayout?: SlideDesign['layout'];
+  slideComposite?: SlideDesign['composite'];
 }
 
 function MathContent({ display, latex }: { display: boolean; latex: string }) {
@@ -211,9 +248,9 @@ function InlineImageContent({
   title: string | null;
 }) {
   const { copy } = useDocumentCopy();
-  const [failed, setFailed] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | undefined>(undefined);
   const resolvedSrc = resolvedImageUrl(src, resolveImageUrl);
-  if (!resolvedSrc || failed) {
+  if (!resolvedSrc || failedSrc === resolvedSrc) {
     return (
       <span className="preview-inline-image-fallback">
         {alt || copy.preview.imageUnavailable}
@@ -228,7 +265,7 @@ function InlineImageContent({
       title={title ?? undefined}
       loading="lazy"
       referrerPolicy="no-referrer"
-      onError={() => setFailed(true)}
+      onError={() => setFailedSrc(resolvedSrc)}
     />
   );
 }
@@ -321,11 +358,15 @@ function SlidePlacedFigure({
   interaction?: FigureInteraction;
 }) {
   const { copy, locale } = useDocumentCopy();
-  const [failed, setFailed] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | undefined>(undefined);
   const [draft, setDraft] = useState<SlideImagePlacement | null>(null);
   const currentPlacement = draft ?? placement;
   const activeCleanup = useRef<(() => void) | null>(null);
-  const src = resolvedImageUrl(node.attrs.src, resolveImageUrl);
+  const figureSource = resolveFigureGraphicSource(
+    node,
+    resolvedImageUrl(node.attrs.src, resolveImageUrl),
+  );
+  const src = figureSource.src;
   const interactive = Boolean(interaction?.onPlacementChange);
   const selected = interaction?.selectedNodeId === node.attrs.nodeId;
 
@@ -435,15 +476,13 @@ function SlidePlacedFigure({
           onKeyDown={(event) => adjustWithKeyboard(event, 'move')}
         />
       )}
-      {src && !failed ? (
-        <img
+      {src && failedSrc !== src ? (
+        <FigureGraphic
+          node={node}
           src={src}
-          alt={node.attrs.alt}
-          title={node.attrs.title ?? undefined}
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          draggable={false}
-          onError={() => setFailed(true)}
+          resolvedSource={figureSource}
+          placed
+          onError={() => setFailedSrc(src)}
         />
       ) : (
         <div className="preview-image-fallback">
@@ -453,6 +492,7 @@ function SlidePlacedFigure({
       )}
       <figcaption>
         <Caption node={node} />
+        <FigureSource node={node} />
       </figcaption>
       {interactive && selected && (
         <span className="slide-image-handles">
@@ -487,8 +527,12 @@ function FigureBlock({
   const { copy } = useDocumentCopy();
   const slide = useContext(SlideContext);
   const figureInteraction = useContext(FigureInteractionContext);
-  const [failed, setFailed] = useState(false);
-  const src = resolvedImageUrl(node.attrs.src, resolveImageUrl);
+  const [failedSrc, setFailedSrc] = useState<string | undefined>(undefined);
+  const figureSource = resolveFigureGraphicSource(
+    node,
+    resolvedImageUrl(node.attrs.src, resolveImageUrl),
+  );
+  const src = figureSource.src;
   const beginFreePlacement = () => {
     if (!slide || !figureInteraction?.onPlacementChange) return;
     figureInteraction.onSelect?.(node.attrs.nodeId);
@@ -529,7 +573,7 @@ function FigureBlock({
     );
   const width = Math.min(100, Math.max(10, Number(node.attrs.width) || 100));
 
-  if (!src || failed) {
+  if (!src || failedSrc === src) {
     return (
       <figure
         data-node-id={node.attrs.nodeId}
@@ -545,6 +589,7 @@ function FigureBlock({
         </div>
         <figcaption>
           <Caption node={node} />
+          <FigureSource node={node} />
         </figcaption>
       </figure>
     );
@@ -560,16 +605,15 @@ function FigureBlock({
       style={{ width: `${width}%` }}
       {...layoutStarter}
     >
-      <img
+      <FigureGraphic
+        node={node}
         src={src}
-        alt={node.attrs.alt}
-        title={node.attrs.title ?? undefined}
-        loading="lazy"
-        referrerPolicy="no-referrer"
-        onError={() => setFailed(true)}
+        resolvedSource={figureSource}
+        onError={() => setFailedSrc(src)}
       />
       <figcaption>
         <Caption node={node} />
+        <FigureSource node={node} />
       </figcaption>
     </figure>
   );
@@ -827,6 +871,7 @@ export function DocumentRenderer({
   figureInteraction,
   speakerNotes = false,
   slideLayout,
+  slideComposite,
 }: DocumentRendererProps) {
   const copy = messages[locale];
   const computed = useMemo(
@@ -849,6 +894,13 @@ export function DocumentRenderer({
       )
     : pageNodes;
   const footnotes = speakerNotes ? [] : collectFootnotes(pageNodes);
+  const composite =
+    document.type === 'slide' && !speakerNotes && slideLayout === 'composite'
+      ? (slideComposite ?? createSlideComposite(blocks))
+      : undefined;
+  const compositeGroups = composite
+    ? groupSlideCompositeNodes(blocks, composite)
+    : undefined;
   const layoutGroups =
     document.type === 'slide' && !speakerNotes && slideLayout
       ? groupSlideDesignNodes(
@@ -864,81 +916,145 @@ export function DocumentRenderer({
         resolveImageUrl={resolveImageUrl}
       />
     ));
+  const renderRegion = (
+    region: keyof NonNullable<typeof compositeGroups>['regions'],
+  ) => {
+    const content = compositeGroups?.regions[region];
+    if (!content?.length) return null;
+    const labels =
+      locale === 'ja'
+        ? {
+            full: '全幅上部',
+            left: composite?.reverseColumns ? '右側' : '左側',
+            'right-top': composite?.reverseColumns ? '左上' : '右上',
+            'right-bottom': composite?.reverseColumns ? '左下' : '右下',
+            bottom: '全幅下部',
+          }
+        : {
+            full: 'Full-width top',
+            left: composite?.reverseColumns ? 'Right' : 'Left',
+            'right-top': composite?.reverseColumns ? 'Top left' : 'Top right',
+            'right-bottom': composite?.reverseColumns
+              ? 'Bottom left'
+              : 'Bottom right',
+            bottom: 'Full-width bottom',
+          };
+    return (
+      <section
+        key={region}
+        className={`slide-composite-region slide-composite-${region}`}
+        data-composite-region={region}
+        aria-label={labels[region]}
+      >
+        {renderBlocks(content)}
+      </section>
+    );
+  };
   return (
-    <LocaleContext.Provider value={locale}>
-      <AnalysisContext.Provider value={computed}>
-        <SlideContext.Provider value={document.type === 'slide'}>
-          <FigureInteractionContext.Provider value={figureInteraction}>
-            <FootnoteContext.Provider value={footnoteNumbers}>
-              <div className="document-renderer">
-                {showToc &&
-                  !speakerNotes &&
-                  document.metadata.toc === true &&
-                  computed.outline.length > 0 && (
-                    <nav className="document-toc" aria-label={copy.preview.toc}>
-                      <h2>{copy.preview.toc}</h2>
-                      <ol>
-                        {computed.outline.map((entry) => (
-                          <li
-                            key={entry.nodeId}
-                            style={{
-                              paddingLeft: `${((entry.level ?? 1) - 1) * 16}px`,
-                            }}
-                          >
-                            <a
-                              href={`#${encodeURIComponent(anchorId(entry.nodeId))}`}
+    <FigureReferencesContext.Provider
+      value={figureReferences(document.metadata)}
+    >
+      <LocaleContext.Provider value={locale}>
+        <AnalysisContext.Provider value={computed}>
+          <SlideContext.Provider value={document.type === 'slide'}>
+            <FigureInteractionContext.Provider value={figureInteraction}>
+              <FootnoteContext.Provider value={footnoteNumbers}>
+                <div className="document-renderer">
+                  {showToc &&
+                    !speakerNotes &&
+                    document.metadata.toc === true &&
+                    computed.outline.length > 0 && (
+                      <nav
+                        className="document-toc"
+                        aria-label={copy.preview.toc}
+                      >
+                        <h2>{copy.preview.toc}</h2>
+                        <ol>
+                          {computed.outline.map((entry) => (
+                            <li
+                              key={entry.nodeId}
+                              style={{
+                                paddingLeft: `${((entry.level ?? 1) - 1) * 16}px`,
+                              }}
                             >
-                              {entry.number ? `${entry.number} ` : ''}
-                              {entry.title}
+                              <a
+                                href={`#${encodeURIComponent(anchorId(entry.nodeId))}`}
+                              >
+                                {entry.number ? `${entry.number} ` : ''}
+                                {entry.title}
+                              </a>
+                            </li>
+                          ))}
+                        </ol>
+                      </nav>
+                    )}
+                  {compositeGroups ? (
+                    <>
+                      {compositeGroups.title &&
+                        renderBlocks([compositeGroups.title])}
+                      {renderRegion('full')}
+                      <div
+                        className="slide-composite-grid"
+                        data-reverse={composite?.reverseColumns || undefined}
+                      >
+                        {!composite?.reverseColumns && renderRegion('left')}
+                        <div className="slide-composite-sidebar">
+                          {renderRegion('right-top')}
+                          {renderRegion('right-bottom')}
+                        </div>
+                        {composite?.reverseColumns && renderRegion('left')}
+                      </div>
+                      {renderRegion('bottom')}
+                      {renderBlocks(compositeGroups.manual)}
+                    </>
+                  ) : layoutGroups ? (
+                    <>
+                      {layoutGroups.title && renderBlocks([layoutGroups.title])}
+                      <div className="slide-design-columns">
+                        {layoutGroups.columns.map((column, index) => (
+                          <div key={index} className="slide-design-column">
+                            {renderBlocks(column)}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    renderBlocks(blocks)
+                  )}
+                  {footnotes.length > 0 && (
+                    <ol
+                      className="document-footnotes"
+                      aria-label={copy.preview.footnotes}
+                    >
+                      {footnotes.map((footnote) => {
+                        const number = footnoteNumbers.get(footnote) ?? 0;
+                        return (
+                          <li
+                            key={number}
+                            id={footnoteId(number)}
+                            value={number}
+                          >
+                            <span className="footnote-text">
+                              {footnote.attrs.text}
+                            </span>{' '}
+                            <a
+                              className="footnote-back"
+                              href={`#${footnoteReferenceId(number)}`}
+                              aria-label={copy.preview.footnoteBack(number)}
+                            >
+                              ↩
                             </a>
                           </li>
-                        ))}
-                      </ol>
-                    </nav>
+                        );
+                      })}
+                    </ol>
                   )}
-                {layoutGroups ? (
-                  <>
-                    {layoutGroups.title && renderBlocks([layoutGroups.title])}
-                    <div className="slide-design-columns">
-                      {layoutGroups.columns.map((column, index) => (
-                        <div key={index} className="slide-design-column">
-                          {renderBlocks(column)}
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  renderBlocks(blocks)
-                )}
-                {footnotes.length > 0 && (
-                  <ol
-                    className="document-footnotes"
-                    aria-label={copy.preview.footnotes}
-                  >
-                    {footnotes.map((footnote) => {
-                      const number = footnoteNumbers.get(footnote) ?? 0;
-                      return (
-                        <li key={number} id={footnoteId(number)} value={number}>
-                          <span className="footnote-text">
-                            {footnote.attrs.text}
-                          </span>{' '}
-                          <a
-                            className="footnote-back"
-                            href={`#${footnoteReferenceId(number)}`}
-                            aria-label={copy.preview.footnoteBack(number)}
-                          >
-                            ↩
-                          </a>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                )}
-              </div>
-            </FootnoteContext.Provider>
-          </FigureInteractionContext.Provider>
-        </SlideContext.Provider>
-      </AnalysisContext.Provider>
-    </LocaleContext.Provider>
+                </div>
+              </FootnoteContext.Provider>
+            </FigureInteractionContext.Provider>
+          </SlideContext.Provider>
+        </AnalysisContext.Provider>
+      </LocaleContext.Provider>
+    </FigureReferencesContext.Provider>
   );
 }

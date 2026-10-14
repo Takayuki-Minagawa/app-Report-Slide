@@ -1,3 +1,4 @@
+import { resolveChartPlot } from '@/src/document/chart';
 import pptxgen from 'pptxgenjs';
 import {
   documentTitle,
@@ -20,6 +21,12 @@ import {
 import { messages, type AppLocale } from '@/src/i18n/messages';
 import type { AssetUrls } from '@/src/workspace/files';
 import { prepareOfficeImages } from './office-images';
+import { addOfficeFigureImages, officeFigureKey } from './office-figures';
+import {
+  figureReferences,
+  figureSourceText,
+  readFigureEdit,
+} from '@/src/document/figure-edit';
 
 const width = 13.333333;
 const height = 7.5;
@@ -96,6 +103,7 @@ export async function exportSlidePptx(
   const text = copy[locale];
   if (document.type !== 'slide') throw new Error(text.slidesOnly);
   const { images } = await prepareOfficeImages(document, assets, locale);
+  await addOfficeFigureImages(document, images);
   const analysis = analyzeDocument(document);
   const pages = splitDocumentPages(document);
   const warnings = new Set<string>([
@@ -170,7 +178,17 @@ export async function exportSlidePptx(
 
   function caption(node: DocumentNode): string {
     const target = analysis.targets.get(node.attrs.nodeId);
-    return `${target?.number ? formatSemanticReference(target, locale) : ''}${target?.number && node.attrs.caption ? ' — ' : ''}${node.attrs.caption || ''}`;
+    return [
+      `${target?.number ? formatSemanticReference(target, locale) : ''}${target?.number && node.attrs.caption ? ' — ' : ''}${node.attrs.caption || ''}`,
+      node.type === 'figure'
+        ? figureSourceText(
+            readFigureEdit(node.attrs.figureEdit),
+            figureReferences(document.metadata),
+          )
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
 
   pages.forEach((nodes, pageIndex) => {
@@ -482,7 +500,7 @@ export async function exportSlidePptx(
           if (node.attrs.slidePlacement) positioned.push(node);
           else
             addImage(
-              node.attrs.src,
+              officeFigureKey(node),
               node.attrs.alt,
               node.attrs.width,
               node.attrs.align,
@@ -494,10 +512,12 @@ export async function exportSlidePptx(
           addTable(node, indent);
           break;
         case 'chart': {
+          const plot = resolveChartPlot(node.attrs);
+          const primary = plot.series[0];
           const data =
             node.attrs.chartType === 'line'
-              ? [...node.attrs.data].sort((a, b) => a.x - b.x)
-              : node.attrs.data;
+              ? [...primary.data].sort((a, b) => a.x - b.x)
+              : primary.data;
           const numeric = node.attrs.chartType !== 'bar';
           const series = numeric
             ? [
@@ -506,14 +526,14 @@ export async function exportSlidePptx(
                   values: data.map((point) => point.x),
                 },
                 {
-                  name: node.attrs.series,
+                  name: primary.name,
                   labels: data.map((point) => point.label),
                   values: data.map((point) => point.y),
                 },
               ]
             : [
                 {
-                  name: node.attrs.series,
+                  name: primary.name,
                   labels: data.map((point) => point.label),
                   values: data.map((point) => point.y),
                 },
@@ -552,7 +572,7 @@ export async function exportSlidePptx(
               ),
           });
           notes.push(
-            `${node.attrs.alt || node.attrs.series}\n${text.chartData}\n${node.attrs.data.map((point) => `${point.label} / ${point.x} / ${point.y}`).join('\n')}`,
+            `${node.attrs.alt || node.attrs.series}\n${text.chartData}\n${plot.series.map((entry) => `${entry.name}\n${entry.data.map((point) => `${point.label} / ${point.x} / ${point.y}`).join('\n')}`).join('\n\n')}\n${[plot.xUnit, plot.yUnit, plot.source, plot.nature].filter(Boolean).join(' / ')}`,
           );
           if (caption(node)) addText([{ text: caption(node) }], 15, {}, indent);
           break;
@@ -633,7 +653,7 @@ export async function exportSlidePptx(
     }
     for (const node of positioned) {
       const placement = node.attrs.slidePlacement!;
-      const image = images.get(node.attrs.src)!;
+      const image = images.get(officeFigureKey(node))!;
       slide.addImage({
         data: image.dataUrl,
         altText: node.attrs.alt,

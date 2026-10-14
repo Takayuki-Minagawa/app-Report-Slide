@@ -51,6 +51,7 @@ export function DocumentPage({
       data-slide-design={design ? '1' : undefined}
       data-layout={design?.layout}
       data-density={design?.density}
+      data-table-striped={design?.tableStyle?.striped}
       data-page-id={slide ? getSlidePageId(document, index) : undefined}
       style={design ? slideDesignStyle(design) : undefined}
       aria-label={
@@ -68,6 +69,7 @@ export function DocumentPage({
         resolveImageUrl={resolveImageUrl}
         figureInteraction={figureInteraction}
         slideLayout={design?.layout}
+        slideComposite={design?.composite}
       />
       <footer>
         {slide && <span>{document.metadata.author ?? ''}</span>}

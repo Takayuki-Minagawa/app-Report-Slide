@@ -1,3 +1,8 @@
+import { chartPlotSchema } from './chart';
+import {
+  readerSupplementsSchema,
+  syncReaderSupplementPositions,
+} from './reader-supplement';
 import { z } from 'zod';
 
 import { isSafeResourceUrl } from '@/src/security/resource-url';
@@ -18,6 +23,7 @@ import {
 import { isSlideImagePlacement } from './slide-layout';
 import { slideDesignIssues } from './slide-design';
 import { isTextRuler } from './text-ruler';
+import { figureEditSchema, figureReferencesSchema } from './figure-edit';
 
 const documentEnvelopeSchema = z
   .object({
@@ -702,6 +708,14 @@ function validateBlockNode(
       }
       break;
     case 'figure':
+      if (
+        attrs?.figureEdit != null &&
+        !figureEditSchema.safeParse(attrs.figureEdit).success
+      ) {
+        issues.push(
+          `${path}.attrs.figureEdit: 図の編集情報（切り抜き・注釈・出典）を確認してください`,
+        );
+      }
       expectString(attrs?.src, `${path}.attrs.src`, issues, { nonEmpty: true });
       expectString(attrs?.alt, `${path}.attrs.alt`, issues);
       expectString(attrs?.title, `${path}.attrs.title`, issues, {
@@ -746,6 +760,12 @@ function validateBlockNode(
       }
       break;
     case 'chart': {
+      if (
+        attrs?.plot !== undefined &&
+        attrs.plot !== null &&
+        !chartPlotSchema.safeParse(attrs.plot).success
+      )
+        issues.push(`${path}.attrs.plot: グラフの系列・軸設定が不正です`);
       if (!['line', 'scatter', 'bar'].includes(String(attrs?.chartType)))
         issues.push(`${path}.attrs.chartType: line、scatter、barが必要です`);
       for (const key of ['xLabel', 'yLabel', 'series', 'alt'])
@@ -870,6 +890,22 @@ export function validateDocumentData(value: unknown): DocumentData {
 
   const issues: string[] = [];
   const metadata = result.data.metadata;
+  if (
+    metadata.reader_supplements !== undefined &&
+    !readerSupplementsSchema.safeParse(metadata.reader_supplements).success
+  ) {
+    issues.push(
+      'metadata.reader_supplements: 読者向け補足の形式・長さ・リンクを確認してください',
+    );
+  }
+  if (
+    metadata.figure_references !== undefined &&
+    !figureReferencesSchema.safeParse(metadata.figure_references).success
+  ) {
+    issues.push(
+      'metadata.figure_references: 文献情報または文献IDを確認してください',
+    );
+  }
   issues.push(
     ...slideDesignIssues(metadata.slide_design).map(
       (issue) => `metadata.${issue}`,
@@ -913,5 +949,9 @@ export function validateDocumentData(value: unknown): DocumentData {
 /** Accept legacy JSON without mutating the caller's data. Unknown versions are rejected. */
 export function migrateDocumentData(value: unknown): DocumentData {
   const document = validateDocumentData(value);
-  return { ...document, schemaVersion: 2 };
+  return {
+    ...document,
+    schemaVersion: 2,
+    metadata: syncReaderSupplementPositions(document),
+  };
 }

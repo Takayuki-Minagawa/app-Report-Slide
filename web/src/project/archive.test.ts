@@ -13,7 +13,15 @@ import {
   createBlankChapter,
   createReportProject,
   manifestFromProject,
+  appendReportProjectChapter,
+  assembleReportProject,
 } from './model';
+import { figureReferences } from '@/src/document/figure-edit';
+import {
+  readerSupplementForPage,
+  setReaderSupplement,
+} from '@/src/document/reader-supplement';
+import { exportReportHtml } from '@/src/export/report-html';
 import { prepareChapter } from './assets';
 import {
   projectLimits,
@@ -113,6 +121,92 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('report project ZIP', () => {
+  it('keeps imported citations and chapter-local supplements editable after ZIP reload and combined HTML export', async () => {
+    const report = (name: string) => {
+      const document = parseMarkdown(
+        `# ${name}\n\n![Original](https://example.com/original.png)`,
+      ).document;
+      document.metadata.figure_references = [
+        {
+          id: 'source',
+          title: name,
+          authors: 'Author',
+          year: '2026',
+          url: `https://example.com/${name}`,
+        },
+      ];
+      const figure = document.children[1];
+      if (figure.type !== 'figure') throw new Error('Expected figure');
+      figure.attrs.figureEdit = {
+        version: 1,
+        source: {
+          referenceId: 'source',
+          origin: 'original',
+          pdfPage: '4',
+          printedPage: '',
+          figureNumber: '2',
+          note: '',
+        },
+      };
+      document.metadata = setReaderSupplement(document, 0, {
+        title: `${name} explanation`,
+        text: `${name} conditions`,
+        link: `https://example.com/${name}/details`,
+      });
+      return document;
+    };
+    const first = createReportProject(report('First'));
+    const project = appendReportProjectChapter(first, {
+      ...createBlankChapter(2),
+      pageBreakBefore: false,
+      document: report('Second'),
+    });
+    const bytes = await writeReportProject(project, new Map());
+    const loaded = await readReportProject(archiveFile(bytes));
+    expect(
+      figureReferences(loaded.project.metadata).map(
+        (reference) => reference.title,
+      ),
+    ).toEqual(['First', 'Second']);
+    for (const [index, chapter] of loaded.project.chapters.entries()) {
+      expect(readerSupplementForPage(chapter.document, 0)?.text).toBe(
+        `${index ? 'Second' : 'First'} conditions`,
+      );
+      const figure = chapter.document.children.find(
+        (node) => node.type === 'figure',
+      )!;
+      if (figure.type !== 'figure') throw new Error('Expected figure');
+      expect(figure.attrs.figureEdit?.source?.referenceId).toBe(
+        figureReferences(project.metadata)[index].id,
+      );
+    }
+    loaded.project.chapters[1].document.metadata = setReaderSupplement(
+      loaded.project.chapters[1].document,
+      0,
+      {
+        title: 'Revised',
+        text: 'Revised second chapter conditions',
+        link: 'https://example.com/revised',
+      },
+    );
+    const html = (
+      await exportReportHtml(
+        assembleReportProject(loaded.project),
+        new Map(),
+        'ja',
+      )
+    ).html;
+    expect(html).toContain('First conditions');
+    expect(html).toContain('Revised second chapter conditions');
+    expect(html).toContain('https://example.com/Second');
+    expect(html).toContain('https://example.com/revised');
+    const savedAgain = await readReportProject(
+      archiveFile(await writeReportProject(loaded.project, new Map())),
+    );
+    expect(
+      readerSupplementForPage(savedAgain.project.chapters[1].document, 0)?.text,
+    ).toBe('Revised second chapter conditions');
+  });
   it('round-trips ordered and excluded chapters with root and chapter metadata', async () => {
     const project = createReportProject(
       parseMarkdown(

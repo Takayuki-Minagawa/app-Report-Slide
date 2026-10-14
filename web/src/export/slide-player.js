@@ -98,6 +98,9 @@
     notes.forEach((note, i) => {
       note.hidden = i !== current;
     });
+    document.querySelectorAll('.reader-detail-launcher').forEach((button) => {
+      button.hidden = Number(button.dataset.readerPage) !== current;
+    });
     previous.disabled = current === 0;
     next.disabled = current === slides.length - 1;
     counter.textContent = current + 1 + ' / ' + slides.length;
@@ -241,6 +244,7 @@
         : null;
     if (target?.closest('input, textarea, select, [contenteditable="true"]'))
       return;
+    if (document.getElementById('reader-dialog')?.open) return;
     const key = event.key;
     const letter = key.toLowerCase();
     const pendingJump = jump;

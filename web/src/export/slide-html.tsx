@@ -14,6 +14,9 @@ import { embedSlideImages } from './embedded-images';
 import { offlineMathStyles } from './math-styles';
 import playerStyles from './slide-player.css?raw';
 import playerSource from './slide-player.js?raw';
+import readerSource from './reader.js?raw';
+import readerStyles from './reader.css?raw';
+import { ReaderDetails, ReaderDialog } from './reader-content';
 import { hashedInlineScript } from './standalone-html';
 import { editableHtmlId, editableHtmlPayload } from './editable-html';
 
@@ -89,9 +92,17 @@ export async function exportSlideHtml(
   const analysis = analyzeDocument(document);
   const pages = splitDocumentPages(document);
   const copy = playerMessages[locale];
-  const { script, policy } = await hashedInlineScript(playerSource);
+  const { script, policy } = await hashedInlineScript(
+    playerSource + '\n' + readerSource,
+  );
   const styles =
-    playerStyles + '\n' + documentStyles + '\n' + offlineMathStyles;
+    playerStyles +
+    '\n' +
+    readerStyles +
+    '\n' +
+    documentStyles +
+    '\n' +
+    offlineMathStyles;
 
   const markup = renderToStaticMarkup(
     <html lang={locale}>
@@ -175,6 +186,14 @@ export async function exportSlideHtml(
           <button id="deck-overview" type="button" aria-pressed="false">
             {copy.overview}
           </button>
+          {pages.map((_, index) => (
+            <ReaderDetails
+              key={index}
+              document={document}
+              index={index}
+              locale={locale}
+            />
+          ))}
           <button id="deck-notes-toggle" type="button" aria-pressed="false">
             {copy.notes}
           </button>
@@ -234,6 +253,7 @@ export async function exportSlideHtml(
             <output id="presenter-status" />
           </footer>
         </template>
+        <ReaderDialog locale={locale} />
         <template id={editableHtmlId} data-encoding="base64">
           {editableHtmlPayload(document, resolveImageUrl)}
         </template>

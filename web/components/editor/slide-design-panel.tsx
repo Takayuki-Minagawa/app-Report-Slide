@@ -15,6 +15,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { DocumentPage } from '@/components/preview/document-page';
+import { CompositeLayoutPanel } from './composite-layout-panel';
 import { documentThemes } from '@/src/document/metadata';
 import {
   inlineText,
@@ -33,6 +34,7 @@ import {
   slideTypographyPresets,
   type SlideDesign,
   readSlideDesignSettings,
+  createSlideComposite,
 } from '@/src/document/slide-design';
 import { slideDesignMessages } from '@/src/i18n/slide-design';
 import type { ImageUrlResolver } from '@/src/security/resource-url';
@@ -43,6 +45,7 @@ interface SlideDesignPanelProps {
   disabled: boolean;
   resolveImageUrl?: ImageUrlResolver;
   onApply: (metadata: DocumentMetadata) => void;
+  onFocus?: (nodeId: string) => void;
 }
 
 const roleBounds = {
@@ -110,6 +113,7 @@ function SlideDesignControls({
   disabled,
   resolveImageUrl,
   onApply,
+  onFocus,
 }: SlideDesignPanelProps) {
   const { locale } = useAppPreferences();
   const copy = slideDesignMessages[locale];
@@ -183,6 +187,9 @@ function SlideDesignControls({
               setDraft({
                 ...draft,
                 layout: event.target.value as SlideDesign['layout'],
+                ...(event.target.value === 'composite' && !draft.composite
+                  ? { composite: createSlideComposite(pages[currentPageIndex]) }
+                  : {}),
               })
             }
           >
@@ -193,6 +200,16 @@ function SlideDesignControls({
             ))}
           </NativeSelect>
         </label>
+        {draft.layout === 'composite' && (
+          <CompositeLayoutPanel
+            nodes={pages[currentPageIndex]}
+            value={
+              draft.composite ?? createSlideComposite(pages[currentPageIndex])
+            }
+            onChange={(composite) => setDraft({ ...draft, composite })}
+            onFocus={onFocus}
+          />
+        )}
         <label className="grid gap-1 text-xs">
           {copy.density}
           <NativeSelect
@@ -248,6 +265,86 @@ function SlideDesignControls({
                 />
               </label>
             ))}
+          </div>
+        </details>
+        <details>
+          <summary className="cursor-pointer text-xs">
+            {locale === 'ja' ? '表のスタイル' : 'Table style'}
+          </summary>
+          <div className="mt-2 grid gap-2">
+            <label className="flex gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={draft.tableStyle?.striped ?? false}
+                onChange={(event) =>
+                  setDraft({
+                    ...draft,
+                    tableStyle: {
+                      header: 'accent',
+                      cellPadding: 6,
+                      ...draft.tableStyle,
+                      striped: event.target.checked,
+                    },
+                  })
+                }
+              />
+              {locale === 'ja'
+                ? '表の交互行に色を付ける'
+                : 'Alternating table row colors'}
+            </label>
+            <label className="grid gap-1 text-xs">
+              {locale === 'ja' ? '表の見出し色' : 'Table header color'}
+              <NativeSelect
+                value={draft.tableStyle?.header ?? 'accent'}
+                onChange={(event) =>
+                  setDraft({
+                    ...draft,
+                    tableStyle: {
+                      striped: false,
+                      cellPadding: 6,
+                      ...draft.tableStyle,
+                      header: event.target.value as 'accent' | 'light',
+                    },
+                  })
+                }
+              >
+                <NativeSelectOption value="accent">
+                  {locale === 'ja' ? 'テーマの強調色' : 'Theme accent'}
+                </NativeSelectOption>
+                <NativeSelectOption value="light">
+                  {locale === 'ja' ? '薄い背景' : 'Light background'}
+                </NativeSelectOption>
+              </NativeSelect>
+            </label>
+            <label className="grid gap-1 text-xs">
+              {locale === 'ja'
+                ? '表のセル余白 (px)'
+                : 'Table cell padding (px)'}
+              <Input
+                type="number"
+                min="2"
+                max="14"
+                value={
+                  Number.isFinite(draft.tableStyle?.cellPadding ?? 6)
+                    ? (draft.tableStyle?.cellPadding ?? 6)
+                    : ''
+                }
+                onChange={(event) =>
+                  setDraft({
+                    ...draft,
+                    tableStyle: {
+                      striped: false,
+                      header: 'accent',
+                      ...draft.tableStyle,
+                      cellPadding:
+                        event.target.value === ''
+                          ? NaN
+                          : Number(event.target.value),
+                    },
+                  })
+                }
+              />
+            </label>
           </div>
         </details>
         <label className="grid gap-1 text-xs">

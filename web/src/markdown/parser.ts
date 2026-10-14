@@ -1,3 +1,4 @@
+import { rebindReaderSupplements } from '@/src/document/reader-supplement';
 import type {
   BlockMathNode,
   BlockquoteNode,
@@ -841,18 +842,20 @@ export function parseMarkdown(
   }
 
   return {
-    document: restoreSlideDesignFromMarkdown(
-      validateDocumentData({
-        schemaVersion: 2,
-        type: frontMatter.type,
-        metadata: {
-          theme:
-            frontMatter.metadata.theme ??
-            (frontMatter.type === 'report' ? 'latex' : 'beamer-simple'),
-          ...frontMatter.metadata,
-        },
-        children,
-      }),
+    document: rebindReaderSupplements(
+      restoreSlideDesignFromMarkdown(
+        validateDocumentData({
+          schemaVersion: 2,
+          type: frontMatter.type,
+          metadata: {
+            theme:
+              frontMatter.metadata.theme ??
+              (frontMatter.type === 'report' ? 'latex' : 'beamer-simple'),
+            ...frontMatter.metadata,
+          },
+          children,
+        }),
+      ),
     ),
     diagnostics,
   };

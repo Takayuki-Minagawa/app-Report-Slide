@@ -1,5 +1,7 @@
 import { inlineText, type DocumentData } from './model';
 import { splitDocumentPages } from './semantics';
+import { resolveSlideDesign } from './slide-design';
+import { readFigureEdit } from './figure-edit';
 import { walkDocumentTree } from './traversal';
 import type { AppLocale } from '@/src/i18n/messages';
 
@@ -58,6 +60,11 @@ export function slideNavigationPages(
     (node) => node.type === 'slideBreak' || node.type === 'pageBreak',
   );
   return splitDocumentPages(document).map((nodes, index) => {
+    const namesById = new Map(
+      resolveSlideDesign(document, index)
+        .composite?.assignments.filter((entry) => entry.name?.trim())
+        .map((entry) => [entry.nodeId, entry.name!.trim()]) ?? [],
+    );
     const heading = nodes.find((node) => node.type === 'heading');
     const title =
       (heading?.type === 'heading' ? inlineText(heading.content) : '') ||
@@ -87,7 +94,12 @@ export function slideNavigationPages(
                 : '';
       elements.push({
         nodeId: node.attrs.nodeId,
-        name: `${names[locale][node.type]} ${number}`,
+        name:
+          namesById.get(node.attrs.nodeId) ??
+          (node.type === 'figure'
+            ? readFigureEdit(node.attrs.figureEdit)?.name?.trim() || undefined
+            : undefined) ??
+          `${names[locale][node.type]} ${number}`,
         text,
       });
     }

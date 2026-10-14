@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 /* oxlint-disable nextjs/no-head-element -- Standalone HTML output. */
 import { renderToStaticMarkup } from 'react-dom/server.browser';
 import katexLicense from 'katex/LICENSE?raw';
@@ -16,6 +17,9 @@ import { embedSlideImages } from './embedded-images';
 import { offlineMathStyles } from './math-styles';
 import { hashedInlineScript } from './standalone-html';
 import { editableHtmlId, editableHtmlPayload } from './editable-html';
+import readerSource from './reader.js?raw';
+import readerStyles from './reader.css?raw';
+import { ReaderDetails, ReaderDialog } from './reader-content';
 
 const reportScript = `const pages = [...document.querySelectorAll('.report-sheet')];
 const warning = document.getElementById('overflow-warning');
@@ -60,7 +64,9 @@ export async function exportReportHtml(
   const pages = splitDocumentPages(document);
   const settings = resolvePageSettings(document.metadata);
   const [width, height] = pageDimensions(settings);
-  const { script, policy } = await hashedInlineScript(reportScript);
+  const { script, policy } = await hashedInlineScript(
+    reportScript + '\n' + readerSource,
+  );
   const copy = reportMessages[locale];
   const style =
     `:root{--border:#bdc8d1;--muted-foreground:#596b7b;--font-ui:Arial,sans-serif;--font-code:monospace;color-scheme:light}
@@ -72,6 +78,7 @@ button{font:inherit;cursor:pointer}.report-tools{position:sticky;top:0;z-index:2
 @page{size:${width}mm ${height}mm;margin:0}
 @media print{body{background:white}.report-tools{display:none}.report-pages{display:block;padding:0}.report-sheet{width:${width}mm;min-height:${height}mm;break-after:page;page-break-after:always}.report-sheet:last-child{break-after:auto;page-break-after:auto}.report-sheet .report-layout{min-height:${height}mm}.document-renderer figure,.document-renderer table{break-inside:avoid}}
 ` +
+    readerStyles +
     documentStyles +
     '\n' +
     offlineMathStyles;
@@ -97,18 +104,25 @@ button{font:inherit;cursor:pointer}.report-tools{position:sticky;top:0;z-index:2
         </header>
         <main className="report-pages">
           {pages.map((nodes, index) => (
-            <DocumentPage
-              key={index}
-              document={document}
-              nodes={nodes}
-              analysis={analysis}
-              locale={locale}
-              index={index}
-              count={pages.length}
-              resolveImageUrl={resolveImageUrl}
-            />
+            <Fragment key={index}>
+              <DocumentPage
+                document={document}
+                nodes={nodes}
+                analysis={analysis}
+                locale={locale}
+                index={index}
+                count={pages.length}
+                resolveImageUrl={resolveImageUrl}
+              />
+              <ReaderDetails
+                document={document}
+                index={index}
+                locale={locale}
+              />
+            </Fragment>
           ))}
         </main>
+        <ReaderDialog locale={locale} />
         <template id={editableHtmlId} data-encoding="base64">
           {editableHtmlPayload(document, resolveImageUrl)}
         </template>

@@ -23,6 +23,8 @@ import {
   type SemanticNode,
 } from '@/src/document/semantics';
 import { walkDocumentTree } from '@/src/document/traversal';
+import { officeFeatureWarnings } from '@/src/export/format-capabilities';
+import { createFigureAuthoringSample } from '@/src/workspace/figure-authoring-sample';
 import { createEditorExtensions } from '@/src/editor/extensions';
 import { defaultSlideImagePlacement } from '@/src/document/slide-layout';
 import { parseMarkdown, type ParseMarkdownResult } from '@/src/markdown/parser';
@@ -895,11 +897,15 @@ export function useDocumentWorkspace() {
     setView('visual');
   };
 
-  const loadSample = (type: DocumentType) => {
+  const loadSample = (type: DocumentType | 'figures') => {
     if (documentWriteLocked || !confirmReplacement()) return;
     loadDocument(
       cloneDocument(
-        type === 'report' ? sampleReportDocument : sampleSlideDocument,
+        type === 'figures'
+          ? createFigureAuthoringSample()
+          : type === 'report'
+            ? sampleReportDocument
+            : sampleSlideDocument,
       ),
       locale === 'ja' ? 'サンプルを開きました' : 'Example opened',
       { assets: new Map() },
@@ -1162,6 +1168,7 @@ export function useDocumentWorkspace() {
         description: [
           ...snapshot.diagnostics.map(diagnosticStatusMessage),
           statusMessage('binaryExportDescription'),
+          ...(format === 'office' ? officeFeatureWarnings(source, locale) : []),
           ...(format === 'office' &&
           source.type === 'slide' &&
           source.metadata.slide_design
@@ -1201,6 +1208,15 @@ export function useDocumentWorkspace() {
   const updateMetadata = (updates: DocumentMetadata) => {
     if (documentWriteLocked) return;
     if (projectSession) {
+      if (updates.figure_references !== undefined) {
+        setDocument((current) => ({
+          ...current,
+          metadata: {
+            ...current.metadata,
+            figure_references: updates.figure_references,
+          },
+        }));
+      }
       projectActions.updateProjectMetadata(updates);
       return;
     }
@@ -1214,6 +1230,21 @@ export function useDocumentWorkspace() {
       ),
     }));
     setDocumentDirty(true);
+  };
+
+  /** Reader supplements belong to the edited chapter, not the project's combined page IDs. */
+  const updateReaderSupplements = (updates: DocumentMetadata) => {
+    if (documentWriteLocked) return;
+    invalidatePendingImport();
+    setDocument((current) => ({
+      ...current,
+      metadata: {
+        ...current.metadata,
+        reader_supplements: updates.reader_supplements,
+      },
+    }));
+    setDocumentDirty(true);
+    markProjectEdited();
   };
 
   const updatePageSettings = (settings: PageSettings) => {
@@ -1301,6 +1332,7 @@ export function useDocumentWorkspace() {
     updatePageSettings,
     updateTheme,
     updateMetadata,
+    updateReaderSupplements,
     updateDocumentFlag,
   };
 }

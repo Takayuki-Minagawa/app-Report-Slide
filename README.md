@@ -36,6 +36,8 @@
 
 Report／SlideのHTML保存・取り込み、外部HTMLの変換確認、スライドの3テーマ・8配置・文字サイズ・一括適用・基本検査に対応します。詳細・対応範囲・後続項目は [HTML再編集ガイド](./web/docs/html-editing.ja.md) を参照してください。
 
+図表制作には、SVGソース・ラベル・矢印の編集、非破壊の切り抜き・注釈、共有文献、第9配置の名前付き複合領域、複数系列グラフ、HTMLの図拡大・読者向け補足を追加しました。**サンプルを開く → 図表サンプル（5ページ）** から試せます。操作、保存形式別の制限、要望ごとの対応は [図表編集ガイド](./web/docs/figure-authoring.ja.md) にまとめています。
+
 ## 文書機能
 
 - 図・表・式のキャプション、安定した参照ラベル、自動番号付け
@@ -47,7 +49,7 @@ Report／SlideのHTML保存・取り込み、外部HTMLの変換確認、スラ�
 - Document JSON v1／v2のImport、v2への非破壊移行
 - 有効な章を通した目次・番号・相互参照と、ページを切り替える全体プレビュー
 
-使い方・構文・制限は [文書機能ガイド](./web/docs/document-features.md) を参照してください。最初の操作は [かんたんガイド（日本語）](./web/docs/quick-start.ja.md) / [Quick guide (English)](./web/docs/quick-start.en.md) にまとめています。元の全体仕様は [仕様書](./md_report_slide_editor_web_spec.md) にあります。厳密な自動ページ組版、文献管理、段組み、TeXファイル互換はまだ未実装です。
+使い方・構文・制限は [文書機能ガイド](./web/docs/document-features.md) を参照してください。最初の操作は [かんたんガイド（日本語）](./web/docs/quick-start.ja.md) / [Quick guide (English)](./web/docs/quick-start.en.md) にまとめています。元の全体仕様は [仕様書](./md_report_slide_editor_web_spec.md) にあります。厳密な自動ページ組版、文献データベースの同期、Reportの段組み、TeXファイル互換はまだ未実装です。
 
 ## ページ設定
 

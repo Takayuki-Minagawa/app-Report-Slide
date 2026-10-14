@@ -13,6 +13,7 @@ import type {
   TableNode,
 } from '@/src/document/model';
 import { slideDesignMetadataForMarkdown } from '@/src/document/slide-design';
+import { syncReaderSupplementPositions } from '@/src/document/reader-supplement';
 import { validateDocumentData } from '@/src/document/validation';
 import { isTableCellBorders } from '@/src/document/table';
 import { isSafeResourceUrl } from '@/src/security/resource-url';
@@ -414,9 +415,12 @@ function serializeBlocks(nodes: DocumentNode[]): string {
 export function serializeDocument(document: DocumentData): string {
   validateDocumentData(document);
   const metadata = Object.fromEntries(
-    Object.entries(slideDesignMetadataForMarkdown(document)).filter(
-      ([key, value]) => key !== 'type' && value !== undefined,
-    ),
+    Object.entries(
+      slideDesignMetadataForMarkdown({
+        ...document,
+        metadata: syncReaderSupplementPositions(document),
+      }),
+    ).filter(([key, value]) => key !== 'type' && value !== undefined),
   );
   const frontMatter = stringify(
     {

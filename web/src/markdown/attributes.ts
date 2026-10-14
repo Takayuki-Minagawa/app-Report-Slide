@@ -5,6 +5,7 @@ import {
   serializeSlideImagePlacement,
 } from '@/src/document/slide-layout';
 import { isTextRuler } from '@/src/document/text-ruler';
+import { readFigureEdit } from '@/src/document/figure-edit';
 
 /** A strict single-line attribute grammar. Quoted values follow JSON string escaping. */
 export function parseBlockAttributes(
@@ -33,6 +34,7 @@ export function parseBlockAttributes(
         'align',
         'slide_layout',
         'text_ruler',
+        'figure_edit',
       ].includes(key) ||
       parsedKeys.has(key)
     )
@@ -86,6 +88,18 @@ export function parseBlockAttributes(
       rest = rest.slice(match[0].length);
       continue;
     }
+    if (key === 'figure_edit') {
+      if (node.type !== 'figure' || typeof value !== 'string')
+        throw new Error('figure_editは図だけに指定できます');
+      const edit = readFigureEdit(JSON.parse(value));
+      if (!edit)
+        throw new Error(
+          'figure_editの切り抜き・注釈・出典情報を確認してください',
+        );
+      attrs.figureEdit = edit;
+      rest = rest.slice(match[0].length);
+      continue;
+    }
     if (key === 'numbered') {
       if (value !== 'true' && value !== 'false')
         throw new Error('numberedにはtrueまたはfalseを指定してください');
@@ -122,6 +136,10 @@ export function serializeBlockAttributes(node: DocumentNode): string {
     attrs.push(`text_ruler=${left},${right},${firstLine}`);
   }
   if (node.type === 'figure') {
+    if (node.attrs.figureEdit)
+      attrs.push(
+        `figure_edit=${JSON.stringify(JSON.stringify(node.attrs.figureEdit))}`,
+      );
     if (node.attrs.width !== 100) attrs.push(`width=${node.attrs.width}%`);
     if (node.attrs.align !== 'center') attrs.push(`align=${node.attrs.align}`);
     if (node.attrs.slidePlacement)

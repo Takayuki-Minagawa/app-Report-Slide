@@ -1,3 +1,4 @@
+import { resolveChartPlot } from '@/src/document/chart';
 import {
   AlignmentType,
   Bookmark,
@@ -47,6 +48,12 @@ import {
 import { messages, type AppLocale } from '@/src/i18n/messages';
 import type { AssetUrls } from '@/src/workspace/files';
 import { prepareOfficeImages } from './office-images';
+import { addOfficeFigureImages, officeFigureKey } from './office-figures';
+import {
+  figureReferences,
+  figureSourceText,
+  readFigureEdit,
+} from '@/src/document/figure-edit';
 
 const mmToTwips = (millimeters: number) =>
   Math.round((millimeters * 1440) / 25.4);
@@ -109,6 +116,7 @@ export async function exportReportDocx(
     assets,
     locale,
   );
+  await addOfficeFigureImages(document, images);
   const settings = resolvePageSettings(document.metadata);
   const [pageWidth, pageHeight] = pageDimensions(settings);
   const bodyWidth = mmToTwips(
@@ -271,6 +279,12 @@ export async function exportReportDocx(
     const text = [
       target?.number ? formatSemanticReference(target, locale) : '',
       node.attrs.caption || '',
+      node.type === 'figure'
+        ? figureSourceText(
+            readFigureEdit(node.attrs.figureEdit),
+            figureReferences(document.metadata),
+          )
+        : '',
     ]
       .filter(Boolean)
       .join(' — ');
@@ -490,7 +504,7 @@ export async function exportReportDocx(
             new Paragraph({
               children: [
                 image(
-                  node.attrs.src,
+                  officeFigureKey(node),
                   node.attrs.alt,
                   ((context.width - context.indent) * node.attrs.width) / 100,
                   true,
@@ -515,16 +529,35 @@ export async function exportReportDocx(
           ];
         case 'chart': {
           warnings.add(copy.chart);
+          const plot = resolveChartPlot(node.attrs);
           const rows = [
-            [copy.label, node.attrs.xLabel || 'x', node.attrs.yLabel || 'y'],
-            ...node.attrs.data.map((entry) => [
-              entry.label,
-              String(entry.x),
-              String(entry.y),
-            ]),
+            [
+              'Series',
+              copy.label,
+              [node.attrs.xLabel || 'x', plot.xUnit]
+                .filter(Boolean)
+                .join(' / '),
+              [node.attrs.yLabel || 'y', plot.yUnit]
+                .filter(Boolean)
+                .join(' / '),
+            ],
+            ...plot.series.flatMap((series) =>
+              series.data.map((entry) => [
+                series.name,
+                entry.label,
+                String(entry.x),
+                String(entry.y),
+              ]),
+            ),
           ];
           return [
-            ...[node.attrs.caption, node.attrs.series, node.attrs.alt]
+            ...[
+              node.attrs.caption,
+              node.attrs.series,
+              node.attrs.alt,
+              plot.source,
+              plot.nature !== 'unspecified' ? plot.nature : '',
+            ]
               .filter((text): text is string => Boolean(text))
               .map((text) => new Paragraph({ text, keepNext: true })),
             new Table({

@@ -26,7 +26,7 @@ export const slideDesignMessages = {
     page: (index: number) => `ページ ${index + 1}`,
     empty:
       '変更できるページを1つ以上選択してください。個別設定を保持する場合、そのページは対象外になります。',
-    invalid: '文字サイズを表示された範囲内の数値で指定してください。',
+    invalid: '文字サイズ・幅・余白を表示された範囲内の数値で指定してください。',
     role: {
       title: 'タイトル',
       heading: '見出し',
@@ -43,6 +43,7 @@ export const slideDesignMessages = {
       'table-focus': '表を中心に',
       'formula-focus': '数式を中心に',
       'key-number': '数値を強調',
+      composite: '図・表・説明を領域に配置',
     },
     densities: {
       spacious: 'ゆったり',
@@ -78,7 +79,8 @@ export const slideDesignMessages = {
     page: (index: number) => `Page ${index + 1}`,
     empty:
       'Select at least one eligible page. Pages with individual settings are excluded when Keep is checked.',
-    invalid: 'Enter a numeric font size within the displayed range.',
+    invalid:
+      'Enter numeric sizes, widths and gaps within the displayed ranges.',
     role: {
       title: 'Title',
       heading: 'Heading',
@@ -95,6 +97,7 @@ export const slideDesignMessages = {
       'table-focus': 'Table focus',
       'formula-focus': 'Formula focus',
       'key-number': 'Key number',
+      composite: 'Composite figure / table / text regions',
     },
     densities: {
       spacious: 'Spacious',

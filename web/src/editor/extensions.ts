@@ -5,6 +5,8 @@ import {
   type Extensions,
 } from '@tiptap/core';
 import { Image } from '@tiptap/extension-image';
+import { readFigureEdit, svgDataUrl } from '@/src/document/figure-edit';
+import { sanitizeSvgSource } from '@/src/security/svg-source';
 import { Mathematics } from '@tiptap/extension-mathematics';
 import { TableKit } from '@tiptap/extension-table';
 import { NodeSelection, Plugin } from '@tiptap/pm/state';
@@ -323,7 +325,8 @@ function createFigureExtension(resolveImageUrl: (source: string) => string) {
           getAttrs: (element) => {
             const src =
               element instanceof HTMLElement
-                ? element.getAttribute('src')
+                ? (element.getAttribute('data-original-src') ??
+                  element.getAttribute('src'))
                 : null;
             return src && safeResourceUrl(src, 'image') ? null : false;
           },
@@ -334,6 +337,12 @@ function createFigureExtension(resolveImageUrl: (source: string) => string) {
     addAttributes() {
       return {
         ...this.parent?.(),
+        src: {
+          default: null,
+          parseHTML: (element) =>
+            element.getAttribute('data-original-src') ??
+            element.getAttribute('src'),
+        },
         alt: {
           default: '',
           parseHTML: (element) => element.getAttribute('alt') ?? '',
@@ -363,6 +372,22 @@ function createFigureExtension(resolveImageUrl: (source: string) => string) {
               element.getAttribute('data-slide-placement'),
             ) ?? null,
         },
+        figureEdit: {
+          default: null,
+          parseHTML: (element) => {
+            try {
+              return (
+                readFigureEdit(
+                  JSON.parse(
+                    element.getAttribute('data-figure-edit') ?? 'null',
+                  ),
+                ) ?? null
+              );
+            } catch {
+              return null;
+            }
+          },
+        },
       };
     },
 
@@ -371,6 +396,7 @@ function createFigureExtension(resolveImageUrl: (source: string) => string) {
         align,
         nodeId,
         slidePlacement,
+        figureEdit,
         src,
         style: _discardedStyle,
         width,
@@ -385,7 +411,17 @@ function createFigureExtension(resolveImageUrl: (source: string) => string) {
         align === 'left' || align === 'right' || align === 'center'
           ? align
           : 'center';
-      const resolvedSource = resolveSafeImageUrl(src, resolveImageUrl);
+      let resolvedSource = resolveSafeImageUrl(src, resolveImageUrl);
+      const sourceEdit = readFigureEdit(figureEdit);
+      if (sourceEdit?.svgSource && typeof DOMParser !== 'undefined') {
+        try {
+          resolvedSource = svgDataUrl(
+            sanitizeSvgSource(sourceEdit.svgSource).source,
+          );
+        } catch {
+          /* Preserve the original if source is invalid. */
+        }
+      }
       const safePlacement = isSlideImagePlacement(slidePlacement)
         ? serializeSlideImagePlacement(slidePlacement)
         : undefined;
@@ -394,10 +430,14 @@ function createFigureExtension(resolveImageUrl: (source: string) => string) {
         'img',
         mergeAttributes(this.options.HTMLAttributes, imageAttributes, {
           src: resolvedSource,
+          'data-original-src': typeof src === 'string' ? src : undefined,
           'data-node-id': typeof nodeId === 'string' ? nodeId : undefined,
           'data-width': safeWidth,
           'data-align': safeAlign,
           'data-slide-placement': safePlacement,
+          'data-figure-edit': readFigureEdit(figureEdit)
+            ? JSON.stringify(figureEdit)
+            : undefined,
           class: 'kumi-figure',
           style: `display:block;width:${safeWidth}%;height:auto;margin-left:${
             safeAlign === 'right' || safeAlign === 'center' ? 'auto' : '0'
@@ -463,6 +503,7 @@ const Chart = Node.create({
   addAttributes() {
     return {
       chartType: { default: 'line' },
+      plot: { default: null },
       data: {
         default: [
           { label: 'A', x: 1, y: 1 },
@@ -484,7 +525,7 @@ const Chart = Node.create({
         getAttrs: (element) => {
           try {
             const raw = element.getAttribute('data-kumi-chart') ?? '';
-            if (raw.length > 100_000) return false;
+            if (raw.length > 500_000) return false;
             const attrs: unknown = JSON.parse(raw);
             const chart = validateDocumentData({
               schemaVersion: 2,

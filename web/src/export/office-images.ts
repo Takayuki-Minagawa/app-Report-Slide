@@ -4,6 +4,8 @@ import type { AppLocale } from '@/src/i18n/messages';
 import { safeResourceUrl } from '@/src/security/resource-url';
 import type { AssetUrls } from '@/src/workspace/files';
 import { bytesToBase64 } from './embedded-images';
+import { readFigureEdit } from '@/src/document/figure-edit';
+import { sanitizeSvgSource } from '@/src/security/svg-source';
 
 export interface OfficeImage {
   data: Uint8Array;
@@ -167,6 +169,13 @@ async function prepareImage(
   }
 }
 
+/** Internal, derived SVG only: the caller constructs it from the safe figure renderer. */
+export async function prepareRenderedFigureSvg(
+  source: string,
+): Promise<OfficeImage> {
+  return prepareImage(new TextEncoder().encode(source), 'svg');
+}
+
 function imageError(source: string, locale: AppLocale, missing = false): Error {
   const label = /^data:/i.test(source)
     ? locale === 'ja'
@@ -198,6 +207,19 @@ export async function prepareOfficeImages(
   const sources = new Map<string, string>();
   for (const node of walkDocumentTree(document.children)) {
     if (node.type !== 'figure' && node.type !== 'inlineImage') continue;
+    // An editable SVG is an independent replacement. Only this figure can skip
+    // its original; another figure/inline image sharing the same URL still needs it.
+    if (node.type === 'figure') {
+      const svgSource = readFigureEdit(node.attrs.figureEdit)?.svgSource;
+      if (svgSource) {
+        try {
+          sanitizeSvgSource(svgSource);
+          continue;
+        } catch {
+          // Invalid SVG falls back to the original, matching FigureGraphic.
+        }
+      }
+    }
     const original = node.attrs.src;
     const source = safeResourceUrl(original, 'image');
     if (/^(?:https?:|\/\/)/i.test(original.trim()))

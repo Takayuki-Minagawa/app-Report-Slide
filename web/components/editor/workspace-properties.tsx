@@ -13,7 +13,11 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
-import { documentTitle, type DocumentData } from '@/src/document/model';
+import {
+  documentTitle,
+  type DocumentData,
+  type DocumentMetadata,
+} from '@/src/document/model';
 import {
   documentThemes,
   documentFlags,
@@ -38,6 +42,8 @@ import { ChartProperties } from './chart-properties';
 import { FootnoteProperties } from './footnote-properties';
 import { FigurePlacementProperties } from './figure-placement-properties';
 import type { ChartNode } from '@/src/document/model';
+import { FigureEditProperties } from './figure-edit-properties';
+import { BlockActions } from './block-actions';
 
 interface WorkspacePropertiesProps {
   slideTools?: ReactNode;
@@ -59,6 +65,9 @@ interface WorkspacePropertiesProps {
   updateDocumentFlag: (flag: DocumentFlag, checked: boolean) => void;
   displayedStatus: DisplayedWorkspaceStatus;
   dirty: boolean;
+  resolveImageUrl: (source: string) => string;
+  updateMetadata: (metadata: DocumentMetadata) => void;
+  focusNode: (nodeId: string) => void;
 }
 
 export function WorkspaceProperties({
@@ -81,6 +90,9 @@ export function WorkspaceProperties({
   updateDocumentFlag,
   displayedStatus,
   dirty,
+  resolveImageUrl,
+  updateMetadata,
+  focusNode,
 }: WorkspacePropertiesProps) {
   const { copy, locale } = useAppPreferences();
   const [referenceTarget, setReferenceTarget] = useState('');
@@ -244,6 +256,27 @@ export function WorkspaceProperties({
                   <p className="break-all font-mono text-[10px] text-muted-foreground">
                     {selectedNode.nodeId}
                   </p>
+                )}
+                {selectedNode.nodeId && (
+                  <BlockActions
+                    editor={editor}
+                    nodeId={selectedNode.nodeId}
+                    disabled={documentWriteLocked}
+                    onFocus={focusNode}
+                  />
+                )}
+                {selectedSemantic?.type === 'figure' && (
+                  <FigureEditProperties
+                    key={`figure-edit:${selectedSemantic.attrs.nodeId}:${JSON.stringify(selectedSemantic.attrs.figureEdit)}`}
+                    node={selectedSemantic}
+                    metadata={document.metadata}
+                    resolveImageUrl={resolveImageUrl}
+                    disabled={documentWriteLocked}
+                    onApply={applyAttributes}
+                    onMetadataChange={(metadata) =>
+                      updateMetadata(metadata as DocumentMetadata)
+                    }
+                  />
                 )}
                 {(selectedNode.type === 'inlineMath' ||
                   selectedNode.type === 'blockMath') && (

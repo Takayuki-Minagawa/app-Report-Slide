@@ -8,6 +8,14 @@ import {
   type InlineNode,
 } from '@/src/document/model';
 import { migrateDocumentData } from '@/src/document/validation';
+import {
+  figureReferences,
+  type FigureReference,
+} from '@/src/document/figure-edit';
+import {
+  readReaderSupplements,
+  syncReaderSupplementPositions,
+} from '@/src/document/reader-supplement';
 
 export const projectFileName = 'project.json';
 export const maximumProjectChapters = 100;
@@ -127,6 +135,153 @@ export function isLocalProjectImage(source: string): boolean {
   return !/^[a-z][a-z\d+.-]*:/i.test(value) && !value.startsWith('/');
 }
 
+function sameFigureReference(a: FigureReference, b: FigureReference): boolean {
+  return (
+    a.title === b.title &&
+    a.authors === b.authors &&
+    a.year === b.year &&
+    a.url === b.url
+  );
+}
+
+function remapFigureReferenceIds(
+  node: DocumentNode | InlineNode,
+  ids: ReadonlyMap<string, string>,
+): DocumentNode | InlineNode {
+  let result = node;
+  if (node.type === 'figure' && node.attrs.figureEdit?.source) {
+    const source = node.attrs.figureEdit.source;
+    const referenceId = ids.get(source.referenceId);
+    if (referenceId && referenceId !== source.referenceId)
+      result = {
+        ...node,
+        attrs: {
+          ...node.attrs,
+          figureEdit: {
+            ...node.attrs.figureEdit,
+            source: { ...source, referenceId },
+          },
+        },
+      };
+  }
+  if ('content' in result && result.content)
+    result = {
+      ...result,
+      content: result.content.map((child) =>
+        remapFigureReferenceIds(child, ids),
+      ),
+    } as typeof result;
+  return result;
+}
+
+/** Imported chapters may reuse a reference ID for another publication. Preserve both explicitly. */
+function normalizeProjectFigureReferences(
+  project: ReportProject,
+): ReportProject {
+  const catalog = new Map(
+    figureReferences(project.metadata).map((reference) => [
+      reference.id,
+      reference,
+    ]),
+  );
+  const chapters = project.chapters.map((chapter) => {
+    const ids = new Map<string, string>();
+    for (const reference of figureReferences(chapter.document.metadata)) {
+      let id = reference.id;
+      const existing = catalog.get(id);
+      if (existing && !sameFigureReference(existing, reference)) {
+        const base = `${chapter.id.slice(0, 60)}:${reference.id.slice(0, 60)}`;
+        id = base;
+        let suffix = 2;
+        while (
+          catalog.has(id) &&
+          !sameFigureReference(catalog.get(id)!, reference)
+        )
+          id = `${base}:${suffix++}`;
+      }
+      ids.set(reference.id, id);
+      if (!catalog.has(id)) catalog.set(id, { ...reference, id });
+    }
+    return ids.size
+      ? {
+          ...chapter,
+          document: {
+            ...chapter.document,
+            children: chapter.document.children.map((node) =>
+              remapFigureReferenceIds(node, ids),
+            ) as DocumentNode[],
+          },
+        }
+      : chapter;
+  });
+  if (!catalog.size && project.metadata.figure_references === undefined)
+    return project;
+  const references = [...catalog.values()];
+  return {
+    ...project,
+    metadata: { ...project.metadata, figure_references: references },
+    chapters: chapters.map((chapter) => ({
+      ...chapter,
+      document: {
+        ...chapter.document,
+        metadata: {
+          ...chapter.document.metadata,
+          figure_references: references,
+        },
+      },
+    })),
+  };
+}
+
+/** An edit to a shared project reference updates every chapter without changing its identity. */
+export function updateReportProjectDocument(
+  project: ReportProject,
+  chapterId: string,
+  document: DocumentData,
+): ReportProject {
+  const catalog = new Map(
+    figureReferences(project.metadata).map((reference) => [
+      reference.id,
+      reference,
+    ]),
+  );
+  for (const reference of figureReferences(document.metadata))
+    catalog.set(reference.id, reference);
+  const references = [...catalog.values()];
+  const hasReferences =
+    references.length > 0 ||
+    project.metadata.figure_references !== undefined ||
+    document.metadata.figure_references !== undefined;
+  return {
+    ...project,
+    metadata: hasReferences
+      ? { ...project.metadata, figure_references: references }
+      : project.metadata,
+    chapters: project.chapters.map((chapter) => {
+      const edited = chapter.id === chapterId ? document : chapter.document;
+      return {
+        ...chapter,
+        document: hasReferences
+          ? {
+              ...edited,
+              metadata: { ...edited.metadata, figure_references: references },
+            }
+          : edited,
+      };
+    }),
+  };
+}
+
+export function appendReportProjectChapter(
+  project: ReportProject,
+  chapter: ReportChapter,
+): ReportProject {
+  return normalizeProjectFigureReferences({
+    ...project,
+    chapters: [...project.chapters, chapter],
+  });
+}
+
 function assembleChapterNode(
   node: DocumentNode | InlineNode,
   chapter: ReportChapter,
@@ -221,7 +376,7 @@ export function validateReportProject(project: ReportProject): ReportProject {
     metadata: project.metadata,
     children: project.chapters[0].document.children,
   });
-  return result;
+  return normalizeProjectFigureReferences(result);
 }
 
 export function manifestFromProject(project: ReportProject): ProjectManifest {
@@ -239,7 +394,7 @@ export function createReportProject(document: DocumentData): ReportProject {
   const report = migrateDocumentData(document);
   if (report.type !== 'report') throw new ReportProjectError('reportOnly');
   const id = createChapterId();
-  return {
+  return normalizeProjectFigureReferences({
     schemaVersion: 1,
     type: 'kumi-report-project',
     metadata: { ...report.metadata },
@@ -253,7 +408,7 @@ export function createReportProject(document: DocumentData): ReportProject {
         document: report,
       },
     ],
-  };
+  });
 }
 
 export function createBlankChapter(
@@ -282,7 +437,8 @@ export function createBlankChapter(
 }
 
 export function assembleReportProject(project: ReportProject): DocumentData {
-  const chapters = project.chapters.filter((chapter) => chapter.enabled);
+  const normalized = normalizeProjectFigureReferences(project);
+  const chapters = normalized.chapters.filter((chapter) => chapter.enabled);
   const children: DocumentNode[] = [];
   chapters.forEach((chapter, index) => {
     if (index > 0 && chapter.pageBreakBefore) {
@@ -295,12 +451,32 @@ export function assembleReportProject(project: ReportProject): DocumentData {
   });
   if (children.length === 0)
     children.push({ type: 'paragraph', attrs: { nodeId: 'project-empty' } });
-  return {
+  const document: DocumentData = {
     schemaVersion: 2,
     type: 'report',
-    metadata: { ...project.metadata },
+    metadata: { ...normalized.metadata },
     children,
   };
+  const supplements = chapters.flatMap((chapter) =>
+    readReaderSupplements(chapter.document.metadata).pages.map((entry) => ({
+      ...entry,
+      pageId: `${chapter.id}:${entry.pageId}`,
+      ...(entry.anchorIds
+        ? { anchorIds: entry.anchorIds.map((id) => `${chapter.id}:${id}`) }
+        : {}),
+      // Chapter-local positions may collide. Resolve every entry against the assembled content below.
+      orphaned: true,
+    })),
+  );
+  // Chapter-local supplements are the source of truth; the project metadata may contain a stale creation-time copy.
+  delete document.metadata.reader_supplements;
+  if (supplements.length)
+    document.metadata.reader_supplements = {
+      version: 1,
+      pages: supplements,
+    };
+  document.metadata = syncReaderSupplementPositions(document);
+  return document;
 }
 
 export function projectTitle(project: ReportProject): string {

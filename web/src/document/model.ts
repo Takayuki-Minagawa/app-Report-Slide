@@ -2,6 +2,8 @@ import { resolveDocumentTheme } from './metadata';
 import type { PageSettings } from './page-settings';
 import type { TableCellBorders } from './table';
 import type { TextRuler } from './text-ruler';
+import type { FigureEdit } from './figure-edit';
+import type { ChartPlot } from './chart';
 
 export type DocumentType = 'report' | 'slide';
 
@@ -181,6 +183,8 @@ export interface FigureNode extends IdentifiedNode {
     align: 'left' | 'center' | 'right';
     /** Optional PowerPoint-style position used only when the document is a Slide. */
     slidePlacement?: SlideImagePlacement | null;
+    /** Source image, crop, overlay annotations and citation remain independently editable. */
+    figureEdit?: FigureEdit | null;
   };
 }
 
@@ -195,6 +199,7 @@ export interface ChartNode extends IdentifiedNode {
   type: 'chart';
   attrs: IdentifiedNode['attrs'] & {
     chartType: 'line' | 'scatter' | 'bar';
+    plot?: ChartPlot | null;
     data: { label: string; x: number; y: number }[];
     xLabel: string;
     yLabel: string;

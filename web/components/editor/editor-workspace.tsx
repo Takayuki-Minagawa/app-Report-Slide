@@ -14,6 +14,7 @@ import { HtmlImportDialog } from './html-import-dialog';
 import { SlideNavigation } from './slide-navigation';
 import { SlideDesignPanel } from './slide-design-panel';
 import { SlideCheckPanel } from './slide-check-panel';
+import { ReaderSupplementProperties } from './reader-supplement-properties';
 import { slideNavigationPages } from '@/src/document/slide-navigation';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 
@@ -62,6 +63,12 @@ export function EditorWorkspace() {
         (element) => element.nodeId === workspace.selectedNode?.nodeId,
       ),
     )?.index ?? currentPageIndex;
+  const editedPageIndex =
+    slideNavigationPages(workspace.document, locale).find((page) =>
+      page.elements.some(
+        (element) => element.nodeId === workspace.selectedNode?.nodeId,
+      ),
+    )?.index ?? 0;
   const projectPanel = (overlay: boolean) => (
     <ProjectPanel
       idPrefix={overlay ? 'workspace-sheet' : 'workspace'}
@@ -107,24 +114,34 @@ export function EditorWorkspace() {
     <WorkspaceProperties
       overlay={overlay}
       slideTools={
-        workspace.document.type === 'slide' ? (
-          <>
-            <SlideDesignPanel
-              document={workspace.previewDocument}
-              currentPageIndex={selectedPageIndex}
-              disabled={controlsLocked}
-              onApply={workspace.updateMetadata}
-              resolveImageUrl={workspace.resolvePreviewImageUrl}
-            />
-            <SlideCheckPanel
-              document={workspace.previewDocument}
-              resolveImageUrl={workspace.resolvePreviewImageUrl}
-              onFocus={focusTarget}
-              onPageSelect={setCurrentPageIndex}
-              disabled={controlsLocked}
-            />
-          </>
-        ) : undefined
+        <>
+          <ReaderSupplementProperties
+            key={`reader:${workspace.document.children[0]?.attrs.nodeId}:${editedPageIndex}:${JSON.stringify(workspace.document.metadata.reader_supplements)}`}
+            document={workspace.document}
+            pageIndex={editedPageIndex}
+            disabled={controlsLocked}
+            onMetadata={workspace.updateReaderSupplements}
+          />
+          {workspace.document.type === 'slide' ? (
+            <>
+              <SlideDesignPanel
+                document={workspace.previewDocument}
+                currentPageIndex={selectedPageIndex}
+                disabled={controlsLocked}
+                onApply={workspace.updateMetadata}
+                resolveImageUrl={workspace.resolvePreviewImageUrl}
+                onFocus={focusTarget}
+              />
+              <SlideCheckPanel
+                document={workspace.previewDocument}
+                resolveImageUrl={workspace.resolvePreviewImageUrl}
+                onFocus={focusTarget}
+                onPageSelect={setCurrentPageIndex}
+                disabled={controlsLocked}
+              />
+            </>
+          ) : null}
+        </>
       }
       idPrefix={overlay ? 'workspace-sheet' : 'workspace'}
       document={workspace.previewDocument}
@@ -143,6 +160,9 @@ export function EditorWorkspace() {
       updateDocumentFlag={workspace.updateDocumentFlag}
       displayedStatus={workspace.displayedStatus}
       dirty={workspace.dirty}
+      resolveImageUrl={workspace.resolvePreviewImageUrl}
+      updateMetadata={workspace.updateMetadata}
+      focusNode={focusTarget}
     />
   );
 

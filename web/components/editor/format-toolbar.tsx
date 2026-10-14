@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { Editor } from '@tiptap/react';
 import {
   Bold,
@@ -37,6 +37,12 @@ import {
   selectionTouchesSpeakerNotes,
   setCallout,
 } from '@/src/editor/document-commands';
+import {
+  insertDocumentBlock,
+  insertionPage,
+  type BlockInsertionTarget,
+} from '@/src/editor/block-commands';
+import { createConceptFigure } from '@/src/document/figure-edit';
 
 export function FormatToolbar({
   editor,
@@ -45,7 +51,19 @@ export function FormatToolbar({
   editor: Editor | null;
   documentType: DocumentType;
 }) {
-  const { copy } = useAppPreferences();
+  const { copy, locale } = useAppPreferences();
+  const [insertionTarget, setInsertionTarget] =
+    useState<BlockInsertionTarget>('after-block');
+  const [insertionResult, setInsertionResult] = useState('');
+  const ja = locale === 'ja';
+  const insert = (value: Parameters<typeof insertDocumentBlock>[1]) => {
+    if (!editor) return;
+    const page = insertionPage(editor, insertionTarget);
+    if (insertDocumentBlock(editor, value, insertionTarget))
+      setInsertionResult(
+        ja ? `${page}ページに挿入しました` : `Inserted on page ${page}`,
+      );
+  };
   // Notes hold paragraphs only: a block command would lift the text out of
   // them and into the slide.
   const inNotes = Boolean(editor && selectionTouchesSpeakerNotes(editor));
@@ -168,11 +186,16 @@ export function FormatToolbar({
         label={copy.workspace.insertTable}
         disabled={inNotes}
         onClick={() =>
-          editor
-            ?.chain()
-            .focus()
-            .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-            .run()
+          insert({
+            type: 'table',
+            content: Array.from({ length: 3 }, (_, row) => ({
+              type: 'tableRow',
+              content: Array.from({ length: 3 }, () => ({
+                type: row === 0 ? 'tableHeader' : 'tableCell',
+                content: [{ type: 'paragraph' }],
+              })),
+            })),
+          })
         }
       >
         <Table2 />
@@ -181,31 +204,67 @@ export function FormatToolbar({
         label={copy.workspace.insertChart}
         disabled={inNotes}
         onClick={() =>
-          editor
-            ?.chain()
-            .focus()
-            .insertContent({
-              type: 'chart',
-              attrs: {
-                nodeId: createNodeId(),
-                chartType: 'line',
-                data: [
-                  { label: 'A', x: 1, y: 2 },
-                  { label: 'B', x: 2, y: 4 },
-                ],
-                xLabel: 'X',
-                yLabel: 'Y',
-                series: 'Series 1',
-                alt: 'Chart',
-                width: 100,
-                caption: null,
-              },
-            })
-            .run()
+          insert({
+            type: 'chart',
+            attrs: {
+              nodeId: createNodeId(),
+              chartType: 'line',
+              data: [
+                { label: 'A', x: 1, y: 2 },
+                { label: 'B', x: 2, y: 4 },
+              ],
+              xLabel: 'X',
+              yLabel: 'Y',
+              series: 'Series 1',
+              alt: 'Chart',
+              width: 100,
+              caption: null,
+            },
+          })
         }
       >
         <ChartNoAxesCombined />
       </FormatButton>
+      <Button
+        size="sm"
+        variant="ghost"
+        disabled={inNotes}
+        onClick={() => insert(createConceptFigure())}
+      >
+        {ja ? 'SVG図解を挿入' : 'Insert SVG diagram'}
+      </Button>
+      <NativeSelect
+        aria-label={ja ? '図表の挿入先' : 'Figure and table insertion target'}
+        size="sm"
+        value={insertionTarget}
+        onChange={(event) =>
+          setInsertionTarget(event.target.value as BlockInsertionTarget)
+        }
+      >
+        <NativeSelectOption value="after-block">
+          {ja ? '選択ブロックの後' : 'After selected block'}
+        </NativeSelectOption>
+        <NativeSelectOption value="page-end">
+          {ja ? '現在のページ末尾' : 'End of current page'}
+        </NativeSelectOption>
+        <NativeSelectOption value="cursor">
+          {ja
+            ? 'カーソル位置（セル内を含む）'
+            : 'Cursor (including table cells)'}
+        </NativeSelectOption>
+      </NativeSelect>
+      <output
+        className="text-[10px] text-muted-foreground"
+        aria-live="polite"
+        aria-label={ja ? '図表の挿入結果' : 'Insertion result'}
+      >
+        {insertionResult ||
+          (editor
+            ? ja
+              ? `挿入先: ${insertionPage(editor, insertionTarget)}ページ`
+              : `Target: page ${insertionPage(editor, insertionTarget)}`
+            : '')}
+      </output>
       <FormatButton
         label={copy.workspace.insertFootnote}
         onClick={() =>

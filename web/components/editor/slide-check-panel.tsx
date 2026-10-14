@@ -12,11 +12,17 @@ import {
 } from '@/components/ui/dialog';
 import { DocumentPage } from '@/components/preview/document-page';
 import type { DocumentData } from '@/src/document/model';
-import type { DocumentTreeNode } from '@/src/document/traversal';
+import { readFigureEdit } from '@/src/document/figure-edit';
+import {
+  walkDocumentTree,
+  type DocumentTreeNode,
+} from '@/src/document/traversal';
 import { analyzeDocument, splitDocumentPages } from '@/src/document/semantics';
 import { slideNavigationPages } from '@/src/document/slide-navigation';
 import {
   checkSlideGeometry,
+  rasterPixelRatio,
+  slideCheckSuggestions,
   type SlideCheckElement,
   type SlideCheckIssue,
   type SlideCheckRect,
@@ -234,6 +240,15 @@ function issueText(
           ? '画像を取り込み直すか、外部画像への接続を確認して再検査してください。'
           : 'Import the image again or check the external image connection, then rerun the check.',
       };
+    case 'image-low-resolution':
+      return {
+        reason: ja
+          ? `表示寸法に対して元画像の画素数が少ない可能性（約${issue.pixelRatio?.toFixed(2)}倍）`
+          : `The original may have too few pixels for this size (about ${issue.pixelRatio?.toFixed(2)}×)`,
+        suggestion: ja
+          ? '基準幅920 pxでの目安です。画像内の文字が読めることを保証する検査ではありません。'
+          : 'This is a hint at the 920 px reference width; it does not guarantee legible text inside images.',
+      };
     case 'measurement-unavailable':
       return {
         reason: ja
@@ -374,6 +389,81 @@ export function SlideCheckPanel({
           nodeId,
           name: names.get(nodeId ?? '') ?? page.title,
         });
+      for (const image of Array.from(article.querySelectorAll('img'))) {
+        if (!image.complete || !image.naturalWidth) continue;
+        const source = image.currentSrc || image.src;
+        const nodeId =
+          image.closest<HTMLElement>('[data-node-id]')?.dataset.nodeId ??
+          page.anchorNodeId;
+        const original = Array.from(walkDocumentTree(pages[run.index])).find(
+          (node) =>
+            (node.type === 'figure' || node.type === 'inlineImage') &&
+            node.attrs.nodeId === nodeId,
+        );
+        const originalSource =
+          original &&
+          (original.type === 'figure' || original.type === 'inlineImage')
+            ? original.attrs.src
+            : '';
+        if (
+          [source, originalSource].some((value) =>
+            /^(data:image\/svg\+xml)|\.svg(?:[?#]|$)/i.test(value),
+          )
+        )
+          continue;
+        const bounds = image.getBoundingClientRect();
+        const pixelRatio = rasterPixelRatio(
+          image.naturalWidth,
+          image.naturalHeight,
+          bounds.width,
+          bounds.height,
+        );
+        if (pixelRatio === undefined || pixelRatio >= 0.95) continue;
+        measured.push({
+          id: `${run.index + 1}:image-low-resolution:${nodeId ?? ''}`,
+          kind: 'image-low-resolution',
+          page: run.index + 1,
+          title: page.title,
+          nodeId,
+          name: names.get(nodeId ?? '') ?? page.title,
+          pixelRatio,
+        });
+      }
+      for (const graphic of Array.from(
+        article.querySelectorAll<SVGSVGElement>('svg.figure-edit-graphic'),
+      )) {
+        const nodeId =
+          graphic.closest<HTMLElement>('[data-node-id]')?.dataset.nodeId;
+        const node = Array.from(walkDocumentTree(pages[run.index])).find(
+          (candidate) =>
+            candidate.type === 'figure' && candidate.attrs.nodeId === nodeId,
+        );
+        if (node?.type !== 'figure') continue;
+        const edit = readFigureEdit(node.attrs.figureEdit);
+        if (
+          !edit?.imageSize ||
+          edit.svgSource ||
+          /^(data:image\/svg\+xml)|\.svg(?:[?#]|$)/i.test(node.attrs.src)
+        )
+          continue;
+        const bounds = graphic.getBoundingClientRect();
+        const pixelRatio = rasterPixelRatio(
+          (edit.imageSize.width * (edit.crop?.width ?? 100)) / 100,
+          (edit.imageSize.height * (edit.crop?.height ?? 100)) / 100,
+          bounds.width,
+          bounds.height,
+        );
+        if (pixelRatio === undefined || pixelRatio >= 0.95) continue;
+        measured.push({
+          id: `${run.index + 1}:image-low-resolution:${nodeId}`,
+          kind: 'image-low-resolution',
+          page: run.index + 1,
+          title: page.title,
+          nodeId,
+          name: names.get(nodeId ?? '') ?? page.title,
+          pixelRatio,
+        });
+      }
       const nextIssues = [...run.issues, ...measured];
       if (run.index + 1 < pages.length)
         setRun({ ...run, index: run.index + 1, issues: nextIssues });
@@ -515,6 +605,23 @@ export function SlideCheckPanel({
                     </p>
                     <p>{text.reason}</p>
                     <p className="text-muted-foreground">{text.suggestion}</p>
+                    {slideCheckSuggestions(document, issue, locale).length >
+                      0 && (
+                      <ul
+                        className="list-disc space-y-1 pl-4"
+                        aria-label={
+                          ja
+                            ? '内容を保つ修正候補'
+                            : 'Content-preserving suggestions'
+                        }
+                      >
+                        {slideCheckSuggestions(document, issue, locale).map(
+                          (suggestion) => (
+                            <li key={suggestion}>{suggestion}</li>
+                          ),
+                        )}
+                      </ul>
+                    )}
                     <div className="flex flex-wrap gap-2">
                       <Button
                         variant="outline"

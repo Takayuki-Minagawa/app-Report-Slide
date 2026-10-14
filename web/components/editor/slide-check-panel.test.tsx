@@ -219,4 +219,36 @@ describe('on-demand slide checks', () => {
     );
     expect(onFocus).toHaveBeenCalledWith(document.children[1].attrs.nodeId);
   });
+
+  it('uses the retained original dimensions and crop area for raster resolution hints', async () => {
+    vi.spyOn(SVGElement.prototype, 'getBoundingClientRect').mockReturnValue(
+      bounds(100, 100, 500, 300),
+    );
+    const document = parseMarkdown(
+      '---\ntype: slide\n---\n# Cropped original\n\n![Original](original.png)',
+    ).document;
+    const figure = document.children[1];
+    if (figure.type !== 'figure') throw new Error('Expected figure');
+    figure.attrs.figureEdit = {
+      version: 1,
+      imageSize: { width: 400, height: 200 },
+      crop: { x: 0, y: 0, width: 50, height: 50 },
+    };
+    render(
+      <AppPreferencesProvider>
+        <SlideCheckPanel document={document} onFocus={() => {}} />
+      </AppPreferencesProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '全ページをチェック' }));
+    fireEvent.click(screen.getByRole('button', { name: '検査を実行' }));
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('1ページの検査完了'),
+    );
+    expect(screen.getByRole('list', { name: '検査結果' })).toHaveTextContent(
+      '約0.50倍',
+    );
+    expect(screen.getByRole('list', { name: '検査結果' })).toHaveTextContent(
+      '軸と凡例',
+    );
+  });
 });

@@ -54,6 +54,69 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Office image preparation', () => {
+  const svgSource =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 40"><rect width="80" height="40"/></svg>';
+  it.each(['missing.png', 'https://example.com/old.png'])(
+    'does not require original %s when a valid SVG replacement is displayed',
+    async (original) => {
+      const document = withImages([original]);
+      document.children[0].attrs.figureEdit = { version: 1, svgSource };
+      const result = await prepareOfficeImages(document, new Map(), 'en');
+      expect(result.images.size).toBe(0);
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+  it('still requires the original when another ordinary figure uses that same URL', async () => {
+    const document = withImages(['missing.png', 'missing.png']);
+    document.children[0].attrs.figureEdit = { version: 1, svgSource };
+    await expect(
+      prepareOfficeImages(document, new Map(), 'en'),
+    ).rejects.toThrow('Import the image file');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it('still rejects an external original used by an inline image even if another figure has a replacement', async () => {
+    const document = withImages(['https://example.com/old.png']);
+    document.children[0].attrs.figureEdit = { version: 1, svgSource };
+    document.children.push({
+      type: 'paragraph',
+      attrs: { nodeId: 'paragraph' },
+      content: [
+        {
+          type: 'inlineImage',
+          attrs: {
+            nodeId: 'inline',
+            src: 'https://example.com/old.png',
+            alt: '',
+            title: null,
+          },
+        },
+      ],
+    });
+    await expect(
+      prepareOfficeImages(document, new Map(), 'en'),
+    ).rejects.toThrow('Import the image as a local file');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it('keeps the original-image validation when the SVG replacement cannot be displayed', async () => {
+    const document = withImages(['missing.png']);
+    document.children[0].attrs.figureEdit = {
+      version: 1,
+      svgSource: '<svg>invalid',
+    };
+    await expect(
+      prepareOfficeImages(document, new Map(), 'en'),
+    ).rejects.toThrow('Import the image file');
+    const embedded = withImages([png]);
+    embedded.children[0].attrs.figureEdit = {
+      version: 1,
+      svgSource: '<svg>invalid',
+    };
+    expect(
+      (await prepareOfficeImages(embedded, new Map(), 'en')).images.get(png)
+        ?.type,
+    ).toBe('png');
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it('rejects remote URLs before fetching any local or remote image', async () => {
     const source = withImages(['local.png', 'https://example.com/private.png']);
     await expect(

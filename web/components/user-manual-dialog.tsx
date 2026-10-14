@@ -36,7 +36,7 @@ function ManualSection({
 }
 
 export function UserManualDialog() {
-  const { copy } = useAppPreferences();
+  const { copy, locale } = useAppPreferences();
   const { manual } = copy;
 
   return (
@@ -83,6 +83,32 @@ export function UserManualDialog() {
             <ManualSection
               title={manual.recoveryTitle}
               items={manual.recoverySteps}
+            />
+            <ManualSection
+              title={
+                locale === 'ja'
+                  ? '8. 図表を作って再編集する'
+                  : '8. Create and re-edit figures'
+              }
+              items={
+                locale === 'ja'
+                  ? [
+                      'サンプルを開く → 図表サンプル（5ページ）で、図解、原図＋表、比較グラフ、補足を試せます。',
+                      'SVG図解を挿入し、図を選んで「図解・原図・出典」からラベル、矢印、原画像の切り抜き・注釈を編集します。共有文献を保存して図へ関連付けると、同じ文献を使う図へ訂正が反映されます。',
+                      'スライドデザインの「図・表・説明を領域に配置」では、名前付きの領域割当、列幅、余白、左右入替を指定できます。手動配置の図は元の位置を保ちます。',
+                      'グラフは最大8系列、線種・マーカー・横棒・値ラベル・軸範囲・単位・CSVに対応します。図表の挿入先はツールバーで選べます。',
+                      '読者向け補足はHTMLの「詳しい説明」から開けます。図・グラフをクリックして拡大し、Escで同じページへ戻れます。',
+                      'HTML／ZIPに保存すると原画像と編集情報を持ち運べます。「保存形式の違い」で現在の図表が各形式にどこまで残るかを確認してください。',
+                    ]
+                  : [
+                      'Open an example → Figure examples (5 pages) demonstrates diagrams, evidence with tables, comparison charts and reader supplements.',
+                      'Insert an SVG diagram, then edit its source, labels, arrows, non-destructive crop, annotations and shared reference from figure properties.',
+                      'Choose composite regions in slide design to name and assign blocks, adjust column width and gaps, and swap columns. Manual figure coordinates remain protected.',
+                      'Charts support up to eight series, styles, markers, horizontal bars, value labels, axis ranges, units and CSV. Choose the insertion target in the toolbar.',
+                      'HTML readers open Details or click a figure to enlarge it. Escape returns to the same page.',
+                      'Save HTML or ZIP to carry original images and editing data together. Save format details explains the limits for each format.',
+                    ]
+              }
             />
             <section className="rounded-md border bg-muted/30 p-3">
               <h3 className="font-semibold">{manual.privacyTitle}</h3>

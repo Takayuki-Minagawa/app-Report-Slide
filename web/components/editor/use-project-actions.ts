@@ -15,6 +15,8 @@ import {
 import { prepareChapter, pruneProjectAssets } from '@/src/project/assets';
 import {
   assembleReportProject,
+  appendReportProjectChapter,
+  updateReportProjectDocument,
   createBlankChapter,
   createReportProject,
   maximumProjectChapters,
@@ -51,14 +53,11 @@ export function projectWithDocument(
   session: ProjectSession,
   document: DocumentData,
 ): ReportProject {
-  return {
-    ...session.project,
-    chapters: session.project.chapters.map((chapter) =>
-      chapter.id === session.activeChapterId
-        ? { ...chapter, document }
-        : chapter,
-    ),
-  };
+  return updateReportProjectDocument(
+    session.project,
+    session.activeChapterId,
+    document,
+  );
 }
 
 interface ProjectWorkspaceBridge {
@@ -239,10 +238,10 @@ export function useProjectActions(bridge: ProjectWorkspaceBridge) {
         ];
       }
       if (request !== getRevision()) return;
-      const next = validateReportProject({
-        ...project,
-        chapters: [...project.chapters, chapter],
-      });
+      const next = validateReportProject(
+        appendReportProjectChapter(project, chapter),
+      );
+      chapter = next.chapters.find((candidate) => candidate.id === chapter.id)!;
       loadDocument(
         chapter.document,
         projectStatus('chapterAdded', chapter.title),
@@ -334,7 +333,19 @@ export function useProjectActions(bridge: ProjectWorkspaceBridge) {
 
   const updateProjectMetadata = (updates: Partial<DocumentMetadata>) => {
     if (!session || locked || busy) return;
-    const project = snapshot()!;
+    let project = snapshot()!;
+    if (updates.figure_references !== undefined) {
+      const active = project.chapters.find(
+        (chapter) => chapter.id === session.activeChapterId,
+      )!;
+      project = updateReportProjectDocument(project, active.id, {
+        ...active.document,
+        metadata: {
+          ...active.document.metadata,
+          figure_references: updates.figure_references,
+        },
+      });
+    }
     nextRevision();
     setSession((current) =>
       current
@@ -342,7 +353,14 @@ export function useProjectActions(bridge: ProjectWorkspaceBridge) {
             ...current,
             project: {
               ...project,
-              metadata: { ...current.project.metadata, ...updates },
+              metadata: {
+                ...project.metadata,
+                ...current.project.metadata,
+                ...(project.metadata.figure_references !== undefined
+                  ? { figure_references: project.metadata.figure_references }
+                  : {}),
+                ...updates,
+              },
             },
             dirty: true,
           }
