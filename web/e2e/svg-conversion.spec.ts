@@ -44,11 +44,102 @@ async function openFixture(page: Page, svg = source) {
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(document)),
   });
+  // A leading figure already has a ProseMirror NodeSelection after import.
+  // The image itself must still reveal its controls on the first click.
   await page
-    .getByRole('navigation', { name: '文書構成' })
-    .getByRole('button', { name: '3状態の模式図 figure', exact: true })
+    .locator('.kumi-editor-content')
+    .getByRole('img', { name: '3状態の模式図', exact: true })
     .click();
+  await expect(
+    page.getByRole('button', { name: '画像の文字をOCRで読み取る' }),
+  ).toBeVisible();
 }
+
+test('単独図をクリックし、SVGファイル入力からキーボードで分解の取消・適用・原本復帰まで操作できる', async ({
+  page,
+}, testInfo) => {
+  const original = source.replace('初期状態', '元の状態');
+  await openFixture(page, original);
+  await page.setViewportSize({ width: 1366, height: 768 });
+  const fileInput = page.getByLabel('SVG原本を読み込む', { exact: true });
+  await expect(fileInput).toBeVisible();
+  await fileInput.setInputFiles({
+    name: 'external-diagram.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from(source),
+  });
+  await expect(
+    page.getByRole('status').filter({ hasText: 'SVG原本を読み込みました。' }),
+  ).toBeVisible();
+  const split = page.getByRole('button', {
+    name: 'SVGを部品に分解',
+    exact: true,
+  });
+  await split.focus();
+  await split.press('Enter');
+  const dialog = page.getByRole('dialog', { name: 'SVGを部品に分解する確認' });
+  const cancel = dialog.getByRole('button', {
+    name: '分解をキャンセル',
+    exact: true,
+  });
+  const apply = dialog.getByRole('button', {
+    name: '部品への分解を適用',
+    exact: true,
+  });
+  await expect(cancel).toBeFocused();
+  await expect(dialog.getByRole('status')).toContainText(
+    '編集できる部品: 4 / SVGのまま保持する部品: 1',
+  );
+  for (const action of [cancel, apply]) {
+    const bounds = await action.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.y).toBeGreaterThanOrEqual(0);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(768);
+  }
+  await page.screenshot({
+    path: testInfo.outputPath('svg-keyboard-review-1366.png'),
+  });
+  await cancel.press('Escape');
+  await expect(dialog).not.toBeVisible();
+  await expect(split).toBeFocused();
+  expect((await savedFigure(page)).attrs.figureEdit?.svgSource).toBe(original);
+  await split.focus();
+  await split.press('Enter');
+  await expect(cancel).toBeFocused();
+  await cancel.press('Tab');
+  await expect(apply).toBeFocused();
+  await apply.press('Enter');
+  const edit = page.getByRole('button', {
+    name: '図形をドラッグして編集',
+    exact: true,
+  });
+  await expect(edit).toBeFocused();
+  await expect(
+    page
+      .getByRole('status')
+      .filter({ hasText: 'SVG原本と保持した部品を残して分解しました。' }),
+  ).toBeVisible();
+  expect((await savedFigure(page)).attrs.figureEdit?.svgSource).toBe(source);
+  await edit.focus();
+  await edit.press('Enter');
+  const diagram = page.getByRole('dialog', { name: '図形で図解を編集' });
+  await expect(diagram).toBeVisible();
+  await diagram.press('Escape');
+  await expect(edit).toBeFocused();
+  await page
+    .getByRole('button', { name: 'SVG原本に戻す', exact: true })
+    .click();
+  await expect(split).toBeFocused();
+  await expect(
+    page.getByRole('status').filter({ hasText: 'SVG原本の表示に戻しました。' }),
+  ).toBeVisible();
+  expect((await savedFigure(page)).attrs.figureEdit?.diagram).toBeUndefined();
+  await page.getByRole('button', { name: '元に戻す', exact: true }).click();
+  await expect(edit).toBeVisible();
+  expect(
+    (await savedFigure(page)).attrs.figureEdit?.diagram?.shapes,
+  ).toHaveLength(3);
+});
 
 test('外部SVGの分解を比較して適用し、曲線と原本を保持したまま部品編集・HTML再読込・原本復帰できる', async ({
   page,

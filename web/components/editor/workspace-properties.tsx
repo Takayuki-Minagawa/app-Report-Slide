@@ -286,7 +286,7 @@ export function WorkspaceProperties({
                         </Button>
                       )}
                     <FigureEditProperties
-                      key={`figure-edit:${selectedSemantic.attrs.nodeId}:${JSON.stringify(selectedSemantic.attrs.figureEdit)}`}
+                      key={`figure-edit:${selectedSemantic.attrs.nodeId}`}
                       node={selectedSemantic}
                       metadata={document.metadata}
                       resolveImageUrl={resolveImageUrl}

@@ -1,4 +1,6 @@
 'use client';
+
+/* oxlint-disable jsx-a11y/no-noninteractive-tabindex -- Saved evidence can exceed its scroll frame; named regions need keyboard focus for arrow-key scrolling. */
 import type { ExtractionResult } from '@/src/document/extraction';
 import { useAppPreferences } from '@/components/app-preferences';
 import { Button } from '@/components/ui/button';
@@ -29,13 +31,27 @@ export function ExtractionEvidence({ value }: { value: ExtractionResult }) {
       </p>
       <details className="my-2">
         <summary>{t('読み取り原文', 'Raw recognition')}</summary>
-        <pre className="max-h-48 overflow-auto whitespace-pre-wrap">
-          {value.rawText}
-        </pre>
+        <section
+          aria-label={t('保存済みの読み取り原文', 'Saved raw recognition')}
+          tabIndex={0}
+          className="max-h-48 overflow-auto whitespace-pre-wrap"
+        >
+          <pre className="whitespace-pre-wrap">{value.rawText}</pre>
+        </section>
       </details>
       {value.mode === 'table' ? (
         <>
-          <div className="my-2 max-h-60 overflow-auto">
+          <p className="my-2">
+            {t(
+              `確認・修正後の表：${value.rows.length}行 × ${value.rows[0]?.length ?? 0}列`,
+              `Reviewed table: ${value.rows.length} rows × ${value.rows[0]?.length ?? 0} columns`,
+            )}
+          </p>
+          <section
+            aria-label={t('保存済みの表の確認', 'Review saved table')}
+            tabIndex={0}
+            className="my-2 max-h-60 overflow-auto"
+          >
             <table
               aria-label={t(
                 '保存済みの表読み取り結果',
@@ -59,7 +75,7 @@ export function ExtractionEvidence({ value }: { value: ExtractionResult }) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </section>
           <Button
             size="sm"
             variant="outline"
@@ -80,9 +96,19 @@ export function ExtractionEvidence({ value }: { value: ExtractionResult }) {
           </Button>
         </>
       ) : (
-        <pre className="max-h-48 overflow-auto whitespace-pre-wrap">
-          {value.text}
-        </pre>
+        <div className="space-y-1">
+          <p>{t('確認・修正後の本文', 'Reviewed text')}</p>
+          <section
+            aria-label={t(
+              '保存済みの確認・修正後の本文',
+              'Saved reviewed text',
+            )}
+            tabIndex={0}
+            className="max-h-48 overflow-auto whitespace-pre-wrap"
+          >
+            <pre className="whitespace-pre-wrap">{value.text}</pre>
+          </section>
+        </div>
       )}
     </details>
   );

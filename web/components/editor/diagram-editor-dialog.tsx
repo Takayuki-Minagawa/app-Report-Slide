@@ -3,7 +3,13 @@ import { arrangementCommands, arrangementNames } from '@/src/document/arrange';
 
 /* oxlint-disable jsx-a11y/prefer-tag-over-role */
 // SVG hit targets need vector coordinates; the same controls are available as HTML buttons in the list.
-import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import {
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent,
+  type RefObject,
+} from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -91,20 +97,30 @@ export function DiagramEditorDialog({
   diagram,
   disabled = false,
   onApply,
+  triggerRef,
 }: {
   diagram: Diagram;
   disabled?: boolean;
   onApply: (diagram: Diagram) => void;
+  triggerRef?: RefObject<HTMLButtonElement | null>;
 }) {
   const [open, setOpen] = useState(false);
+  const localTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const returnFocus = triggerRef ?? localTriggerRef;
   return (
     <>
-      <Button size="sm" disabled={disabled} onClick={() => setOpen(true)}>
+      <Button
+        ref={returnFocus}
+        size="sm"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+      >
         図形をドラッグして編集
       </Button>
       {open && (
         <DiagramEditor
           initial={diagram}
+          returnFocus={returnFocus}
           onCancel={() => setOpen(false)}
           onApply={(value) => {
             onApply(value);
@@ -120,10 +136,12 @@ function DiagramEditor({
   initial,
   onCancel,
   onApply,
+  returnFocus,
 }: {
   initial: Diagram;
   onCancel: () => void;
   onApply: (diagram: Diagram) => void;
+  returnFocus: RefObject<HTMLButtonElement | null>;
 }) {
   const [history, setHistory] = useState<{
     past: Diagram[];
@@ -433,6 +451,7 @@ function DiagramEditor({
     >
       <DialogContent
         className="flex max-h-[95vh] flex-col sm:max-w-6xl"
+        finalFocus={returnFocus}
         showCloseButton={false}
         onKeyDown={(event) => {
           if (

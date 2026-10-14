@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -66,6 +66,8 @@ export function FigureEditProperties({
   const [message, setMessage] = useState('');
   const [conversion, setConversion] = useState<SvgConversion | null>(null);
   const [ocrOpen, setOcrOpen] = useState(false);
+  const svgActionRef = useRef<HTMLButtonElement | null>(null);
+  const focusSvgAction = useRef(false);
   const [imageSize, setImageSize] = useState(current.imageSize);
   const [reference, setReference] = useState<FigureReference>(
     () =>
@@ -75,6 +77,30 @@ export function FigureEditProperties({
   );
   const references = figureReferences(metadata);
   const source = edit.source ?? emptySource;
+  const figureEditRevision = JSON.stringify(node.attrs.figureEdit);
+  const previousFigureEditRevision = useRef(figureEditRevision);
+  // Keep the panel mounted so applying a change retains its message and focus.
+  // Only external document changes (including Undo) replace an editing draft.
+  useEffect(() => {
+    if (previousFigureEditRevision.current === figureEditRevision) return;
+    previousFigureEditRevision.current = figureEditRevision;
+    const next = readFigureEdit(node.attrs.figureEdit) ?? {
+      version: 1 as const,
+    };
+    setEdit(next);
+    setImageSize((previous) => next.imageSize ?? previous);
+    setReference(
+      figureReferences(metadata).find(
+        (entry) => entry.id === next.source?.referenceId,
+      ) ?? emptyReference,
+    );
+  }, [figureEditRevision, node.attrs.figureEdit, metadata]);
+  useEffect(() => {
+    if (focusSvgAction.current) {
+      focusSvgAction.current = false;
+      svgActionRef.current?.focus();
+    }
+  }, [edit.diagram]);
   useEffect(() => {
     const image = new Image();
     image.onload = () =>
@@ -188,8 +214,40 @@ export function FigureEditProperties({
         />
       )}
       {current.extraction && <ExtractionEvidence value={current.extraction} />}
+      {!edit.diagram && (
+        <label className="property-field">
+          SVG原本を読み込む
+          <input
+            type="file"
+            accept=".svg,image/svg+xml"
+            onChange={async (event) => {
+              const input = event.currentTarget;
+              const file = input.files?.[0];
+              if (!file) return;
+              try {
+                if (file.size > 1_000_000)
+                  throw new Error('SVGソースは1 MB以内にしてください。');
+                const text = await file.text();
+                sanitizeSvgSource(text);
+                setEdit((value) => ({ ...value, svgSource: text }));
+                setMessage(
+                  'SVG原本を読み込みました。「SVGを部品に分解」で確認するか、「図の編集を適用」でSVGのまま保存できます。',
+                );
+              } catch (error) {
+                setMessage(
+                  error instanceof Error
+                    ? error.message
+                    : 'SVGを開けませんでした。',
+                );
+              }
+              input.value = '';
+            }}
+          />
+        </label>
+      )}
       {edit.svgSource && !edit.diagram && (
         <Button
+          ref={svgActionRef}
           size="sm"
           variant="outline"
           onClick={() => {
@@ -210,6 +268,7 @@ export function FigureEditProperties({
       {conversion && (
         <SvgConversionDialog
           conversion={conversion}
+          returnFocus={svgActionRef}
           onClose={() => setConversion(null)}
           onApply={() => {
             const next: FigureEdit = {
@@ -220,6 +279,7 @@ export function FigureEditProperties({
                 height: conversion.diagram.height,
               },
             };
+            focusSvgAction.current = true;
             setEdit(next);
             setImageSize(next.imageSize);
             onApply(node.attrs.nodeId, { figureEdit: next });
@@ -244,6 +304,7 @@ export function FigureEditProperties({
               };
               setEdit(next);
               setImageSize(next.imageSize);
+              focusSvgAction.current = true;
               onApply(node.attrs.nodeId, { figureEdit: next });
               setMessage(
                 'SVG原本の表示に戻しました。分解後の編集は文書の「元に戻す」で復帰できます。',
@@ -263,6 +324,7 @@ export function FigureEditProperties({
       {edit.diagram && (
         <DiagramEditorDialog
           diagram={edit.diagram}
+          triggerRef={svgActionRef}
           disabled={disabled}
           onApply={(diagram) => {
             setEdit({
@@ -280,37 +342,14 @@ export function FigureEditProperties({
           }}
         />
       )}
+      {message && (
+        <output aria-live="polite" className="text-xs block">
+          {message}
+        </output>
+      )}
       {!edit.diagram && (
         <details className="space-y-2">
           <summary>SVGソース・ラベルを編集</summary>
-          <label className="property-field">
-            SVG原本を読み込む
-            <input
-              type="file"
-              accept=".svg,image/svg+xml"
-              onChange={async (event) => {
-                const file = event.target.files?.[0];
-                if (!file) return;
-                try {
-                  if (file.size > 1_000_000)
-                    throw new Error('SVGソースは1 MB以内にしてください。');
-                  const text = await file.text();
-                  sanitizeSvgSource(text);
-                  setEdit((value) => ({ ...value, svgSource: text }));
-                  setMessage(
-                    'SVG原本を読み込みました。図の編集を適用してください。',
-                  );
-                } catch (error) {
-                  setMessage(
-                    error instanceof Error
-                      ? error.message
-                      : 'SVGを開けませんでした。',
-                  );
-                }
-                event.target.value = '';
-              }}
-            />
-          </label>
           <Button
             size="sm"
             variant="outline"
@@ -713,7 +752,6 @@ export function FigureEditProperties({
       <Button size="sm" onClick={apply}>
         図の編集を適用
       </Button>
-      {message && <output className="text-xs block">{message}</output>}
     </fieldset>
   );
 }

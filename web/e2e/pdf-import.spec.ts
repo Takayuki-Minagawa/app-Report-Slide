@@ -54,6 +54,7 @@ async function insertPdf(page: Page, original: Buffer) {
   expect(
     Number(await dialog.getByLabel('PDF範囲 x', { exact: true }).inputValue()),
   ).toBeCloseTo(10, 0);
+  await dialog.getByText('出典を確認', { exact: true }).click();
   await dialog
     .getByLabel('PDF出典 title', { exact: true })
     .fill('Observed comparison');

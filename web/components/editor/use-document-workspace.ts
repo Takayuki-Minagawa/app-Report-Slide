@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor, type Editor } from '@tiptap/react';
+import { NodeSelection } from '@tiptap/pm/state';
 import { useAppPreferences } from '@/components/app-preferences';
 import {
   createDefaultDocument,
@@ -438,6 +439,16 @@ export function useDocumentWorkspace() {
       },
       onSelectionUpdate: ({ editor: updatedEditor }) =>
         handleSelectionUpdate(updatedEditor),
+      // A document that starts with an image already has a NodeSelection.
+      // Clicking that same image does not emit selectionUpdate after import.
+      onFocus: ({ editor: focusedEditor }) => {
+        const focused = focusedEditor.state.selection;
+        if (
+          focused instanceof NodeSelection &&
+          focused.node.type.name === 'figure'
+        )
+          handleSelectionUpdate(focusedEditor);
+      },
     },
     [editorSource.revision, extensions],
   );
