@@ -17,12 +17,15 @@ export const preservedContentSchema = z
     }),
   )
   .max(1000)
-  .refine(
-    (entries) =>
-      entries.reduce((sum, entry) => sum + entry.source.length, 0) <=
-      5 * 1024 * 1024,
-    '保持する原データは合計5 MiBまでです。',
-  );
+  .refine((entries) => {
+    let bytes = 0;
+    const encoder = new TextEncoder();
+    for (const entry of entries) {
+      bytes += encoder.encode(entry.source).byteLength;
+      if (bytes > 5 * 1024 * 1024) return false;
+    }
+    return true;
+  }, '保持する原データは合計5 MiBまでです。');
 
 export type PreservedContent = z.infer<typeof preservedContentSchema>[number];
 

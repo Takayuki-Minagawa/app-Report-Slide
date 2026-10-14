@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseMarkdown } from '@/src/markdown/parser';
 import { serializeDocument } from '@/src/markdown/serializer';
 import { exportReportHtml } from '@/src/export/report-html';
-import { preservedContent } from '@/src/document/preserved-content';
+import {
+  preservedContent,
+  preservedContentSchema,
+} from '@/src/document/preserved-content';
 import { validateDocumentData } from '@/src/document/validation';
 import { importDocumentData } from './import-document';
 import { importHtml } from './html-import';
@@ -121,4 +124,19 @@ describe('import-only preservation', () => {
         .querySelector('canvas'),
     ).toBeNull();
   });
+});
+
+it('enforces the preserved-source limit in UTF-8 bytes for Japanese text', () => {
+  const entry = {
+    id: 'raw',
+    name: 'source',
+    format: 'html',
+    source: 'a'.repeat(1800000),
+  };
+  expect(preservedContentSchema.safeParse([entry]).success).toBe(true);
+  expect(
+    preservedContentSchema.safeParse([
+      { ...entry, source: '日'.repeat(1800000) },
+    ]).success,
+  ).toBe(false);
 });
