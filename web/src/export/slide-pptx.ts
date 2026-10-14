@@ -1,4 +1,5 @@
-import { resolveChartPlot } from '@/src/document/chart';
+import { chartDataCsv, resolveChartPlot } from '@/src/document/chart';
+import { tableFillTextColor } from '@/src/document/table-fill';
 import pptxgen from 'pptxgenjs';
 import {
   documentTitle,
@@ -397,8 +398,11 @@ export async function exportSlidePptx(
                 text: runs,
                 options: {
                   bold: cell.type === 'tableHeader',
+                  color: tableFillTextColor(cell.attrs.fill)?.slice(1),
                   fill: {
-                    color: cell.type === 'tableHeader' ? 'E8EFF5' : 'FFFFFF',
+                    color:
+                      cell.attrs.fill?.slice(1) ??
+                      (cell.type === 'tableHeader' ? 'E8EFF5' : 'FFFFFF'),
                   },
                   align: cell.attrs.align ?? 'left',
                   colspan: cell.attrs.colspan ?? 1,
@@ -572,7 +576,7 @@ export async function exportSlidePptx(
               ),
           });
           notes.push(
-            `${node.attrs.alt || node.attrs.series}\n${text.chartData}\n${plot.series.map((entry) => `${entry.name}\n${entry.data.map((point) => `${point.label} / ${point.x} / ${point.y}`).join('\n')}`).join('\n\n')}\n${[plot.xUnit, plot.yUnit, plot.source, plot.nature].filter(Boolean).join(' / ')}`,
+            `${node.attrs.alt || node.attrs.series}\n${text.chartData}\n${plot.series.map((entry) => `${entry.name}\n${entry.data.some((point) => point.xMinus !== undefined || point.xPlus !== undefined || point.yMinus !== undefined || point.yPlus !== undefined) ? chartDataCsv(entry.data) : entry.data.map((point) => `${point.label} / ${point.x} / ${point.y}`).join('\n')}`).join('\n\n')}\n${[plot.xUnit, plot.yUnit, plot.source, plot.nature, plot.errorDescription, `Scale: X=${plot.xScale ?? 'linear'}, Y=${plot.yScale ?? 'linear'}`].filter(Boolean).join(' / ')}`,
           );
           if (caption(node)) addText([{ text: caption(node) }], 15, {}, indent);
           break;

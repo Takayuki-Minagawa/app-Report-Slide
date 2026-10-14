@@ -99,13 +99,22 @@ import {
   resolveProjectPath,
   validateReportProject,
   ReportProjectError,
+  projectDocumentType,
+  projectChapterDocument,
 } from '@/src/project/model';
+import { chapterLocalAssets } from '@/src/project/assets';
+import { assignBlockRegion } from '@/src/document/block-groups';
+import type { SlideRegion } from '@/src/document/slide-design';
+import { splitDocumentPages } from '@/src/document/semantics';
+import { isHistoryTransaction } from '@tiptap/pm/history';
 
 export type WorkspaceView = 'visual' | 'layout' | 'markdown' | 'preview';
 
 interface LoadDocumentOptions {
   assets?: AssetUrls;
   description?: StatusDescription;
+  projectAssets?: boolean;
+  focusNodeId?: string;
 }
 
 function currentDocument(
@@ -121,8 +130,11 @@ function currentDocument(
   };
 }
 
-function imageSources(nodes: readonly DocumentNode[]): Set<string> {
-  return new Set(referencedAssets(nodes).map(({ source }) => source));
+function imageSources(
+  nodes: readonly DocumentNode[],
+  metadata: DocumentMetadata = {},
+): Set<string> {
+  return new Set(referencedAssets(nodes, metadata).map(({ source }) => source));
 }
 
 function pdfFigureAssets(nodes: readonly DocumentNode[]): Set<string> {
@@ -203,6 +215,22 @@ export function useDocumentWorkspace() {
   const [projectSession, setProjectSession] = useState<ProjectSession | null>(
     null,
   );
+  const [exportScope, setExportScope] = useState<'project' | 'chapter'>(
+    'project',
+  );
+  const pendingFocus = useRef<string | null>(null);
+  const [documentUndo, setDocumentUndo] = useState<{
+    document: DocumentData;
+    after: string;
+    chapterId?: string;
+    projectSignature: string;
+  } | null>(null);
+  const [insertionRegion, setRegion] = useState<SlideRegion | undefined>();
+  const insertionRegionRef = useRef<SlideRegion | undefined>(undefined);
+  const setInsertionRegion = (region: SlideRegion | undefined) => {
+    insertionRegionRef.current = region;
+    setRegion(region);
+  };
   const markProjectEdited = useCallback(() => {
     setProjectSession((current) =>
       current && !current.dirty ? { ...current, dirty: true } : current,
@@ -282,10 +310,13 @@ export function useDocumentWorkspace() {
       replaceAssets(
         retainedAssetsForSources(
           assetStore.assets,
-          new Set([...imageSources(nodes), ...pdfHistoryAssets.current]),
+          new Set([
+            ...imageSources(nodes, document.metadata),
+            ...pdfHistoryAssets.current,
+          ]),
         ),
       ),
-    [assetStore, replaceAssets],
+    [assetStore, replaceAssets, document.metadata],
   );
 
   const enqueueRecoveryTask = useCallback((task: () => Promise<void>) => {
@@ -355,16 +386,43 @@ export function useDocumentWorkspace() {
           'aria-label': copy.workspace.documentBody,
         },
       },
-      onUpdate: ({ editor: updatedEditor }) => {
+      onUpdate: ({ editor: updatedEditor, transaction }) => {
         const content = updatedEditor.getJSON().content;
         if (!Array.isArray(content)) return;
         invalidatePendingImport();
         const children = content as DocumentNode[];
-        if (document.type === 'slide') pruneUnusedSlideAssets(children);
-        setDocument((current) => ({
-          ...current,
-          children,
-        }));
+        if (document.type === 'slide' && !projectSession)
+          pruneUnusedSlideAssets(children);
+        const beforeIds = new Set<string>();
+        transaction.before.forEach((node) => {
+          if (node.attrs.nodeId) beforeIds.add(node.attrs.nodeId);
+        });
+        const inserted = children
+          .filter(
+            (node) =>
+              !beforeIds.has(node.attrs.nodeId) &&
+              (node.type === 'table' ||
+                node.type === 'chart' ||
+                (node.type === 'figure' && !node.attrs.slidePlacement)),
+          )
+          .map((node) => node.attrs.nodeId);
+        const region =
+          !isHistoryTransaction(transaction) && inserted.length
+            ? insertionRegionRef.current
+            : undefined;
+        if (region) setInsertionRegion(undefined);
+        setDocument((current) => {
+          let next = { ...current, children };
+          if (region && current.type === 'slide')
+            splitDocumentPages(next).forEach((nodes, pageIndex) => {
+              const ids = inserted.filter((id) =>
+                nodes.some((node) => node.attrs.nodeId === id),
+              );
+              if (ids.length)
+                next = assignBlockRegion(next, pageIndex, ids, region);
+            });
+          return next;
+        });
         setDocumentDirty(true);
         markProjectEdited();
         refreshSelection(updatedEditor);
@@ -384,6 +442,11 @@ export function useDocumentWorkspace() {
     if (editor && !editor.isDestroyed)
       editor.view.dom.setAttribute('aria-label', copy.workspace.documentBody);
   }, [copy.workspace.documentBody, editor]);
+  useEffect(() => {
+    if (!pendingFocus.current || !editor || editor.isDestroyed) return;
+    selection.focusNode(editor, pendingFocus.current);
+    pendingFocus.current = null;
+  }, [editor, selection]);
 
   const outline = useMemo(
     () =>
@@ -405,6 +468,18 @@ export function useDocumentWorkspace() {
   const previewDocument = useMemo(
     () => (project ? assembleReportProject(project) : document),
     [project, document],
+  );
+  const localPreviewDocument = useMemo(() => {
+    const chapter = project?.chapters.find(
+      (entry) => entry.id === projectSession?.activeChapterId,
+    );
+    return project && chapter
+      ? projectChapterDocument(project, chapter)
+      : document;
+  }, [project, projectSession?.activeChapterId, document]);
+  const localAnalysis = useMemo(
+    () => analyzeDocument(localPreviewDocument),
+    [localPreviewDocument],
   );
   const analysis = useMemo(
     () => analyzeDocument(previewDocument),
@@ -444,14 +519,18 @@ export function useDocumentWorkspace() {
       invalidatePendingImport();
       pdfHistoryAssets.current = pdfFigureAssets(next.children);
       const sourceAssets = options.assets ?? assetStore.assets;
-      if (next.type === 'slide') {
+      if (next.type === 'slide' && !options.projectAssets) {
         replaceAssets(
-          retainedAssetsForSources(sourceAssets, imageSources(next.children)),
+          retainedAssetsForSources(
+            sourceAssets,
+            imageSources(next.children, next.metadata),
+          ),
         );
       } else if (options.assets !== undefined) {
         replaceAssets(sourceAssets);
       }
       setDocument(next);
+      pendingFocus.current = options.focusNodeId ?? null;
       // A replaced source is a new editing session, so Undo cannot restore the previous file.
       setEditorSource((current) => ({
         revision: current.revision + 1,
@@ -501,10 +580,12 @@ export function useDocumentWorkspace() {
     clearRecovery,
     confirmReplacement,
     copy: copy.project,
+    focusNode: (nodeId) => selection.focusNode(editor, nodeId),
   });
   const validateChapterDraft = (next: DocumentData) => {
     if (!projectSession) return;
-    if (next.type !== 'report') throw new ReportProjectError('reportOnly');
+    if (next.type !== projectDocumentType(projectSession.project))
+      throw new ReportProjectError('reportOnly');
     validateReportProject(projectWithDocument(projectSession, next));
   };
 
@@ -726,12 +807,27 @@ export function useDocumentWorkspace() {
         asset = createInsertedImageAsset(
           file,
           currentAssets,
-          imageSources(currentDocument(editor, document).children),
+          imageSources(
+            currentDocument(editor, document).children,
+            document.metadata,
+          ),
           assetStore.bytes,
+          (source) =>
+            chapterFile ? resolveProjectPath(chapterFile, source) : source,
         );
         // The editor renders synchronously. Register the blob first so its
         // figure extension resolves the local source during insertion.
-        replaceAssets(new Map([...currentAssets, [asset.source, asset.url]]));
+        replaceAssets(
+          new Map([
+            ...currentAssets,
+            [
+              chapterFile
+                ? resolveProjectPath(chapterFile, asset.source)
+                : asset.source,
+              asset.url,
+            ],
+          ]),
+        );
         assetRegistered = true;
         const inserted = editor
           .chain()
@@ -769,6 +865,7 @@ export function useDocumentWorkspace() {
       editor,
       markdownDirty,
       replaceAssets,
+      chapterFile,
     ],
   );
   const importFiles = useCallback(
@@ -900,6 +997,7 @@ export function useDocumentWorkspace() {
       markProjectEdited();
       loadDocument(result.document, statusMessage('appliedMarkdown'), {
         description: result.diagnostics.map(diagnosticStatusMessage),
+        projectAssets: Boolean(projectSession),
       });
       setDocumentDirty(true);
       setView('visual');
@@ -994,6 +1092,28 @@ export function useDocumentWorkspace() {
       ? parseMarkdown(markdownDraft, { fallbackType: document.type })
       : { document: currentDocument(editor, document), diagnostics: [] };
 
+  /** Shared by file export and output preview, with local asset keys for chapter-only exports. */
+  const getExportSnapshot = () => {
+    const snapshot = snapshotDocument();
+    validateChapterDraft(snapshot.document);
+    if (!projectSession) return { ...snapshot, assets: assetStore.assets };
+    const project = projectWithDocument(projectSession, snapshot.document);
+    if (exportScope === 'project')
+      return {
+        document: migrateDocumentData(assembleReportProject(project)),
+        diagnostics: snapshot.diagnostics,
+        assets: assetStore.assets,
+      };
+    const chapter = project.chapters.find(
+      (entry) => entry.id === projectSession.activeChapterId,
+    )!;
+    return {
+      document: projectChapterDocument(project, chapter),
+      diagnostics: snapshot.diagnostics,
+      assets: chapterLocalAssets(chapter, assetStore.assets),
+    };
+  };
+
   /** A saved draft becomes the edited document; otherwise only the dirty flag clears. */
   const finishSave = (
     snapshot: Pick<ParseMarkdownResult, 'document' | 'diagnostics'>,
@@ -1004,6 +1124,7 @@ export function useDocumentWorkspace() {
       markProjectEdited();
       loadDocument(snapshot.document, savedAfterApplying, {
         description: snapshot.diagnostics.map(diagnosticStatusMessage),
+        projectAssets: Boolean(projectSession),
       });
     } else {
       setDocumentDirty(false);
@@ -1018,7 +1139,18 @@ export function useDocumentWorkspace() {
     try {
       const result = snapshotDocument();
       validateChapterDraft(result.document);
-      downloadDocument(result.document, format);
+      const currentProject = projectSession
+        ? projectWithDocument(projectSession, result.document)
+        : null;
+      const chapter = currentProject?.chapters.find(
+        (entry) => entry.id === projectSession?.activeChapterId,
+      );
+      downloadDocument(
+        currentProject && chapter
+          ? projectChapterDocument(currentProject, chapter)
+          : result.document,
+        format,
+      );
       finishSave(
         result,
         statusMessage(json ? 'savedJson' : 'savedMarkdown'),
@@ -1043,11 +1175,14 @@ export function useDocumentWorkspace() {
   const saveArchive = async () => {
     const revision = ++importRevision.current;
     try {
-      const snapshot = snapshotDocument();
+      const snapshot = getExportSnapshot();
       validateChapterDraft(snapshot.document);
       const { writeDocumentArchive } =
         await import('@/src/workspace/document-archive');
-      const content = await writeDocumentArchive(snapshot.document, assets);
+      const content = await writeDocumentArchive(
+        snapshot.document,
+        snapshot.assets,
+      );
       if (revision !== importRevision.current) return;
       downloadFile(
         snapshot.document,
@@ -1055,11 +1190,14 @@ export function useDocumentWorkspace() {
         new Uint8Array(content),
         'application/zip',
       );
-      finishSave(
-        snapshot,
-        statusMessage('savedArchive'),
-        statusMessage('savedArchive'),
-      );
+      if (projectSession)
+        setStatus({ kind: 'success', title: statusMessage('savedArchive') });
+      else
+        finishSave(
+          snapshot,
+          statusMessage('savedArchive'),
+          statusMessage('savedArchive'),
+        );
     } catch (error) {
       if (revision === importRevision.current)
         setStatus({
@@ -1080,23 +1218,18 @@ export function useDocumentWorkspace() {
     activeHtmlExport.current = revision;
     setHtmlExporting(true);
     try {
-      const snapshot = snapshotDocument();
+      const snapshot = getExportSnapshot();
       setStatus({ kind: 'idle', title: statusMessage('exportingHtml') });
       // Load the static renderer and embedded fonts only when export is requested.
-      const source =
-        snapshot.document.type === 'report' && projectSession
-          ? assembleReportProject(
-              projectWithDocument(projectSession, snapshot.document),
-            )
-          : snapshot.document;
+      const source = snapshot.document;
       const result =
         source.type === 'slide'
           ? await (
               await import('@/src/export/slide-html')
-            ).exportSlideHtml(source, assets, locale)
+            ).exportSlideHtml(source, snapshot.assets, locale)
           : await (
               await import('@/src/export/report-html')
-            ).exportReportHtml(source, assets, locale);
+            ).exportReportHtml(source, snapshot.assets, locale);
       if (revision !== importRevision.current) return;
       downloadFile(source, 'html', result.html, 'text/html;charset=utf-8');
       setLastHtmlExportSignature(workspaceSignature);
@@ -1152,14 +1285,9 @@ export function useDocumentWorkspace() {
           ? 'PowerPoint'
           : 'Word';
     try {
-      const snapshot = snapshotDocument();
+      const snapshot = getExportSnapshot();
       validateChapterDraft(snapshot.document);
-      const source =
-        snapshot.document.type === 'report' && projectSession
-          ? assembleReportProject(
-              projectWithDocument(projectSession, snapshot.document),
-            )
-          : snapshot.document;
+      const source = snapshot.document;
       const extension =
         format === 'pdf' ? 'pdf' : source.type === 'slide' ? 'pptx' : 'docx';
       label =
@@ -1173,14 +1301,14 @@ export function useDocumentWorkspace() {
         format === 'pdf'
           ? await (
               await import('@/src/export/document-pdf')
-            ).exportDocumentPdf(source, assets, locale)
+            ).exportDocumentPdf(source, snapshot.assets, locale)
           : source.type === 'slide'
             ? await (
                 await import('@/src/export/slide-pptx')
-              ).exportSlidePptx(source, assets, locale)
+              ).exportSlidePptx(source, snapshot.assets, locale)
             : await (
                 await import('@/src/export/report-docx')
-              ).exportReportDocx(source, assets, locale);
+              ).exportReportDocx(source, snapshot.assets, locale);
       if (revision !== importRevision.current) return;
       const mime =
         extension === 'pdf'
@@ -1291,7 +1419,7 @@ export function useDocumentWorkspace() {
       );
     const assetPath = (source: string) =>
       chapterFile ? resolveProjectPath(chapterFile, source) : source;
-    const occupied = imageSources(current.children);
+    const occupied = imageSources(current.children, current.metadata);
     let registered = false;
     const previousHistory = new Set(pdfHistoryAssets.current);
     try {
@@ -1453,6 +1581,82 @@ export function useDocumentWorkspace() {
     markProjectEdited();
   };
 
+  const updateSlideMetadata = (updates: DocumentMetadata) => {
+    if (documentWriteLocked) return;
+    invalidatePendingImport();
+    setDocument((current) => ({
+      ...current,
+      metadata: Object.fromEntries(
+        Object.entries({
+          ...current.metadata,
+          slide_design: updates.slide_design,
+          slide_presets: updates.slide_presets,
+        }).filter(([, value]) => value !== undefined),
+      ),
+    }));
+    setDocumentDirty(true);
+    markProjectEdited();
+  };
+
+  const applyDocumentChange = (next: DocumentData, message: string) => {
+    if (documentWriteLocked || projectActions.busy) return;
+    validateChapterDraft(next);
+    const previous = currentDocument(editor, document);
+    loadDocument(next, statusMessage('editing'), {
+      projectAssets: true,
+      description: message,
+    });
+    // Retain all old asset URLs until this explicit Undo can no longer use them.
+    pdfHistoryAssets.current = new Set([
+      ...pdfHistoryAssets.current,
+      ...imageSources(previous.children, previous.metadata),
+      ...imageSources(next.children, next.metadata),
+    ]);
+    setDocumentUndo({
+      document: previous,
+      after: JSON.stringify(next),
+      chapterId: projectSession?.activeChapterId,
+      projectSignature: JSON.stringify(projectSession?.project ?? null),
+    });
+    setDocumentDirty(true);
+    markProjectEdited();
+  };
+  const canUndoDocumentChange = Boolean(
+    documentUndo &&
+    documentUndo.projectSignature ===
+      JSON.stringify(projectSession?.project ?? null) &&
+    documentUndo.chapterId === projectSession?.activeChapterId &&
+    documentUndo.after === JSON.stringify(document) &&
+    !markdownDirty,
+  );
+  const undoDocumentChange = () => {
+    if (
+      !canUndoDocumentChange ||
+      !documentUndo ||
+      documentWriteLocked ||
+      projectActions.busy
+    )
+      return;
+    loadDocument(documentUndo.document, statusMessage('editing'), {
+      projectAssets: true,
+    });
+    setDocumentUndo(null);
+    setDocumentDirty(true);
+    markProjectEdited();
+  };
+
+  const focusProjectNode = (nodeId: string) => {
+    const chapter = project?.chapters.find((entry) =>
+      nodeId.startsWith(`${entry.id}:`),
+    );
+    if (chapter)
+      projectActions.selectChapter(
+        chapter.id,
+        nodeId.slice(chapter.id.length + 1),
+      );
+    else selection.focusNode(editor, nodeId);
+  };
+
   const updatePageSettings = (settings: PageSettings) => {
     const pageSettings = pageSettingsSchema.safeParse(settings);
     if (pageSettings.success)
@@ -1498,6 +1702,18 @@ export function useDocumentWorkspace() {
     restoreRecovery,
     discardRecovery,
     previewDocument,
+    localPreviewDocument,
+    localAnalysis,
+    exportScope,
+    setExportScope,
+    getExportSnapshot,
+    focusProjectNode,
+    updateSlideMetadata,
+    applyDocumentChange,
+    undoDocumentChange,
+    canUndoDocumentChange,
+    insertionRegion,
+    setInsertionRegion,
     editor,
     view,
     markdownDraft,

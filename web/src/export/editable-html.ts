@@ -18,10 +18,12 @@ export function editableHtmlPayload(
   document: DocumentData,
   resolveImageUrl: (source: string) => string,
 ): string {
-  const assets = referencedAssets(document.children).flatMap(({ source }) => {
-    const data = resolveImageUrl(source);
-    return data !== source ? [{ source, data }] : [];
-  });
+  const assets = referencedAssets(document.children, document.metadata).flatMap(
+    ({ source }) => {
+      const data = resolveImageUrl(source);
+      return data !== source ? [{ source, data }] : [];
+    },
+  );
   const envelope: EditableHtmlEnvelope = {
     format: editableHtmlFormat,
     version: editableHtmlVersion,

@@ -1,4 +1,6 @@
 import DOMPurify from 'dompurify';
+import { importDocumentData } from './import-document';
+import { preservedContent } from '@/src/document/preserved-content';
 import {
   createNodeId,
   type DocumentData,
@@ -309,8 +311,8 @@ function restoreEmbedded(
     )
   )
     throw new Error('編集用HTMLに未知の項目があります。');
-  const document = migrateDocumentData(value.document);
-  const references = referencedAssets(document.children);
+  const document = importDocumentData(value.document);
+  const references = referencedAssets(document.children, document.metadata);
   const sources = new Map(references.map(({ source, kind }) => [source, kind]));
   for (const asset of value.assets) {
     if (
@@ -339,6 +341,12 @@ function restoreEmbedded(
         )
       : [];
   const warnings = [...previousWarnings, ...assets.warnings];
+  if (
+    preservedContent(document.metadata).some((entry) => entry.format === 'json')
+  )
+    warnings.push(
+      '未対応要素の原データを保持しています。プロパティの「保持した取込原データ」から確認できます。',
+    );
   if (remote.length)
     warnings.push(
       `外部URLの画像 ${remote.length} 件は通信に依存します。内容・表示可否は検証していません。`,
@@ -851,6 +859,17 @@ export function importHtml(
       document,
       'converted',
       converter.finishWarnings(),
+    );
+    document.metadata.preserved_content = [
+      {
+        id: createNodeId(),
+        name: sourceName.slice(0, 1000),
+        format: 'html',
+        source,
+      },
+    ];
+    htmlImport.warnings.push(
+      '変換前のHTML原文を保持しました。プロパティから原文を確認・保存できます。外部リンク先のファイルは含みません。',
     );
     // The conversion report survives saves and subsequent editable HTML round trips.
     document.metadata.html_import = {

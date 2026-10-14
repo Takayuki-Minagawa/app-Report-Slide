@@ -1,3 +1,6 @@
+import { preservedContentSchema } from './preserved-content';
+import { blockLayoutSchema } from './block-layout';
+import { blockLibrarySchema } from './block-library';
 import { chartPlotSchema } from './chart';
 import {
   readerSupplementsSchema,
@@ -21,7 +24,7 @@ import {
   tableBorderSides,
 } from './table';
 import { isSlideImagePlacement } from './slide-layout';
-import { slideDesignIssues } from './slide-design';
+import { slideDesignIssues, slidePresetsSchema } from './slide-design';
 import { isTextRuler } from './text-ruler';
 import { figureEditSchema, figureReferencesSchema } from './figure-edit';
 
@@ -562,6 +565,20 @@ function validateBlockNode(
   validateNodeId(attrs, path, issues, nodeIds);
 
   if (attrs) {
+    if (
+      attrs.blockLayout != null &&
+      !blockLayoutSchema.safeParse(attrs.blockLayout).success
+    )
+      issues.push(
+        `${path}.attrs.blockLayout: 名前・グループ・ロック・役割を確認してください`,
+      );
+    if (
+      attrs.fill != null &&
+      (!(node.type === 'tableCell' || node.type === 'tableHeader') ||
+        typeof attrs.fill !== 'string' ||
+        !/^#[0-9a-f]{6}$/i.test(attrs.fill))
+    )
+      issues.push(`${path}.attrs.fill: 表セルの色は#RRGGBBで指定してください`);
     if (attrs.textRuler !== undefined) {
       if (node.type !== 'paragraph' && node.type !== 'heading') {
         issues.push(`${path}.attrs.textRuler: 段落・見出しだけに指定できます`);
@@ -819,6 +836,14 @@ function validateBlockNode(
       }
       break;
     case 'table':
+      if (
+        attrs?.sourceReferenceId != null &&
+        (typeof attrs.sourceReferenceId !== 'string' ||
+          attrs.sourceReferenceId.length > 128)
+      )
+        issues.push(
+          `${path}.attrs.sourceReferenceId: 128文字以内の文献IDが必要です`,
+        );
       requireNonEmptyContent(node.content, `${path}.content`, issues);
       validateChildNodes(
         node.content,
@@ -891,6 +916,20 @@ export function validateDocumentData(value: unknown): DocumentData {
   const issues: string[] = [];
   const metadata = result.data.metadata;
   if (
+    metadata.slide_presets !== undefined &&
+    !slidePresetsSchema.safeParse(metadata.slide_presets).success
+  )
+    issues.push(
+      'metadata.slide_presets: スタイルプリセットの形式を確認してください',
+    );
+  if (
+    metadata.preserved_content !== undefined &&
+    !preservedContentSchema.safeParse(metadata.preserved_content).success
+  )
+    issues.push(
+      'metadata.preserved_content: 保持した原データの形式・サイズを確認してください',
+    );
+  if (
     metadata.reader_supplements !== undefined &&
     !readerSupplementsSchema.safeParse(metadata.reader_supplements).success
   ) {
@@ -926,6 +965,32 @@ export function validateDocumentData(value: unknown): DocumentData {
     assertJsonValue(entry, `metadata.${key}`, issues, new Set());
   }
 
+  if (metadata.block_library !== undefined) {
+    const library = blockLibrarySchema.safeParse(metadata.block_library);
+    if (!library.success)
+      issues.push(
+        'metadata.block_library: 部品ライブラリーの形式を確認してください',
+      );
+    else
+      library.data.items.forEach((item, index) => {
+        const ids = new Set<string>();
+        item.nodes.forEach((node, child) => {
+          validateBlockNode(
+            node,
+            `metadata.block_library.items.${index}.nodes.${child}`,
+            'root',
+            issues,
+            ids,
+          );
+          validateSlidePlacementScope(
+            node,
+            `metadata.block_library.items.${index}.nodes.${child}`,
+            result.data.type,
+            issues,
+          );
+        });
+      });
+  }
   const nodeIds = new Set<string>();
   if (result.data.children.length === 0) {
     issues.push('children: 1つ以上のblock nodeが必要です');

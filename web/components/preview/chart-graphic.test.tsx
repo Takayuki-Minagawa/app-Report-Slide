@@ -21,6 +21,81 @@ function chart(data: ChartNode['attrs']['data']): ChartNode {
 }
 
 describe('chart SVG', () => {
+  it('keeps extreme positive logarithmic ticks finite and gives automatic log bars a visible baseline', () => {
+    const node = chart([
+      { label: 'tiny', x: Number.MIN_VALUE, y: Number.MIN_VALUE },
+      { label: 'huge', x: Number.MAX_VALUE, y: Number.MAX_VALUE },
+    ]);
+    node.attrs.plot = {
+      ...resolveChartPlot(node.attrs),
+      xScale: 'log',
+      yScale: 'log',
+    };
+    expect(renderToStaticMarkup(<ChartGraphic node={node} />)).not.toMatch(
+      /NaN|Infinity/,
+    );
+    node.attrs.chartType = 'bar';
+    node.attrs.plot.series[0].data = [
+      { label: 'A', x: 1, y: 10 },
+      { label: 'B', x: 2, y: 100 },
+    ];
+    const doc = new DOMParser().parseFromString(
+      renderToStaticMarkup(<ChartGraphic node={node} />),
+      'text/html',
+    );
+    expect(doc.querySelector('.chart-baseline')?.textContent).toContain(
+      'baseline: 1',
+    );
+    for (const bar of doc.querySelectorAll('[data-chart-series] rect'))
+      expect(Number(bar.getAttribute('height'))).toBeGreaterThan(1);
+  });
+  it('places logarithmic decades evenly and draws asymmetric error endpoints', () => {
+    const node = chart([{ label: 'middle', x: 10, y: 10 }]);
+    node.attrs.plot = {
+      ...resolveChartPlot(node.attrs),
+      xScale: 'log',
+      yScale: 'log',
+      xMin: 1,
+      xMax: 100,
+      yMin: 1,
+      yMax: 100,
+      errorDescription: '95% CI',
+    };
+    node.attrs.plot.series[0].data[0] = {
+      label: 'middle',
+      x: 10,
+      y: 10,
+      xMinus: 9,
+      xPlus: 90,
+      yMinus: 9,
+      yPlus: 90,
+    };
+    const html = renderToStaticMarkup(<ChartGraphic node={node} />);
+    expect(html).not.toMatch(/NaN|Infinity/);
+    expect(html).toContain('95% CI');
+    expect(html).toContain('log10');
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    expect(doc.querySelector('circle')?.getAttribute('cx')).toBe('338');
+    expect(doc.querySelector('circle')?.getAttribute('cy')).toBe('160');
+    expect(
+      doc.querySelector('[data-chart-error-axis="x"]')?.getAttribute('d'),
+    ).toContain('M 74 160 H 602');
+    expect(
+      doc.querySelector('[data-chart-error-axis="y"]')?.getAttribute('d'),
+    ).toContain('M 338 285 V 35');
+    node.attrs.chartType = 'bar';
+    node.attrs.plot.orientation = 'horizontal';
+    const horizontal = new DOMParser().parseFromString(
+      renderToStaticMarkup(<ChartGraphic node={node} />),
+      'text/html',
+    );
+    expect(horizontal.querySelector('[data-chart-error-axis="x"]')).toBeNull();
+    expect(
+      horizontal
+        .querySelector('[data-chart-error-axis="y"]')
+        ?.getAttribute('d'),
+    ).toContain('H 602');
+  });
   it('renders valid extreme numbers without invalid SVG coordinates', () => {
     const html = renderToStaticMarkup(
       <ChartGraphic

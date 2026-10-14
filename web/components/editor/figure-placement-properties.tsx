@@ -1,5 +1,6 @@
 'use client';
 
+import { readBlockLayout } from '@/src/document/block-layout';
 import { useState } from 'react';
 import { useAppPreferences } from '@/components/app-preferences';
 import { Button } from '@/components/ui/button';
@@ -43,7 +44,10 @@ export function FigurePlacementProperties({
     height: ja ? '配置の高さ (%)' : 'Placement height (%)',
   };
   return (
-    <fieldset disabled={disabled} className="space-y-2 rounded border p-3">
+    <fieldset
+      disabled={disabled || readBlockLayout(node.attrs.blockLayout).locked}
+      className="space-y-2 rounded border p-3"
+    >
       <legend className="px-1 text-xs font-medium">
         {ja
           ? '図の配置（スライド全体に対する%）'

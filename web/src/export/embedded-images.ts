@@ -34,7 +34,7 @@ export async function embedSlideImages(
   document: DocumentData,
   assets: AssetUrls,
 ) {
-  const references = referencedAssets(document.children);
+  const references = referencedAssets(document.children, document.metadata);
   const sources = references.flatMap(({ source, kind }) =>
     kind === 'pdf' || safeResourceUrl(source, 'image') ? [source] : [],
   );

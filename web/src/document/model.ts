@@ -3,6 +3,7 @@ import type { PageSettings } from './page-settings';
 import type { TableCellBorders } from './table';
 import type { TextRuler } from './text-ruler';
 import type { FigureEdit } from './figure-edit';
+import type { BlockLayout } from './block-layout';
 import type { ChartPlot } from './chart';
 
 export type DocumentType = 'report' | 'slide';
@@ -113,6 +114,7 @@ export type InlineNode =
 interface IdentifiedNode {
   attrs: SemanticAttributes & {
     nodeId: string;
+    blockLayout?: BlockLayout | null;
     [key: string]: unknown;
   };
 }
@@ -225,6 +227,7 @@ export interface SpeakerNotesNode extends IdentifiedNode {
 
 export interface TableNode extends IdentifiedNode {
   type: 'table';
+  attrs: IdentifiedNode['attrs'] & { sourceReferenceId?: string | null };
   content: TableRowNode[];
 }
 
@@ -239,6 +242,7 @@ export interface TableHeaderNode extends IdentifiedNode {
   attrs: IdentifiedNode['attrs'] & {
     align: 'left' | 'center' | 'right' | null;
     borders?: TableCellBorders | null;
+    fill?: string | null;
     colspan?: number;
     rowspan?: number;
     colwidth?: number[] | null;
@@ -251,6 +255,7 @@ export interface TableCellNode extends IdentifiedNode {
   attrs: IdentifiedNode['attrs'] & {
     align: 'left' | 'center' | 'right' | null;
     borders?: TableCellBorders | null;
+    fill?: string | null;
     colspan?: number;
     rowspan?: number;
     colwidth?: number[] | null;

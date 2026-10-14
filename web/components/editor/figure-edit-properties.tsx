@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -49,6 +49,7 @@ export function FigureEditProperties({
   onApply: (nodeId: string, attrs: Record<string, unknown>) => void;
   onMetadataChange: (metadata: Record<string, unknown>) => void;
 }) {
+  const referenceFormId = useId();
   const current = readFigureEdit(node.attrs.figureEdit) ?? {
     version: 1 as const,
   };
@@ -513,25 +514,61 @@ export function FigureEditProperties({
         )}
         <fieldset className="space-y-2 border p-2">
           <legend>共有文献（同じIDの全図へ反映）</legend>
-          {(['id', 'title', 'authors', 'year', 'url'] as const).map((key) => (
-            <label className="property-field" key={key}>
-              {
+          {(['id', 'title', 'authors', 'year', 'url', 'pdfUrl'] as const).map(
+            (key) => (
+              <label
+                className="property-field"
+                key={key}
+                htmlFor={`${referenceFormId}-${key}`}
+              >
                 {
-                  id: '文献ID',
-                  title: '文献の題名',
-                  authors: '文献の著者',
-                  year: '文献の年',
-                  url: '文献のリンク',
-                }[key]
-              }
-              <Input
-                value={reference[key]}
-                onChange={(event) =>
-                  setReference({ ...reference, [key]: event.target.value })
+                  {
+                    id: '文献ID',
+                    title: '文献の題名',
+                    authors: '文献の著者',
+                    year: '文献の年',
+                    url: '文献のリンク',
+                    pdfUrl: 'PDFのリンク',
+                  }[key]
                 }
-              />
-            </label>
-          ))}
+                <Input
+                  id={`${referenceFormId}-${key}`}
+                  aria-label={
+                    {
+                      id: '文献ID',
+                      title: '文献の題名',
+                      authors: '文献の著者',
+                      year: '文献の年',
+                      url: '文献のリンク',
+                      pdfUrl: 'PDFのリンク',
+                    }[key]
+                  }
+                  value={reference[key] ?? ''}
+                  onChange={(event) =>
+                    setReference({ ...reference, [key]: event.target.value })
+                  }
+                />
+              </label>
+            ),
+          )}
+          <label
+            className="property-field"
+            htmlFor={`${referenceFormId}-summary`}
+          >
+            文献の要点・研究条件
+            <Textarea
+              id={`${referenceFormId}-summary`}
+              aria-label="文献の要点・研究条件"
+              maxLength={10000}
+              value={reference.summary ?? ''}
+              onChange={(event) =>
+                setReference({ ...reference, summary: event.target.value })
+              }
+            />
+          </label>
+          <p className="text-xs text-muted-foreground">
+            要点とPDFリンクは出力HTMLの読み手にも公開されます。文献を確認して記入してください。
+          </p>
           <Button
             size="sm"
             variant="outline"

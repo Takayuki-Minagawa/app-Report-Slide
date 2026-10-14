@@ -51,6 +51,9 @@ export function DocumentPage({
       data-slide-design={design ? '1' : undefined}
       data-layout={design?.layout}
       data-density={design?.density}
+      data-role-styles={
+        Object.keys(design?.roleStyles ?? {}).join(' ') || undefined
+      }
       data-table-striped={design?.tableStyle?.striped}
       data-page-id={slide ? getSlidePageId(document, index) : undefined}
       style={design ? slideDesignStyle(design) : undefined}
@@ -70,6 +73,7 @@ export function DocumentPage({
         figureInteraction={figureInteraction}
         slideLayout={design?.layout}
         slideComposite={design?.composite}
+        roleStyles={design?.roleStyles}
       />
       <footer>
         {slide && <span>{document.metadata.author ?? ''}</span>}

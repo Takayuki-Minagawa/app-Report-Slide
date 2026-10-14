@@ -23,6 +23,8 @@ import {
   checkSlideGeometry,
   rasterPixelRatio,
   slideCheckSuggestions,
+  slideCheckRepairs,
+  type SlideCheckRepairAction,
   type SlideCheckElement,
   type SlideCheckIssue,
   type SlideCheckRect,
@@ -266,6 +268,7 @@ export interface SlideCheckPanelProps {
   resolveImageUrl?: ImageUrlResolver;
   onFocus: (nodeId: string) => void;
   onPageSelect?: (index: number) => void;
+  onRepair?: (nodeId: string, action: SlideCheckRepairAction) => void;
   disabled?: boolean;
 }
 
@@ -275,6 +278,7 @@ export function SlideCheckPanel({
   resolveImageUrl,
   onFocus,
   onPageSelect,
+  onRepair,
   disabled,
 }: SlideCheckPanelProps) {
   const { locale } = useAppPreferences();
@@ -624,6 +628,28 @@ export function SlideCheckPanel({
                       </ul>
                     )}
                     <div className="flex flex-wrap gap-2">
+                      {onRepair &&
+                        slideCheckRepairs(document, issue).map((repair) => (
+                          <Button
+                            key={repair.action}
+                            variant="outline"
+                            size="sm"
+                            disabled={disabled}
+                            onClick={() => {
+                              close();
+                              onPageSelect?.(issue.page - 1);
+                              onRepair(repair.nodeId, repair.action);
+                            }}
+                          >
+                            {repair.action === 'split-table'
+                              ? ja
+                                ? '表の分割位置を選ぶ'
+                                : 'Choose table split'
+                              : ja
+                                ? '表を全幅下部へ移す'
+                                : 'Move table to full width'}
+                          </Button>
+                        ))}
                       <Button
                         variant="outline"
                         size="sm"

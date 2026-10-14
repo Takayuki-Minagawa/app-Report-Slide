@@ -1,3 +1,4 @@
+import { readBlockLayout } from './block-layout';
 import { inlineText, type DocumentData } from './model';
 import { splitDocumentPages } from './semantics';
 import { resolveSlideDesign } from './slide-design';
@@ -95,7 +96,10 @@ export function slideNavigationPages(
       elements.push({
         nodeId: node.attrs.nodeId,
         name:
-          namesById.get(node.attrs.nodeId) ??
+          (readBlockLayout(
+            'blockLayout' in node.attrs ? node.attrs.blockLayout : undefined,
+          ).name?.trim() ||
+            namesById.get(node.attrs.nodeId)) ??
           (node.type === 'figure'
             ? readFigureEdit(node.attrs.figureEdit)?.name?.trim() || undefined
             : undefined) ??

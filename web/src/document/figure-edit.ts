@@ -83,6 +83,15 @@ export const figureReferenceSchema = z
     title: z.string().max(1000),
     authors: z.string().max(1000),
     year: z.string().max(40),
+    summary: z.string().max(10000).optional(),
+    pdfUrl: z
+      .string()
+      .max(2000)
+      .refine(
+        (value) => !value || /^https?:\/\//i.test(value),
+        'http/httpsのPDFリンクを指定してください',
+      )
+      .optional(),
     url: z
       .string()
       .max(2000)

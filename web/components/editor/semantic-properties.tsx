@@ -9,6 +9,9 @@ import {
 } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
 import { useAppPreferences } from '@/components/app-preferences';
+import { SharedReferenceFields } from './shared-reference-fields';
+import type { FigureReference } from '@/src/document/figure-edit';
+import { readBlockLayout } from '@/src/document/block-layout';
 import { labelPattern, type SemanticNode } from '@/src/document/semantics';
 
 /** Parent keys this form by node ID + attributes, resetting selection/Undo drafts safely. */
@@ -16,7 +19,11 @@ export function SemanticProperties({
   node,
   disabled,
   onApply,
+  references = [],
+  onMetadataChange,
 }: {
+  references?: FigureReference[];
+  onMetadataChange?: (metadata: Record<string, unknown>) => void;
   node: SemanticNode;
   disabled: boolean;
   onApply: (nodeId: string, attrs: Record<string, unknown>) => void;
@@ -24,6 +31,9 @@ export function SemanticProperties({
   const { copy } = useAppPreferences();
   const { semantic } = copy;
   const id = useId();
+  const [sourceReferenceId, setSourceReferenceId] = useState(
+    node.type === 'table' ? (node.attrs.sourceReferenceId ?? '') : '',
+  );
   const [label, setLabel] = useState(node.attrs.label ?? '');
   const [caption, setCaption] = useState(node.attrs.caption ?? '');
   const [numbered, setNumbered] = useState(
@@ -101,6 +111,7 @@ export function SemanticProperties({
               max="100"
               step="0.1"
               value={width}
+              disabled={readBlockLayout(node.attrs.blockLayout).locked}
               onChange={(event) => setWidth(event.target.value)}
             />
           </label>
@@ -110,6 +121,7 @@ export function SemanticProperties({
               aria-label={semantic.alignment}
               id={`${id}-align`}
               value={align}
+              disabled={readBlockLayout(node.attrs.blockLayout).locked}
               onChange={(event) =>
                 setAlign(event.target.value as 'left' | 'center' | 'right')
               }
@@ -136,6 +148,14 @@ export function SemanticProperties({
           </label>
         </>
       )}
+      {node.type === 'table' && (
+        <SharedReferenceFields
+          references={references}
+          value={sourceReferenceId}
+          onChange={setSourceReferenceId}
+          onMetadataChange={onMetadataChange}
+        />
+      )}
       <Button
         size="sm"
         className="w-full"
@@ -145,6 +165,9 @@ export function SemanticProperties({
         onClick={() =>
           onApply(node.attrs.nodeId, {
             label: label || null,
+            ...(node.type === 'table'
+              ? { sourceReferenceId: sourceReferenceId || null }
+              : {}),
             numbered: numbered === 'auto' ? null : numbered === 'true',
             ...(node.type !== 'heading' ? { caption: caption || null } : {}),
             ...(node.type === 'figure'

@@ -8,7 +8,7 @@ import {
 } from '@zip.js/zip.js';
 import { z } from 'zod';
 import type { DocumentMetadata } from '@/src/document/model';
-import { migrateDocumentData } from '@/src/document/validation';
+import { importDocumentData } from '@/src/workspace/import-document';
 import { parseMarkdown } from '@/src/markdown/parser';
 import {
   serializeDocument,
@@ -46,7 +46,7 @@ export const projectLimits = {
 const manifestSchema = z
   .object({
     schemaVersion: z.literal(1),
-    type: z.literal('kumi-report-project'),
+    type: z.enum(['kumi-report-project', 'kumi-slide-project']),
     metadata: z.record(z.string(), z.unknown()),
     chapters: z
       .array(
@@ -57,6 +57,7 @@ const manifestSchema = z
             file: z.string(),
             enabled: z.boolean(),
             pageBreakBefore: z.boolean(),
+            themeOverride: z.string().optional(),
           })
           .strict(),
       )
@@ -217,8 +218,11 @@ export async function readReportProject(file: File): Promise<ImportedProject> {
     chapters: manifest.chapters.map((chapter) => {
       const source = getSource(chapter.file);
       const parsed = /\.json$/i.test(chapter.file)
-        ? { document: migrateDocumentData(JSON.parse(source)), diagnostics: [] }
-        : parseMarkdown(source, { fallbackType: 'report' });
+        ? { document: importDocumentData(JSON.parse(source)), diagnostics: [] }
+        : parseMarkdown(source, {
+            fallbackType:
+              manifest.type === 'kumi-slide-project' ? 'slide' : 'report',
+          });
       diagnostics.push(...parsed.diagnostics);
       return { ...chapter, document: parsed.document };
     }),

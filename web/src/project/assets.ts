@@ -1,4 +1,4 @@
-import type { DocumentData } from '@/src/document/model';
+import type { DocumentData, DocumentNode } from '@/src/document/model';
 import { walkDocumentTree } from '@/src/document/traversal';
 import { localDocumentAssets, type DocumentAsset } from '@/src/document/assets';
 import type { AssetUrls } from '@/src/workspace/files';
@@ -35,7 +35,25 @@ export function prepareChapter(
     }
     return next;
   };
-  for (const node of walkDocumentTree(document.children)) {
+  const library = document.metadata.block_library;
+  const libraryNodes =
+    library &&
+    typeof library === 'object' &&
+    !Array.isArray(library) &&
+    Array.isArray(library.items)
+      ? library.items.flatMap((item) =>
+          item &&
+          typeof item === 'object' &&
+          !Array.isArray(item) &&
+          Array.isArray(item.nodes)
+            ? (item.nodes as unknown as DocumentNode[])
+            : [],
+        )
+      : [];
+  for (const node of walkDocumentTree([
+    ...document.children,
+    ...libraryNodes,
+  ])) {
     if (node.type !== 'figure' && node.type !== 'inlineImage') continue;
     node.attrs.src = remap(node.attrs.src, 'image');
     if (node.type === 'figure' && node.attrs.figureEdit?.pdfSource) {
@@ -45,6 +63,25 @@ export function prepareChapter(
       );
     }
   }
+  if (Array.isArray(document.metadata.preserved_content))
+    for (const entry of document.metadata.preserved_content)
+      if (
+        entry &&
+        typeof entry === 'object' &&
+        !Array.isArray(entry) &&
+        Array.isArray(entry.assets)
+      )
+        for (const asset of entry.assets)
+          if (
+            asset &&
+            typeof asset === 'object' &&
+            !Array.isArray(asset) &&
+            typeof asset.source === 'string'
+          )
+            asset.source = remap(
+              asset.source,
+              asset.kind === 'pdf' ? 'pdf' : 'image',
+            );
   return { chapter: { ...chapter, document }, assets };
 }
 
@@ -55,10 +92,29 @@ export function chapterImagePaths(chapter: ReportChapter): string[] {
 export function chapterAssetReferences(
   chapter: ReportChapter,
 ): DocumentAsset[] {
-  return localDocumentAssets(chapter.document.children).map((entry) => ({
+  return localDocumentAssets(
+    chapter.document.children,
+    chapter.document.metadata,
+  ).map((entry) => ({
     ...entry,
     source: resolveProjectPath(chapter.file, entry.source),
   }));
+}
+
+/** Single-chapter exports use source-local keys, while the workspace owns canonical project keys. */
+export function chapterLocalAssets(
+  chapter: ReportChapter,
+  assets: ProjectAssets,
+): ProjectAssets {
+  return new Map(
+    localDocumentAssets(
+      chapter.document.children,
+      chapter.document.metadata,
+    ).flatMap(({ source }) => {
+      const url = assets.get(resolveProjectPath(chapter.file, source));
+      return url ? [[source, url] as const] : [];
+    }),
+  );
 }
 
 export function pruneProjectAssets(

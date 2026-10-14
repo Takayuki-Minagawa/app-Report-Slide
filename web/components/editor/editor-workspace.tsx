@@ -20,14 +20,38 @@ import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { PdfImportDialog } from './pdf-import-dialog';
 import type { FigureNode } from '@/src/document/model';
 import type { BlockInsertionTarget } from '@/src/editor/block-commands';
+import { PreservedContentPanel } from './preserved-content-panel';
+import { TableSplitDialog } from './table-split-dialog';
+import { slideCheckRepairMetadata } from '@/src/document/slide-check';
+import { BlockGroupPanel } from './block-group-panel';
+import { Button } from '@/components/ui/button';
+import {
+  OutputPreviewDialog,
+  type OutputSnapshot,
+} from './output-preview-dialog';
 
 export function EditorWorkspace() {
   const workspace = useDocumentWorkspace();
   const { copy, locale } = useAppPreferences();
-  const [currentPageIndex, setCurrentPageIndex] = useState(0);
+  const chapterKey = workspace.projectSession?.activeChapterId ?? 'document';
+  const [pageSelection, setPageSelection] = useState({ chapterKey, index: 0 });
+  const currentPageIndex =
+    pageSelection.chapterKey === chapterKey
+      ? Math.min(
+          pageSelection.index,
+          slideNavigationPages(workspace.document, locale).length - 1,
+        )
+      : 0;
+  const setCurrentPageIndex = (index: number) =>
+    setPageSelection({ chapterKey, index });
   const [navigatorOpen, setNavigatorOpen] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [outputSnapshot, setOutputSnapshot] = useState<OutputSnapshot | null>(
+    null,
+  );
+  const [outputError, setOutputError] = useState('');
+  const [splitTableId, setSplitTableId] = useState<string | null>(null);
   const [pdfImport, setPdfImport] = useState<{
     node?: FigureNode;
     target: BlockInsertionTarget;
@@ -62,10 +86,10 @@ export function EditorWorkspace() {
     workspace.documentWriteLocked || workspace.projectActions.busy;
   const focusTarget = (nodeId: string) => {
     if (workspace.view !== 'visual') workspace.changeView('visual');
-    workspace.focusNode(nodeId);
+    workspace.focusProjectNode(nodeId);
   };
   const selectedPageIndex =
-    slideNavigationPages(workspace.previewDocument, locale).find((page) =>
+    slideNavigationPages(workspace.localPreviewDocument, locale).find((page) =>
       page.elements.some(
         (element) => element.nodeId === workspace.selectedNode?.nodeId,
       ),
@@ -94,7 +118,7 @@ export function EditorWorkspace() {
       selectedNodeId={workspace.selectedNode?.nodeId}
       documentWriteLocked={controlsLocked}
       focusNode={(nodeId) => {
-        workspace.focusNode(nodeId);
+        workspace.focusProjectNode(nodeId);
         if (overlay) setNavigatorOpen(false);
       }}
       importFiles={workspace.importFiles}
@@ -106,7 +130,7 @@ export function EditorWorkspace() {
       }}
     >
       <SlideNavigation
-        document={workspace.previewDocument}
+        document={workspace.localPreviewDocument}
         selectedNodeId={workspace.selectedNode?.nodeId}
         currentPageIndex={selectedPageIndex}
         onPageSelect={setCurrentPageIndex}
@@ -122,6 +146,46 @@ export function EditorWorkspace() {
       overlay={overlay}
       slideTools={
         <>
+          <PreservedContentPanel
+            document={workspace.document}
+            onFocus={focusTarget}
+          />
+          <BlockGroupPanel
+            key={`blocks:${workspace.projectSession?.activeChapterId ?? 'document'}:${selectedPageIndex}`}
+            document={workspace.document}
+            currentPageIndex={selectedPageIndex}
+            disabled={controlsLocked}
+            selectedNodeId={workspace.selectedNode?.nodeId}
+            onFocus={focusTarget}
+            onApply={workspace.applyDocumentChange}
+            onInsertionRegionChange={workspace.setInsertionRegion}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={controlsLocked || !workspace.canUndoDocumentChange}
+            onClick={workspace.undoDocumentChange}
+          >
+            {locale === 'ja'
+              ? 'まとまり・配置の変更を取り消す'
+              : 'Undo block / layout change'}
+          </Button>
+          {workspace.insertionRegion && (
+            <div className="rounded border p-2 text-xs">
+              <output>
+                {locale === 'ja'
+                  ? `次の新しい図表の領域: ${{ full: '全幅上部', left: '主領域', 'right-top': '副領域上', 'right-bottom': '副領域下', bottom: '全幅下部' }[workspace.insertionRegion]}（挿入ページは本文の選択位置）`
+                  : `Next figure/table region: ${workspace.insertionRegion} (page follows the editor selection)`}
+              </output>
+              <Button
+                size="xs"
+                variant="ghost"
+                onClick={() => workspace.setInsertionRegion(undefined)}
+              >
+                {locale === 'ja' ? '領域指定を解除' : 'Clear insertion region'}
+              </Button>
+            </div>
+          )}
           <ReaderSupplementProperties
             key={`reader:${workspace.document.children[0]?.attrs.nodeId}:${editedPageIndex}:${JSON.stringify(workspace.document.metadata.reader_supplements)}`}
             document={workspace.document}
@@ -132,29 +196,47 @@ export function EditorWorkspace() {
           {workspace.document.type === 'slide' ? (
             <>
               <SlideDesignPanel
-                document={workspace.previewDocument}
+                document={workspace.localPreviewDocument}
                 currentPageIndex={selectedPageIndex}
                 disabled={controlsLocked}
-                onApply={workspace.updateMetadata}
-                resolveImageUrl={workspace.resolvePreviewImageUrl}
+                onApply={workspace.updateSlideMetadata}
+                resolveImageUrl={workspace.resolveImageUrl}
                 onFocus={focusTarget}
               />
               <SlideCheckPanel
-                document={workspace.previewDocument}
-                resolveImageUrl={workspace.resolvePreviewImageUrl}
+                document={workspace.localPreviewDocument}
+                resolveImageUrl={workspace.resolveImageUrl}
                 onFocus={focusTarget}
                 onPageSelect={setCurrentPageIndex}
                 disabled={controlsLocked}
+                onRepair={(nodeId, action) => {
+                  focusTarget(nodeId);
+                  if (action === 'split-table') setSplitTableId(nodeId);
+                  else {
+                    const metadata = slideCheckRepairMetadata(
+                      workspace.document,
+                      nodeId,
+                      action,
+                    );
+                    if (metadata)
+                      workspace.applyDocumentChange(
+                        { ...workspace.document, metadata },
+                        locale === 'ja'
+                          ? '表を全幅へ配置しました'
+                          : 'Placed table at full width',
+                      );
+                  }
+                }}
               />
             </>
           ) : null}
         </>
       }
       idPrefix={overlay ? 'workspace-sheet' : 'workspace'}
-      document={workspace.previewDocument}
+      document={workspace.localPreviewDocument}
       editor={workspace.editor}
       documentWriteLocked={controlsLocked}
-      analysis={workspace.analysis}
+      analysis={workspace.localAnalysis}
       selectedNode={workspace.selectedNode}
       selectedSemantic={workspace.selectedSemantic}
       mathDraft={workspace.mathDraft}
@@ -167,7 +249,7 @@ export function EditorWorkspace() {
       updateDocumentFlag={workspace.updateDocumentFlag}
       displayedStatus={workspace.displayedStatus}
       dirty={workspace.dirty}
-      resolveImageUrl={workspace.resolvePreviewImageUrl}
+      resolveImageUrl={workspace.resolveImageUrl}
       updateMetadata={workspace.updateMetadata}
       focusNode={focusTarget}
       onEditPdf={(node) => {
@@ -192,11 +274,34 @@ export function EditorWorkspace() {
         htmlExporting={workspace.htmlExporting}
         exportOffice={workspace.exportOffice}
         exportPdf={workspace.exportPdf}
+        exportScope={workspace.exportScope}
+        setExportScope={workspace.setExportScope}
+        openOutputPreview={() => {
+          try {
+            setOutputError('');
+            setOutputSnapshot(workspace.getExportSnapshot());
+          } catch (cause) {
+            setOutputError(
+              cause instanceof Error ? cause.message : String(cause),
+            );
+          }
+        }}
         binaryExporting={workspace.binaryExporting}
         openNavigator={() => setNavigatorOpen(true)}
         openProperties={() => setPropertiesOpen(true)}
         toggleSearch={() => setSearchOpen((open) => !open)}
       />
+      {outputError && (
+        <p role="alert" className="px-4 text-sm text-destructive">
+          {outputError}
+        </p>
+      )}
+      {outputSnapshot && (
+        <OutputPreviewDialog
+          snapshot={outputSnapshot}
+          onClose={() => setOutputSnapshot(null)}
+        />
+      )}
       {searchOpen && (
         <SearchReplace
           editor={workspace.editor}
@@ -214,7 +319,7 @@ export function EditorWorkspace() {
       <section className="workspace-grid">
         {navigator()}
         <WorkspaceEditor
-          document={workspace.document}
+          document={workspace.localPreviewDocument}
           previewDocument={workspace.previewDocument}
           project={Boolean(workspace.project)}
           resolvePreviewImageUrl={workspace.resolvePreviewImageUrl}
@@ -267,10 +372,18 @@ export function EditorWorkspace() {
         <PdfImportDialog
           node={pdfImport.node}
           target={pdfImport.target}
-          metadata={workspace.previewDocument.metadata}
+          metadata={workspace.localPreviewDocument.metadata}
           resolveAssetUrl={workspace.resolveImageUrl}
           onApply={workspace.applyPdfFigure}
           onClose={() => setPdfImport(null)}
+        />
+      )}
+      {splitTableId && workspace.editor && (
+        <TableSplitDialog
+          editor={workspace.editor}
+          nodeId={splitTableId}
+          documentType={workspace.document.type}
+          onClose={() => setSplitTableId(null)}
         />
       )}
       <HtmlImportDialog

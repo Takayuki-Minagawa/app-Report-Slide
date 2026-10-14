@@ -1,3 +1,5 @@
+import { readBlockLibrary } from '@/src/document/block-library';
+import { readBlockLayout } from '@/src/document/block-layout';
 import type { DocumentData } from '@/src/document/model';
 import { walkDocumentTree } from '@/src/document/traversal';
 import { readFigureEdit } from '@/src/document/figure-edit';
@@ -12,14 +14,51 @@ export function officeFeatureWarnings(
 ): string[] {
   const ja = locale === 'ja';
   const warnings: string[] = [];
+  const library = readBlockLibrary(document.metadata);
+  if (library.items.length)
+    warnings.push(
+      ja
+        ? `登録部品「${library.items
+            .map((item) => item.name)
+            .slice(0, 10)
+            .join(
+              '、',
+            )}」: Officeには部品ライブラリーとその原素材を含めません。再利用にはHTMLまたはZIPを保存してください。`
+        : 'Office does not retain registered reusable parts and their original assets. Keep HTML or ZIP to reuse them.',
+    );
+  if (
+    [...walkDocumentTree(document.children)].some(
+      (node) =>
+        'attrs' in node &&
+        'blockLayout' in node.attrs &&
+        (readBlockLayout(node.attrs.blockLayout).groupId ||
+          readBlockLayout(node.attrs.blockLayout).locked),
+    )
+  )
+    warnings.push(
+      ja
+        ? 'ブロックのグループ・配置ロックはOfficeには保持しません。内容は出力します。'
+        : 'Office retains the content but not block groups or placement locks.',
+    );
   for (const node of walkDocumentTree(document.children)) {
+    if (
+      (node.type === 'table' && node.attrs.sourceReferenceId) ||
+      (node.type === 'chart' && node.attrs.plot?.referenceId)
+    ) {
+      const name = node.attrs.caption || node.attrs.nodeId;
+      warnings.push(
+        ja
+          ? `図表「${name}」: 共有文献への関連付け・文献の要点・PDFリンクはOfficeには含まれません。出典の詳細を共有する場合はHTMLを、再編集用にはHTMLまたはZIPを保存してください。`
+          : `Table/chart “${name}”: Office does not include its shared reference, summary or PDF link. Share HTML for source details and keep HTML or ZIP for editing.`,
+      );
+    }
     if (node.type === 'chart' && node.attrs.plot && document.type === 'slide') {
       const plot = resolveChartPlot(node.attrs);
       const name = node.attrs.caption || node.attrs.alt || node.attrs.series;
       warnings.push(
         ja
-          ? `グラフ「${name}」: PPTXの図は先頭系列「${plot.series[0].name}」のみです。系列の線種・軸範囲・横棒・値ラベルは再現しません。全系列の元データと出典は発表者ノートへ保存します。比較図の見た目はHTMLまたはPDFを使用してください。`
-          : `Chart “${name}”: PPTX displays only the first series “${plot.series[0].name}”. Series styles, axis ranges, horizontal orientation and value labels are not reproduced. All series data and sources are retained in speaker notes. Use HTML or PDF for the full comparison.`,
+          ? `グラフ「${name}」: PPTXの図は先頭系列「${plot.series[0].name}」のみです。系列の線種・軸範囲・横棒・値ラベル・対数目盛・誤差棒は再現しません。全系列の元データと出典は発表者ノートへ保存します。比較図の見た目はHTMLまたはPDFを使用してください。`
+          : `Chart “${name}”: PPTX displays only the first series “${plot.series[0].name}”. Series styles, axis ranges, horizontal orientation, value labels, log scales and error bars are not reproduced. All series data and sources are retained in speaker notes. Use HTML or PDF for the full comparison.`,
       );
     }
     if (node.type !== 'figure') continue;
@@ -62,5 +101,7 @@ export function officeFeatureWarnings(
 }
 
 export function referencedLocalImages(document: DocumentData): string[] {
-  return localDocumentAssets(document.children).map(({ source }) => source);
+  return localDocumentAssets(document.children, document.metadata).map(
+    ({ source }) => source,
+  );
 }

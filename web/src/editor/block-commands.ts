@@ -1,3 +1,4 @@
+import { readBlockLayout } from '@/src/document/block-layout';
 import type { Editor, JSONContent } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
 import { createNodeId } from '@/src/document/model';
@@ -69,6 +70,10 @@ export function canMoveBlock(
 ): boolean {
   const found = selectedBlock(editor, nodeId);
   if (!found || !editor.isEditable) return false;
+  const layout = readBlockLayout(
+    editor.state.doc.child(found.index).attrs.blockLayout,
+  );
+  if (layout.locked || layout.groupId) return false;
   const siblingIndex = found.index + direction;
   return (
     siblingIndex >= 0 &&
@@ -113,6 +118,8 @@ export function duplicateDocumentBlock(
   const found = selectedBlock(editor, nodeId);
   if (!found || !editor.isEditable) return undefined;
   const node = editor.state.doc.child(found.index);
+  const layout = readBlockLayout(node.attrs.blockLayout);
+  if (layout.locked || layout.groupId) return undefined;
   if (isBreak(node.type.name) || node.type.name === 'speakerNotes')
     return undefined;
   const clone = (value: JSONContent): JSONContent => ({

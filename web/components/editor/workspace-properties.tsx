@@ -45,6 +45,7 @@ import { FigurePlacementProperties } from './figure-placement-properties';
 import type { ChartNode } from '@/src/document/model';
 import { FigureEditProperties } from './figure-edit-properties';
 import { BlockActions } from './block-actions';
+import { figureReferences } from '@/src/document/figure-edit';
 
 interface WorkspacePropertiesProps {
   slideTools?: ReactNode;
@@ -328,6 +329,10 @@ export function WorkspaceProperties({
                     node={selectedSemantic}
                     disabled={documentWriteLocked}
                     onApply={applyAttributes}
+                    references={figureReferences(document.metadata)}
+                    onMetadataChange={(metadata) =>
+                      updateMetadata(metadata as DocumentMetadata)
+                    }
                   />
                 )}
                 {document.type === 'slide' &&
@@ -355,6 +360,10 @@ export function WorkspaceProperties({
                     nodeId={selectedNode.nodeId}
                     disabled={documentWriteLocked}
                     onApply={applyAttributes}
+                    references={figureReferences(document.metadata)}
+                    onMetadataChange={(metadata) =>
+                      updateMetadata(metadata as DocumentMetadata)
+                    }
                   />
                 )}
               </div>

@@ -234,7 +234,11 @@ describe('external HTML conversion', () => {
     expect(
       (globalThis as Record<string, unknown>).importAttack,
     ).toBeUndefined();
-    expect(JSON.stringify(result.document)).not.toContain('javascript:');
+    // Unsafe source is retained only as inert metadata, never as a rendered node or link.
+    expect(JSON.stringify(result.document.children)).not.toContain(
+      'javascript:',
+    );
+    expect(result.document.metadata.preserved_content).toBeDefined();
     expect(textNodes(result.document)).toContain('kept link text');
     expect(textNodes(result.document)).toContain('Kept alt');
     expect(textNodes(result.document)).toContain('Chart fallback');

@@ -1,5 +1,6 @@
 'use client';
 
+import { readBlockLayout } from '@/src/document/block-layout';
 import { useState } from 'react';
 import type { Editor } from '@tiptap/react';
 import { Button } from '@/components/ui/button';
@@ -24,15 +25,26 @@ export function BlockActions({
   const { locale } = useAppPreferences();
   const [result, setResult] = useState('');
   const ja = locale === 'ja';
+  let protectedBlock = false;
+  editor?.state.doc.descendants((node) => {
+    if (node.attrs.nodeId === nodeId) {
+      const layout = readBlockLayout(node.attrs.blockLayout);
+      protectedBlock = !!(layout.groupId || layout.locked);
+    }
+  });
   return (
     <section
       aria-label={ja ? 'ブロックの移動と複製' : 'Move and duplicate block'}
       className="space-y-2"
     >
       <p className="text-[11px] text-muted-foreground">
-        {ja
-          ? '表のセルを選択している場合は、表全体を操作します。本文の順序を変更し、Undoで戻せます。'
-          : 'Selecting a table cell operates on the whole table. Flow order changes can be undone.'}
+        {protectedBlock
+          ? ja
+            ? 'この要素はグループまたは配置ロックの対象です。「ブロックのまとまり・再利用」で操作してください。'
+            : 'Use the block group controls for this grouped or locked element.'
+          : ja
+            ? '表のセルを選択している場合は、表全体を操作します。本文の順序を変更し、Undoで戻せます。'
+            : 'Selecting a table cell operates on the whole table. Flow order changes can be undone.'}
       </p>
       <div className="flex flex-wrap gap-1">
         {([-1, 1] as const).map((direction) => (
@@ -66,7 +78,7 @@ export function BlockActions({
         <Button
           size="sm"
           variant="outline"
-          disabled={disabled || !editor}
+          disabled={disabled || !editor || protectedBlock}
           onClick={() => {
             if (!editor) return;
             const copiedId = duplicateDocumentBlock(editor, nodeId);

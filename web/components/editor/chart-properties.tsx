@@ -1,6 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { SharedReferenceFields } from './shared-reference-fields';
+import type { FigureReference } from '@/src/document/figure-edit';
+import { readBlockLayout } from '@/src/document/block-layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -24,7 +27,11 @@ export function ChartProperties({
   nodeId,
   disabled,
   onApply,
+  references = [],
+  onMetadataChange,
 }: {
+  references?: FigureReference[];
+  onMetadataChange?: (metadata: Record<string, unknown>) => void;
   attrs: ChartNode['attrs'];
   nodeId: string;
   disabled: boolean;
@@ -77,9 +84,11 @@ export function ChartProperties({
         {copy.type}
         <NativeSelect
           value={chartType}
-          onChange={(event) =>
-            setChartType(event.target.value as typeof chartType)
-          }
+          onChange={(event) => {
+            setChartType(event.target.value as typeof chartType);
+            if (event.target.value === 'bar')
+              setPlot({ ...plot, xScale: 'linear' });
+          }}
         >
           <NativeSelectOption value="line">{copy.line}</NativeSelectOption>
           <NativeSelectOption value="scatter">
@@ -185,6 +194,33 @@ export function ChartProperties({
               }
             />
           </label>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              try {
+                const data = parseChartCsv(csv[index]).map((point) => ({
+                  ...point,
+                  yMinus: point.yMinus ?? 0,
+                  yPlus: point.yPlus ?? 0,
+                }));
+                setCsv(
+                  csv.map((value, i) =>
+                    i === index ? chartDataCsv(data) : value,
+                  ),
+                );
+              } catch {
+                setMessage(
+                  t(
+                    '先にデータの入力を確認してください。',
+                    'Check the data before adding error columns.',
+                  ),
+                );
+              }
+            }}
+          >
+            {t('誤差棒の列を追加', 'Add error-bar columns')}
+          </Button>
           <label className="property-field">
             {t('CSVを読み込む', 'Import CSV')}
             <Input
@@ -212,8 +248,8 @@ export function ChartProperties({
                 } catch {
                   setMessage(
                     t(
-                      'CSVを確認してください。label,x,y の3列、200行までです。',
-                      'Check CSV: label,x,y, up to 200 rows.',
+                      'CSVを確認してください。label,x,y の3列、または誤差のヘッダー付き7列、200行までです。',
+                      'Check CSV: label,x,y or 7 columns with error headers, up to 200 rows.',
                     ),
                   );
                 }
@@ -265,6 +301,26 @@ export function ChartProperties({
           'Up to 8 series, 200 points each. Paste 3 spreadsheet columns. Horizontal bars use Y values and units along the horizontal axis.',
         )}
       </p>
+      <p className="text-xs text-muted-foreground">
+        {t(
+          '誤差棒は値からの幅を xMinus,xPlus,yMinus,yPlus に入力します（空欄は未指定、0以上）。横棒のY誤差は横向きです。棒のXは分類のため、X誤差とX対数軸は使用しません。対数の棒は軸最小値を基線とします。',
+          'Error columns xMinus,xPlus,yMinus,yPlus are nonnegative distances from each value; blank means absent. Y errors follow horizontal bars. Bars use categories, so X errors and X log scale are not displayed. Log bars start at the axis minimum.',
+        )}
+      </p>
+      <label className="property-field">
+        {t('誤差棒の意味・条件', 'Error-bar meaning and conditions')}
+        <Input
+          aria-label={t(
+            '誤差棒の意味・条件',
+            'Error-bar meaning and conditions',
+          )}
+          maxLength={300}
+          value={plot.errorDescription ?? ''}
+          onChange={(e) =>
+            setPlot({ ...plot, errorDescription: e.target.value })
+          }
+        />
+      </label>
       <label className="flex gap-2 text-xs">
         <input
           type="checkbox"
@@ -292,6 +348,24 @@ export function ChartProperties({
             {axis.toUpperCase()}{' '}
             {t('軸設定（空欄は自動）', 'axis (blank = auto)')}
           </legend>
+          <label className="property-field col-span-2">
+            {axis.toUpperCase()} {t('目盛', 'scale')}
+            <NativeSelect
+              aria-label={`${axis.toUpperCase()} ${t('目盛', 'scale')}`}
+              value={plot[`${axis}Scale`] ?? 'linear'}
+              disabled={axis === 'x' && chartType === 'bar'}
+              onChange={(e) =>
+                setPlot({ ...plot, [`${axis}Scale`]: e.target.value })
+              }
+            >
+              <NativeSelectOption value="linear">
+                {t('線形', 'Linear')}
+              </NativeSelectOption>
+              <NativeSelectOption value="log">
+                {t('対数（底10・正値のみ）', 'Log (base 10, positive values)')}
+              </NativeSelectOption>
+            </NativeSelect>
+          </label>
           <label className="property-field col-span-2">
             {axis.toUpperCase()} {t('単位', 'unit')}
             <Input
@@ -346,6 +420,12 @@ export function ChartProperties({
           )}
         </NativeSelect>
       </label>
+      <SharedReferenceFields
+        references={references}
+        value={plot.referenceId ?? ''}
+        onChange={(referenceId) => setPlot({ ...plot, referenceId })}
+        onMetadataChange={onMetadataChange}
+      />
       <label className="property-field">
         {t('グラフの出典', 'Chart source')}
         <Textarea
@@ -361,6 +441,7 @@ export function ChartProperties({
           min="10"
           max="100"
           value={width}
+          disabled={readBlockLayout(attrs.blockLayout).locked}
           onChange={(e) => setWidth(e.target.value)}
         />
       </label>
@@ -368,8 +449,8 @@ export function ChartProperties({
         <p className="text-xs text-destructive">
           {copy.invalid}{' '}
           {t(
-            '軸の最小値と最大値も確認してください。',
-            'Also check axis bounds.',
+            '軸範囲、0以上の誤差幅を確認してください。対数軸は値・誤差下端・範囲に正値が必要です。',
+            'Check axis bounds and nonnegative error widths. Log values, lower error endpoints and bounds must be positive.',
           )}
         </p>
       )}

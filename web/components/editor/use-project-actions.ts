@@ -18,13 +18,20 @@ import {
   appendReportProjectChapter,
   updateReportProjectDocument,
   createBlankChapter,
-  createReportProject,
+  createDocumentProject,
+  projectDocumentType,
+  projectChapterDocument,
   maximumProjectChapters,
   ReportProjectError,
   validateReportProject,
   type ReportChapter,
   type ReportProject,
 } from '@/src/project/model';
+import {
+  duplicateSlidePage,
+  moveSlidePage,
+  transferSlidePage,
+} from '@/src/project/slide-pages';
 import {
   readWorkspaceFiles,
   revokeAssetUrls,
@@ -67,7 +74,12 @@ interface ProjectWorkspaceBridge {
   loadDocument: (
     document: DocumentData,
     title: StatusMessage,
-    options?: { assets?: AssetUrls; description?: StatusDescription },
+    options?: {
+      assets?: AssetUrls;
+      description?: StatusDescription;
+      projectAssets?: boolean;
+      focusNodeId?: string;
+    },
   ) => void;
   assets: AssetUrls;
   getRevision: () => number;
@@ -78,6 +90,7 @@ interface ProjectWorkspaceBridge {
   markDocumentSaved: () => void;
   clearRecovery: () => void;
   confirmReplacement: () => boolean;
+  focusNode?: (nodeId: string) => void;
   copy: ProjectMessages;
 }
 
@@ -100,6 +113,10 @@ export function useProjectActions(bridge: ProjectWorkspaceBridge) {
     copy,
   } = bridge;
   const [busy, setBusy] = useState(false);
+  const [pageUndo, setPageUndo] = useState<{
+    session: ProjectSession;
+    revision: number;
+  } | null>(null);
   const activeOperation = useRef<number | null>(null);
   useEffect(
     () => () => {
@@ -136,12 +153,13 @@ export function useProjectActions(bridge: ProjectWorkspaceBridge) {
   const createProject = () => {
     if (locked || session || busy) return;
     try {
-      const project = createReportProject(getDocument());
+      const project = createDocumentProject(getDocument());
       const prepared = prepareChapter(project.chapters[0], assets);
       project.chapters[0] = prepared.chapter;
       validateReportProject(project);
       loadDocument(prepared.chapter.document, projectStatus('created'), {
         assets: prepared.assets,
+        projectAssets: true,
       });
       setSession({
         project,
@@ -168,6 +186,7 @@ export function useProjectActions(bridge: ProjectWorkspaceBridge) {
       const chapter = result.project.chapters[0];
       loadDocument(chapter.document, projectStatus('opened', file.name), {
         assets: result.assets,
+        projectAssets: true,
         description: result.diagnostics.map(diagnosticStatusMessage),
       });
       setSession({
@@ -186,14 +205,19 @@ export function useProjectActions(bridge: ProjectWorkspaceBridge) {
     }
   };
 
-  const selectChapter = (id: string) => {
-    if (!session || locked || busy || id === session.activeChapterId) return;
+  const selectChapter = (id: string, focusNodeId?: string) => {
+    if (!session || locked || busy) return;
+    if (id === session.activeChapterId) {
+      if (focusNodeId) bridge.focusNode?.(focusNodeId);
+      return;
+    }
     const project = snapshot()!;
     const chapter = project.chapters.find((candidate) => candidate.id === id);
     if (!chapter) return;
     loadDocument(
-      chapter.document,
+      projectChapterDocument(project, chapter),
       projectStatus('chapterSelected', chapter.title),
+      { projectAssets: true, focusNodeId },
     );
     setSession({ ...session, project, activeChapterId: id });
     showEditor();
@@ -211,6 +235,7 @@ export function useProjectActions(bridge: ProjectWorkspaceBridge) {
       let chapter = createBlankChapter(
         project.chapters.length + 1,
         copy.newChapter(project.chapters.length + 1),
+        projectDocumentType(project),
       );
       let nextAssets = assets;
       let description: StatusDescription | undefined;
@@ -218,12 +243,17 @@ export function useProjectActions(bridge: ProjectWorkspaceBridge) {
         const imported = await readWorkspaceFiles(files);
         pendingAssets = imported.assets;
         if (request !== getRevision()) return;
-        if (imported.document.type !== 'report')
+        if (imported.document.type !== projectDocumentType(project))
           throw new ReportProjectError('reportOnly');
         chapter = {
           ...chapter,
           title: documentTitle(imported.document).slice(0, 120),
           document: imported.document,
+          ...(project.type === 'kumi-slide-project' &&
+          imported.document.metadata.theme &&
+          imported.document.metadata.theme !== project.metadata.theme
+            ? { themeOverride: imported.document.metadata.theme }
+            : {}),
         };
         if (/\.json$/i.test(imported.sourceName))
           chapter.file = chapter.file.replace(/\.md$/, '.json');
@@ -232,6 +262,7 @@ export function useProjectActions(bridge: ProjectWorkspaceBridge) {
         nextAssets = new Map([...assets, ...prepared.assets]);
         description = [
           ...imported.diagnostics.map(diagnosticStatusMessage),
+          ...(imported.htmlImport?.warnings ?? []),
           ...imported.unresolved.map((source) =>
             projectStatus('missingImage', source),
           ),
@@ -245,7 +276,7 @@ export function useProjectActions(bridge: ProjectWorkspaceBridge) {
       loadDocument(
         chapter.document,
         projectStatus('chapterAdded', chapter.title),
-        { assets: nextAssets, description },
+        { assets: nextAssets, description, projectAssets: true },
       );
       setSession({ project: next, activeChapterId: chapter.id, dirty: true });
       if (pendingAssets) {
@@ -267,7 +298,10 @@ export function useProjectActions(bridge: ProjectWorkspaceBridge) {
   const updateChapter = (
     id: string,
     updates: Partial<
-      Pick<ReportChapter, 'title' | 'enabled' | 'pageBreakBefore'>
+      Pick<
+        ReportChapter,
+        'title' | 'enabled' | 'pageBreakBefore' | 'themeOverride'
+      >
     >,
   ) => {
     if (!session || locked || busy) return;
@@ -325,7 +359,7 @@ export function useProjectActions(bridge: ProjectWorkspaceBridge) {
     loadDocument(
       active.document,
       projectStatus('chapterDeleted', removed.title),
-      { assets: pruneProjectAssets(next, assets) },
+      { assets: pruneProjectAssets(next, assets), projectAssets: true },
     );
     setSession({ project: next, activeChapterId: active.id, dirty: true });
     showEditor();
@@ -408,6 +442,81 @@ export function useProjectActions(bridge: ProjectWorkspaceBridge) {
     }
   };
 
+  const changeSlidePage = (
+    index: number,
+    operation: 'duplicate' | 'up' | 'down' | 'transfer',
+    destinationId?: string,
+  ) => {
+    if (!session || locked || busy) return;
+    const before = snapshot()!;
+    const chapter = before.chapters.find(
+      (entry) => entry.id === session.activeChapterId,
+    )!;
+    if (chapter.document.type !== 'slide') return;
+    let next: ReportProject;
+    const assetCopies = new Map<string, string>();
+    let activeId = chapter.id;
+    if (operation === 'transfer' && destinationId) {
+      next = transferSlidePage(
+        before,
+        chapter.id,
+        index,
+        destinationId,
+        assetCopies,
+      );
+      activeId = destinationId;
+    } else {
+      const document =
+        operation === 'duplicate'
+          ? duplicateSlidePage(projectChapterDocument(before, chapter), index)
+          : moveSlidePage(
+              chapter.document,
+              index,
+              index + (operation === 'up' ? -1 : 1),
+            );
+      next = updateReportProjectDocument(before, chapter.id, document);
+    }
+    try {
+      next = validateReportProject(next);
+      const nextAssets = new Map(assets);
+      for (const [destination, source] of assetCopies) {
+        const url = assets.get(source);
+        if (!url) throw new ReportProjectError('missingImage', source);
+        nextAssets.set(destination, url);
+      }
+      const active = next.chapters.find((entry) => entry.id === activeId)!;
+      loadDocument(
+        projectChapterDocument(next, active),
+        projectStatus('chapterUpdated'),
+        { projectAssets: true, assets: nextAssets },
+      );
+      setPageUndo({
+        session: { ...session, project: before },
+        revision: getRevision(),
+      });
+      setSession({ project: next, activeChapterId: activeId, dirty: true });
+      showEditor();
+    } catch (error) {
+      errorStatus(error, 'unableToChange');
+    }
+  };
+
+  const undoSlidePageChange = () => {
+    if (!pageUndo || locked || busy || pageUndo.revision !== getRevision())
+      return;
+    const previous = pageUndo.session;
+    const active = previous.project.chapters.find(
+      (chapter) => chapter.id === previous.activeChapterId,
+    )!;
+    loadDocument(
+      projectChapterDocument(previous.project, active),
+      projectStatus('chapterUpdated'),
+      { projectAssets: true },
+    );
+    setSession({ ...previous, dirty: true });
+    setPageUndo(null);
+  };
+
   return {
     busy,
     createProject,
@@ -420,5 +529,8 @@ export function useProjectActions(bridge: ProjectWorkspaceBridge) {
     updateProjectMetadata,
     saveProject,
     exportProject,
+    changeSlidePage,
+    undoSlidePageChange,
+    canUndoSlidePage: Boolean(pageUndo && pageUndo.revision === getRevision()),
   };
 }

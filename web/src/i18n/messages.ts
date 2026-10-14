@@ -607,14 +607,14 @@ export const messages: Record<AppLocale, UiMessages> = {
       restoring: '復元中…',
     },
     manual: {
-      projectTitle: '6. 長いレポートを章に分ける',
+      projectTitle: '6. レポート・スライドを章に分ける',
       projectSteps: [
-        'Reportを開き、左側の「章別プロジェクト」を開き、「現在のReportをプロジェクト化」を選びます。「空の章を追加」または「原稿を章として追加」（原稿1件＋画像）で章を増やします。',
+        'ReportまたはSlideを開き、左側の「章別プロジェクト」から現在の文書をプロジェクト化します。空の章や、Markdown／JSON／編集HTML／文書ZIPを章として追加できます。',
         '章名を選んで編集し、上へ／下へで順序を変えます。「全体出力に含める」を外すと原稿を残したまま除外します。削除には確認が必要です。',
         '章の先頭と本文の改ページを組み合わせます。全体プレビューは1ページずつ表示し、目次・参照のリンクから別ページへ移動できます。番号と参照は有効な章全体で計算します。',
         '「プロジェクトZIPを保存」で構成、全章、取り込んだ画像をまとめて保存します。再開時は「プロジェクトZIPを開く」を使います。Markdownで表せない章はZIP内でJSONとして保持します。',
-        '上部の「章 Markdown／章 JSON」は編集中の章だけ、「全体をMarkdown／JSONで出力」は有効な章を結合した文書だけを保存します。プロジェクトの保存にはZIPを使用してください。構成変更はUndoの対象外で、章の切替・削除で本文のUndo履歴をリセットします。',
-        '復旧用コピーは未完了作業の再開を補助しますが、タブを閉じる前にZIPを保存してください。外部URL画像はリンクのままです。自動A4組版やスライドの章別管理には対応していません。',
+        'HTML・Office・PDF・出力比較は「この章／含める章すべて」を選べます。上部の「章 Markdown／章 JSON」は編集中の章だけ、「全体をMarkdown／JSONで出力」は有効な章を結合した文書だけを保存します。プロジェクトの保存にはZIPを使用してください。構成変更はUndoの対象外で、章の切替・削除で本文のUndo履歴をリセットします。',
+        '復旧用コピーは未完了作業の再開を補助しますが、タブを閉じる前にZIPを保存してください。外部URL画像はリンクのままです。Slideは全体目次・ページ複製／移動・共通テーマと章別例外に対応します。自動A4組版は行いません。',
       ],
       recoveryTitle: '端末内の復旧用保存',
       recoverySteps: [
@@ -652,7 +652,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       exportSteps: [
         '「完成プレビュー」でReportはA4ページ、Slideは16:9スライドとして確認できます。',
         'Reportは「Word」で.docx、Slideは「PPTX」で.pptxを出力できます。「PDF」は両方に対応し、章別プロジェクトでは有効な章をまとめて出力します。未適用のMarkdown下書きも対象になります。',
-        'Word／PowerPointの数式はLaTeXテキスト、Wordのグラフはデータ表になります。PDFは紙面を画像化するため文字を選択・検索できません。長いReportの分割位置を確認してください。外部URLの画像はローカル画像として取り込んでから出力します。',
+        'Word／PowerPointの数式はLaTeXテキスト、Wordのグラフはデータ表になります。PDFボタンは紙面を画像化します。検索できるPDFは「出力比較・印刷」→「印刷／PDF保存」から保存できます。長いReportの分割位置を確認してください。外部URLの画像はローカル画像として取り込んでから出力します。',
         'ヘッダーのMarkdownまたはJSONでファイルを保存します。Document JSONはMarkdownで表せない構造も保持できます。',
         'Slide文書では「HTML」で閲覧・発表用の単一HTMLファイルを出力できます。前へ／次へボタンや矢印キーで移動し、進捗バーで現在位置を確認できます。Fキーで全画面表示、Pキーまたは「印刷／PDF保存」で全スライドを印刷できます。',
         'HTMLスライドでは O で一覧、数字＋Enter で番号を指定して移動、B で暗転できます。N は発表者ノートを画面下に、S は現在と次のスライド・ノート・経過時間を別ウィンドウ（発表者ビュー）に表示します。ノートは印刷されません。',
@@ -979,14 +979,14 @@ export const messages: Record<AppLocale, UiMessages> = {
       restoring: 'Restoring…',
     },
     manual: {
-      projectTitle: '6. Split a long report into chapters',
+      projectTitle: '6. Organize reports and slides into chapters',
       projectSteps: [
-        'Open a Report and choose “Turn this report into a project”. Add a blank chapter or one source file with its images using “Add source as chapter”.',
+        'Open a Report or Slide, expand Chapter project and convert the document into a project. Add blank chapters or import Markdown, JSON, editable HTML or document ZIP files as chapters.',
         'Select a chapter to edit it; use Move up/down to reorder it. Uncheck “Include in combined output” to exclude a chapter without removing its source. Deletion requires confirmation.',
         'Use chapter-start and in-document page breaks together. The project preview renders one page at a time; TOC and reference links navigate to other pages. Numbers and references cover all enabled chapters.',
         '“Save project ZIP” saves the manifest, every chapter and imported images. Resume with “Open project ZIP”. Chapters that Markdown cannot represent are retained as JSON inside the ZIP.',
-        'The header saves only the active chapter; combined exports save only enabled chapters as one document. Use a project ZIP to save the project. Structural operations are outside Undo; switching or deleting chapters resets the body Undo history.',
-        'A recovery copy can help resume unfinished work, but save a ZIP before closing the tab. External image URLs remain links. Automatic A4 typesetting and chapter-based slide projects are not supported.',
+        'Header Markdown/JSON saves the active chapter. Choose this chapter or included chapters for HTML, Office, PDF and output comparison. Combined exports save only enabled chapters as one document. Use a project ZIP to save the project. Structural operations are outside Undo; switching or deleting chapters resets the body Undo history.',
+        'A recovery copy can help resume unfinished work, but save a ZIP before closing the tab. External image URLs remain links. Slide projects support chapter contents, page duplication and movement, common themes and chapter overrides. Automatic A4 typesetting is not provided.',
       ],
       recoveryTitle: 'Device-local recovery copy',
       recoverySteps: [
@@ -1024,7 +1024,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       exportSteps: [
         'Use Preview to review Reports as A4 pages and Slides as 16:9 slides.',
         'Use Word to export Reports as .docx, PPTX to export Slides as .pptx, and PDF for either type. Chapter projects export all enabled chapters together. Unapplied Markdown drafts are included.',
-        'Office equations become LaTeX text and Word charts become data tables. PDF pages are images, so text cannot be selected or searched; check page splits in long Reports. Import external images locally before exporting.',
+        'Office equations become LaTeX text and Word charts become data tables. The PDF button produces page images. Use Compare / Print → Print / Save PDF for searchable text; check page splits in long Reports. Import external images locally before exporting.',
         'Save Markdown or JSON from the header. Document JSON preserves structures that Markdown cannot express.',
         'For Slide documents, use HTML to export a standalone file for viewing and presenting. Use Previous/Next or the arrow keys to navigate, and the progress bar to track your place. Press F for fullscreen where supported; press P or Print / Save PDF to print every slide.',
         'In HTML slides, press O for the overview, type a number and press Enter to go to that slide, and press B to black out the screen. N shows speaker notes below the slide; S opens the presenter view, a separate window with the current and next slides, notes, and elapsed time. Notes are not printed.',

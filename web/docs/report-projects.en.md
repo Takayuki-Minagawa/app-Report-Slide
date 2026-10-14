@@ -1,85 +1,60 @@
-# Chapter projects
+# Report / Slide chapter projects
 
 [日本語](./report-projects.ja.md)
 
-Split a Report into source files and assemble them in a manifest-defined order. This feature is not a slide project manager or a TeX `\input` / `\include` implementation.
+Organize a Report or Slide document as several chapters or decks, then assemble them in the chosen order. All chapters in a project must use the same document type.
 
 ## Editing and saving
 
-| Action                       | Scope                                                                                        |
-| ---------------------------- | -------------------------------------------------------------------------------------------- |
-| Select a chapter             | Load only that chapter in the editor                                                         |
-| Add a blank chapter / source | Add a heading and empty paragraph, or one source file with images                            |
-| Move up/down                 | Change the assembly order                                                                    |
-| Include in combined output   | Include or exclude a chapter from numbering, TOC, references and output; keep its source     |
-| Delete chapter               | Remove it from the project after confirmation; never delete the original file on your device |
-| Chapter Markdown / JSON      | Save only the active source; no images or project structure                                  |
-| Combined Markdown / JSON     | Save enabled chapters as one document; no excluded sources or manifest                       |
-| Save project ZIP             | Save the manifest, every chapter including excluded chapters, and referenced imported images |
+| Action                                       | Scope                                                                                                                        |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Turn this report / slide deck into a project | Use the open document as the first chapter                                                                                   |
+| Add source as chapter                        | Add one Markdown, JSON, editable HTML or document ZIP at a time, with image/PDF attachments when needed                      |
+| Select a chapter                             | Edit that chapter only                                                                                                       |
+| Move up/down; Include in combined output     | Change chapter order and inclusion without deleting excluded chapters                                                        |
+| Chapter Markdown / JSON                      | Save the active chapter with its effective theme and citations; asset files remain separate                                  |
+| Export scope: combined / active chapter      | Choose the scope for HTML, PDF, Office and editable ZIP                                                                      |
+| Combined Markdown / JSON                     | Assemble included chapters without project structure or asset bytes                                                          |
+| Project ZIP                                  | Save every chapter, including excluded chapters, structure, images, original PDFs, reusable parts, citations and supplements |
 
-A chapter name is a navigation label; renaming it does not change its source title or headings. Project title, theme, TOC and section numbering control the combined document. Each chapter's front matter is retained; project settings take precedence in the combined view.
+A chapter name is a navigation label; it does not change the manuscript title or headings. The final chapter cannot be deleted. Excluding every chapter produces an empty combined document. Deletion asks for confirmation and never removes the source file on your device.
 
-Excluding all chapters produces an empty combined body. The final chapter cannot be deleted. Structural operations are outside Undo; switching or deleting chapters resets the body Undo history.
+## A four-chapter Slide project
 
-## Pages and references
+1. Open a Slide document and turn it into a project.
+2. Use **Add source as chapter** three times to import three other decks. Same-named images and original PDFs remain distinct.
+3. Choose chapter order and inclusion. Use **All chapter slides** to select and edit a page in another chapter.
+4. Choose **Active chapter only** to export that chapter as HTML, PDF, PPTX or editable ZIP. Return to **Combined included chapters** to recreate the complete deck. Save a project ZIP to resume the chapter-based work later.
 
-No automatic break is inserted before the first enabled chapter. Later chapters follow their **Page break before chapter** setting. Explicit breaks inside a chapter retain leading, trailing and consecutive empty pages.
+Slide chapters always begin on a new slide. **Add chapter contents slides** generates a linked chapter list, with up to twelve chapters per contents page. Chapter reordering and inclusion update its destinations.
 
-Section, figure, table and equation numbers, the TOC and label references are computed over enabled chapters. Reordering or excluding a chapter recalculates them. Duplicate and unresolved labels produce warnings; labels are never silently renamed. References to an excluded chapter become unresolved.
+Set a common project theme, then choose inheritance or an override for each chapter. Existing page-specific designs take precedence. Manual image placement, composite regions, tables, charts, speaker notes and audience supplements stay with their page.
 
-The project preview renders one explicitly separated page at a time. Use page selection, TOC links and references to navigate. Content is not automatically split at A4 boundaries. A single very large chapter or page can still be expensive to render.
+Use **Chapter slide actions** to duplicate a page, move it earlier/later or move it to the end of another chapter. Copies have independent element IDs and reference labels. Images and original PDFs remain available in the destination chapter. **Undo last slide action** restores body, design and supplements together. Further editing disables that Undo so it cannot overwrite later work. Switching chapters resets ordinary body Undo history.
 
-## ZIP format
+## Report pages and references
 
-```text
-report.kumi.zip
-├── project.json
-└── chapters/
-    ├── chapter-.../
-    │   ├── document.md
-    │   └── assets/image-1.svg
-    └── chapter-.../
-        └── document.json
-```
+Report uses the existing **Page break before chapter** option, with no automatic break before the first enabled chapter. Both document types retain explicit leading, trailing and consecutive empty pages.
 
-Example manifest; the `chapters` array determines order:
+Numbering and references are calculated across included chapters; references into excluded chapters produce warnings. Report retains its existing project-wide labels. Importing another Slide deck renames labels that collide with earlier chapters and updates that deck's internal references. Conflicting publication IDs also remain distinct; subsequent edits to a shared publication update its chapters.
 
-```json
-{
-  "schemaVersion": 1,
-  "type": "kumi-report-project",
-  "metadata": {
-    "title": "Research report",
-    "theme": "latex",
-    "toc": true,
-    "number_sections": true
-  },
-  "chapters": [
-    {
-      "id": "intro",
-      "title": "Introduction",
-      "file": "chapters/intro.md",
-      "enabled": true,
-      "pageBreakBefore": false
-    }
-  ]
-}
-```
+Preview shows explicitly separated pages. It does not automatically paginate long Report content at A4 boundaries.
 
-You may extract, edit and re-compress the project. Keep `project.json` at the ZIP root. Each chapter must be a Report Markdown or Document JSON file. If Markdown cannot represent a chapter, saving uses a non-conflicting `.json` filename in the same directory.
+## ZIP format and compatibility
 
-Markdown element IDs are regenerated on import; use labels for references. JSON element IDs must be unique within each chapter. Different chapters may reuse the same IDs, including through copy and paste. Only the combined view and export prefix IDs with a chapter namespace; chapter source IDs remain unchanged. Labels are shared across all chapters, so resolve duplicate labels separately.
+The ZIP contains `project.json` at its root, chapter sources at `chapters/<id>/document.md` or `document.json`, and chapter asset directories. `schemaVersion` remains 1. The project type is `kumi-report-project` or `kumi-slide-project`; existing Report ZIPs still open. Optional chapter `themeOverride` and project `metadata.project_toc` preserve Slide theme exceptions and contents settings.
 
-Local image paths are relative to each chapter source. Paths such as `../images/a.png` may share an image within the ZIP but cannot escape it. Newly added chapters receive their own `assets` directory to prevent same-name images in different chapters from colliding.
+A chapter must be Markdown or Document JSON of the matching document type. Saving falls back to a non-conflicting JSON filename when Markdown cannot represent a chapter. Adding editable HTML or a document ZIP also imports its supported editing information.
 
-Image paths in a combined Markdown/JSON export are relative to the ZIP root. To use the combined document with images elsewhere, place it at the extracted project's root and keep the image directories alongside it. External image URLs remain links and are never downloaded for packaging. Missing local images block ZIP saving and loading with an error.
+JSON node IDs are unique within each chapter. Assembly namespaces IDs across chapters. Markdown import regenerates IDs and rebinds page designs and supplements to the imported pages.
 
-## Limits and safeguards
+Asset paths are relative to each chapter source. Imported chapters receive separate asset directories. Combined Markdown/JSON uses paths relative to the project ZIP root, so keep the asset directories when using those files elsewhere. Chapter HTML and editable ZIP can embed/package the assets. External image URLs remain external links.
 
-- Up to 100 chapters and 300 ZIP entries including directories.
-- Stored and Deflate ZIP entries are supported. Encrypted entries and symbolic links are not supported. Size, header and CRC mismatches block loading.
-- A ZIP may be up to 60MiB; total expanded content is limited to 50MiB. Each source or manifest is limited to 5MiB and each image to 20MiB.
-- Absolute or escaping paths, duplicate filenames including case-only collisions, Windows reserved names, unsafe paths and unrelated attachments are rejected.
-- Apply or discard Markdown drafts before switching chapters. Edits during a ZIP operation invalidate its result; save again after editing.
-- There is no cloud storage. Unfinished work is temporarily kept as a device-local recovery copy, but the downloaded ZIP remains the resumable source. Save regularly rather than relying only on an unload warning or recovery copy.
-- PDF, Report HTML, automatic A4 typesetting, direct filesystem writes and collaboration are outside this feature.
+## Limits
+
+- Up to 100 chapters and 300 ZIP entries including directories. ZIP size: 60MiB; expanded total: 50MiB; each source/manifest: 5MiB; each asset: 20MiB.
+- Stored and Deflate ZIPs are supported. Encryption, symbolic links, escaping or unsafe paths, duplicate filenames and CRC mismatches are rejected.
+- Missing local images or original PDFs block ZIP saving/loading with an explanation.
+- Apply or discard Markdown drafts before chapter operations. Edits during asynchronous work invalidate stale results.
+- Combined output is also subject to document size limits. The project ZIP retains chapter structure and excluded chapters.
+- There is no cloud storage, TeX file-inclusion compatibility, collaboration or direct filesystem write-back. Save a project ZIP regularly in addition to the device-local recovery copy.

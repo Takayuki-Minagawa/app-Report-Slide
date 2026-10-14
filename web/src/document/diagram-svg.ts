@@ -26,7 +26,7 @@ export function diagramSvg(diagram: Diagram): string {
     );
     if (edge.label)
       parts.push(
-        `<text x="${x((points.start.x + points.end.x) / 2)}" y="${y((points.start.y + points.end.y) / 2 - 2)}" text-anchor="middle" font-size="18" fill="${edge.color}" font-family="sans-serif">${escape(edge.label)}</text>`,
+        `<text x="${x((points.start.x + points.end.x) / 2)}" y="${y((points.start.y + points.end.y) / 2 - 2)}" text-anchor="middle" font-size="${edge.labelFontSize ?? 18}" fill="${edge.labelColor ?? edge.color}" font-family="sans-serif">${escape(edge.label)}</text>`,
       );
   });
   for (const shape of diagram.shapes) {
@@ -42,7 +42,7 @@ export function diagramSvg(diagram: Diagram): string {
     const centerY = ((shape.y + shape.height / 2) * diagram.height) / 100;
     lines.forEach((line, index) =>
       parts.push(
-        `<text x="${x(shape.x + shape.width / 2)}" y="${n(centerY + (index - (lines.length - 1) / 2) * shape.fontSize * 1.2)}" dominant-baseline="central" text-anchor="middle" font-size="${shape.fontSize}" font-family="sans-serif" fill="${shape.stroke}">${escape(line)}</text>`,
+        `<text x="${x(shape.x + shape.width / 2)}" y="${n(centerY + (index - (lines.length - 1) / 2) * shape.fontSize * (shape.textLineHeight ?? 1.2))}" dominant-baseline="central" text-anchor="middle" font-size="${shape.fontSize}" font-family="sans-serif" fill="${shape.textColor ?? shape.stroke}">${escape(line)}</text>`,
       ),
     );
   }

@@ -36,6 +36,9 @@ import {
 } from '@/src/editor/table-commands';
 import type { TableBorderStyle, TableBorderWidth } from '@/src/document/table';
 import type { DocumentType } from '@/src/document/model';
+import { TableSplitDialog } from './table-split-dialog';
+import { tableSplitOptions } from '@/src/editor/table-split';
+import { TableCellStyle } from './table-cell-style';
 
 function TableActionButton({
   active,
@@ -119,7 +122,8 @@ export function TableToolbar({
   editor: Editor | null;
   documentType: DocumentType;
 }) {
-  const { copy } = useAppPreferences();
+  const { copy, locale } = useAppPreferences();
+  const [splitId, setSplitId] = useState<string | null>(null);
   const tableActive = useTableActive(editor);
   const [borderMode, setBorderMode] = useState<TableBorderMode>('draw');
   const [borderColor, setBorderColor] = useState('#334155');
@@ -149,6 +153,32 @@ export function TableToolbar({
       role="toolbar"
       aria-label={copy.workspace.tableTools}
     >
+      {splitId && (
+        <TableSplitDialog
+          editor={editor}
+          nodeId={splitId}
+          documentType={documentType}
+          onClose={() => setSplitId(null)}
+        />
+      )}
+      <TableCellStyle
+        editor={editor}
+        documentType={documentType}
+        disabled={!editor.isEditable}
+      />
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={
+          !editor.isEditable || !tableSplitOptions(editor)?.boundaries.length
+        }
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => setSplitId(tableSplitOptions(editor)?.nodeId ?? null)}
+      >
+        {locale === 'ja'
+          ? '表を次のページへ分割'
+          : 'Split table onto next page'}
+      </Button>
       <TableToolbarGroup label={copy.workspace.tableRows}>
         <TableActionButton
           label={copy.workspace.addRowAbove}

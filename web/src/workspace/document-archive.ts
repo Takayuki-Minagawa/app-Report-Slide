@@ -3,6 +3,7 @@ import type { DocumentData } from '@/src/document/model';
 import { documentAssetMime, localDocumentAssets } from '@/src/document/assets';
 import { validatePdfBytes } from '@/src/document/pdf-source';
 import { migrateDocumentData } from '@/src/document/validation';
+import { importDocumentData } from './import-document';
 import { projectLimits, readZip, writeZip } from '@/src/project/archive';
 import { ReportProjectError, safeProjectPath } from '@/src/project/model';
 import { registerAssetUrl, revokeAssetUrls, type AssetUrls } from './files';
@@ -23,11 +24,13 @@ const manifestSchema = z.strictObject({
 const imageMime = documentAssetMime;
 
 function localSources(document: DocumentData): string[] {
-  return localDocumentAssets(document.children).map(({ source, kind }) => {
-    if ((imageMime(source) === 'application/pdf') !== (kind === 'pdf'))
-      throw new ReportProjectError('unsupportedFile', source);
-    return source;
-  });
+  return localDocumentAssets(document.children, document.metadata).map(
+    ({ source, kind }) => {
+      if ((imageMime(source) === 'application/pdf') !== (kind === 'pdf'))
+        throw new ReportProjectError('unsupportedFile', source);
+      return source;
+    },
+  );
 }
 
 /** The image entries use generated names, so original nested paths and duplicate basenames remain distinct. */
@@ -108,7 +111,7 @@ export async function readDocumentArchive(
     manifest = manifestSchema.parse(
       JSON.parse(decoder.decode(entries[manifestName])),
     );
-    document = migrateDocumentData(
+    document = importDocumentData(
       JSON.parse(decoder.decode(entries[documentName])),
     );
   } catch {

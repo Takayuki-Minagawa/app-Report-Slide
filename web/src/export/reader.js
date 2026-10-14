@@ -63,6 +63,16 @@
       if (template?.content) open(template.content, button);
     }),
   );
+  document.querySelectorAll('[data-reader-reference]').forEach((trigger) => {
+    trigger.addEventListener('click', (event) => {
+      const source = trigger.parentElement?.querySelector(
+        '.figure-reference-content',
+      );
+      if (!source || typeof dialog.showModal !== 'function') return;
+      event.preventDefault();
+      open(source, trigger);
+    });
+  });
   document
     .querySelectorAll('.deck-slide figure, .report-sheet figure')
     .forEach((figure) => {

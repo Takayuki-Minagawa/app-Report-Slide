@@ -2,7 +2,18 @@
 import type { ChartNode } from '@/src/document/model';
 import { resolveChartPlot } from '@/src/document/chart';
 
-function unitPosition(value: number, minimum: number, maximum: number): number {
+function unitPosition(
+  value: number,
+  minimum: number,
+  maximum: number,
+  logarithmic = false,
+): number {
+  if (logarithmic)
+    return unitPosition(
+      Math.log10(value),
+      Math.log10(minimum),
+      Math.log10(maximum),
+    );
   if (minimum === maximum)
     return value === minimum ? 0.5 : value > maximum ? 10 : -10;
   const scale = Math.max(
@@ -21,9 +32,26 @@ function unitPosition(value: number, minimum: number, maximum: number): number {
 }
 const short = (value: string, size = 12) =>
   value.length > size ? value.slice(0, size - 1) + '…' : value;
-const numeric = (value: number) => Number(value.toPrecision(3));
+const numeric = (value: number) => {
+  const rounded = Number(value.toPrecision(3));
+  return Number.isFinite(rounded) ? rounded : value.toExponential(2);
+};
 const withUnit = (label: string, unit: string) =>
   unit ? `${label} (${unit})` : label;
+function tickValue(
+  minimum: number,
+  maximum: number,
+  fraction: number,
+  logarithmic: boolean,
+) {
+  if (fraction <= 0 || minimum === maximum) return minimum;
+  if (fraction >= 1) return maximum;
+  const value = logarithmic
+    ? 10 **
+      ((1 - fraction) * Math.log10(minimum) + fraction * Math.log10(maximum))
+    : (1 - fraction) * minimum + fraction * maximum;
+  return Math.max(minimum, Math.min(maximum, value));
+}
 
 /** Pure SVG keeps all series crisp and identical in preview and offline HTML. */
 export function ChartGraphic({ node }: { node: ChartNode }) {
@@ -56,25 +84,39 @@ export function ChartGraphic({ node }: { node: ChartNode }) {
     ).entries(),
   ];
   const categoryIndex = new Map(categories.map(([key], index) => [key, index]));
-  const xs = all.map((point) => point.x),
-    ys = all.map((point) => point.y);
+  const xs = all.flatMap((point) => [
+      point.x - (point.xMinus ?? 0),
+      point.x + (point.xPlus ?? 0),
+    ]),
+    ys = all.flatMap((point) => [
+      point.y - (point.yMinus ?? 0),
+      point.y + (point.yPlus ?? 0),
+    ]);
+  const logX = chartType !== 'bar' && plot.xScale === 'log',
+    logY = plot.yScale === 'log';
   const rawXMin = Math.min(...xs),
     rawXMax = Math.max(...xs),
-    rawYMin = Math.min(0, ...ys),
-    rawYMax = Math.max(0, ...ys);
+    rawYMin =
+      logY && chartType === 'bar'
+        ? Math.max(
+            Number.MIN_VALUE,
+            10 ** (Math.floor(Math.log10(Math.min(...ys))) - 1),
+          )
+        : Math.min(...(logY ? [] : [0]), ...ys),
+    rawYMax = Math.max(...(logY ? [] : [0]), ...ys);
   const xMin = plot.xMin ?? Math.min(rawXMin, plot.xMax ?? Infinity),
     xMax = plot.xMax ?? Math.max(rawXMax, plot.xMin ?? -Infinity);
   const yMin = plot.yMin ?? Math.min(rawYMin, plot.yMax ?? Infinity),
     yMax = plot.yMax ?? Math.max(rawYMax, plot.yMin ?? -Infinity);
   const xp = (value: number) =>
-    left + unitPosition(value, xMin, xMax) * (right - left);
+    left + unitPosition(value, xMin, xMax, logX) * (right - left);
   const yp = (value: number) =>
-    bottom - unitPosition(value, yMin, yMax) * (bottom - top);
+    bottom - unitPosition(value, yMin, yMax, logY) * (bottom - top);
   const hp = (value: number) =>
-    left + unitPosition(value, yMin, yMax) * (right - left);
+    left + unitPosition(value, yMin, yMax, logY) * (right - left);
   const zero = horizontal
-    ? hp(Math.max(yMin, Math.min(yMax, 0)))
-    : yp(Math.max(yMin, Math.min(yMax, 0)));
+    ? hp(Math.max(yMin, Math.min(yMax, logY ? yMin : 0)))
+    : yp(Math.max(yMin, Math.min(yMax, logY ? yMin : 0)));
   const clipId = `chart-clip-${node.attrs.nodeId.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
   const dash = (value: string) =>
     value === 'dashed' ? '9 5' : value === 'dotted' ? '2 4' : undefined;
@@ -99,7 +141,7 @@ export function ChartGraphic({ node }: { node: ChartNode }) {
         </defs>
         {[0, 1, 2, 3, 4].map((index) => {
           const f = index / 4,
-            value = (1 - f) * yMin + f * yMax;
+            value = tickValue(yMin, yMax, f, logY);
           const x = left + f * (right - left),
             y = bottom - f * (bottom - top);
           return (
@@ -136,35 +178,55 @@ export function ChartGraphic({ node }: { node: ChartNode }) {
         })}
         <line x1={left} x2={left} y1={top} y2={bottom} stroke="#394b5b" />
         <line x1={left} x2={right} y1={bottom} y2={bottom} stroke="#394b5b" />
-        {categories.map(([, point], index) => {
-          if (chartType !== 'bar' && (point.x < xMin || point.x > xMax))
-            return null;
-          if (
-            categories.length > 15 &&
-            index % Math.ceil(categories.length / 12) !== 0 &&
-            index !== categories.length - 1
-          )
-            return null;
-          const fraction = (index + 0.5) / categories.length;
-          return (
-            <text
-              key={index}
-              x={
-                horizontal
-                  ? left - 8
-                  : chartType === 'bar'
-                    ? left + fraction * (right - left)
-                    : xp(point.x)
-              }
-              y={horizontal ? top + fraction * (bottom - top) + 4 : bottom + 20}
-              textAnchor={horizontal ? 'end' : 'middle'}
-              fontSize="11"
-              fill="#394b5b"
-            >
-              {short(point.label)}
-            </text>
-          );
-        })}
+        {logX &&
+          [0, 1, 2, 3, 4].map((index) => {
+            const fraction = index / 4,
+              value = tickValue(xMin, xMax, fraction, true);
+            return (
+              <text
+                key={`log-x-${index}`}
+                x={left + fraction * (right - left)}
+                y={bottom + 20}
+                textAnchor="middle"
+                fontSize="11"
+                fill="#394b5b"
+              >
+                {numeric(value)}
+              </text>
+            );
+          })}
+        {!logX &&
+          categories.map(([, point], index) => {
+            if (chartType !== 'bar' && (point.x < xMin || point.x > xMax))
+              return null;
+            if (
+              categories.length > 15 &&
+              index % Math.ceil(categories.length / 12) !== 0 &&
+              index !== categories.length - 1
+            )
+              return null;
+            const fraction = (index + 0.5) / categories.length;
+            return (
+              <text
+                key={index}
+                x={
+                  horizontal
+                    ? left - 8
+                    : chartType === 'bar'
+                      ? left + fraction * (right - left)
+                      : xp(point.x)
+                }
+                y={
+                  horizontal ? top + fraction * (bottom - top) + 4 : bottom + 20
+                }
+                textAnchor={horizontal ? 'end' : 'middle'}
+                fontSize="11"
+                fill="#394b5b"
+              >
+                {short(point.label)}
+              </text>
+            );
+          })}
         <g clipPath={`url(#${clipId})`}>
           {series.map((entry, seriesIndex) => (
             <g key={seriesIndex} data-chart-series={entry.name}>
@@ -241,6 +303,37 @@ export function ChartGraphic({ node }: { node: ChartNode }) {
                     ) : entry.marker !== 'none' || chartType === 'scatter' ? (
                       <circle cx={x} cy={y} r="4" fill={entry.color} />
                     ) : null}
+                    {(['x', 'y'] as const).map((axis) => {
+                      if (
+                        (chartType === 'bar' && axis === 'x') ||
+                        (point[`${axis}Minus`] === undefined &&
+                          point[`${axis}Plus`] === undefined)
+                      )
+                        return null;
+                      const low = point[axis] - (point[`${axis}Minus`] ?? 0),
+                        high = point[axis] + (point[`${axis}Plus`] ?? 0);
+                      const alongX = axis === 'x' || horizontal;
+                      const scale = axis === 'x' ? xp : horizontal ? hp : yp;
+                      const a = scale(low),
+                        b = scale(high),
+                        cap = 4;
+                      return (
+                        <path
+                          key={axis}
+                          data-chart-error-axis={axis}
+                          d={
+                            alongX
+                              ? `M ${a} ${y} H ${b} M ${a} ${y - cap} V ${y + cap} M ${b} ${y - cap} V ${y + cap}`
+                              : `M ${x} ${a} V ${b} M ${x - cap} ${a} H ${x + cap} M ${x - cap} ${b} H ${x + cap}`
+                          }
+                          fill="none"
+                          stroke={entry.color}
+                          strokeWidth="1.5"
+                        >
+                          <title>{`${axis}: ${low}–${high}${plot.errorDescription ? '; ' + plot.errorDescription : ''}`}</title>
+                        </path>
+                      );
+                    })}
                     {plot.showValues &&
                       point.y >= yMin &&
                       point.y <= yMax &&
@@ -280,8 +373,8 @@ export function ChartGraphic({ node }: { node: ChartNode }) {
         </g>
         <text x="340" y="344" textAnchor="middle" fontSize="14" fill="#25394b">
           {horizontal
-            ? withUnit(yLabel, plot.yUnit)
-            : withUnit(xLabel, plot.xUnit)}
+            ? withUnit(yLabel + (logY ? ' [log10]' : ''), plot.yUnit)
+            : withUnit(xLabel + (logX ? ' [log10]' : ''), plot.xUnit)}
         </text>
         <text
           x="20"
@@ -292,8 +385,8 @@ export function ChartGraphic({ node }: { node: ChartNode }) {
           fill="#25394b"
         >
           {horizontal
-            ? withUnit(xLabel, plot.xUnit)
-            : withUnit(yLabel, plot.yUnit)}
+            ? withUnit(xLabel + (logX ? ' [log10]' : ''), plot.xUnit)
+            : withUnit(yLabel + (logY ? ' [log10]' : ''), plot.yUnit)}
         </text>
         {series.map((entry, index) => (
           <g
@@ -317,6 +410,17 @@ export function ChartGraphic({ node }: { node: ChartNode }) {
         ))}
       </svg>
       {node.attrs.caption && <figcaption>{node.attrs.caption}</figcaption>}
+      {logY && chartType === 'bar' && (
+        <figcaption className="chart-baseline">
+          Log10 · baseline: {numeric(yMin)}
+          {plot.yUnit ? ` ${plot.yUnit}` : ''}
+        </figcaption>
+      )}
+      {plot.errorDescription && (
+        <figcaption className="chart-errors">
+          {plot.errorDescription}
+        </figcaption>
+      )}
       {(plot.source || plot.nature !== 'unspecified') && (
         <figcaption className="chart-source">
           {plot.nature !== 'unspecified' && (

@@ -2,6 +2,7 @@ import { documentTitle, type DocumentData } from '@/src/document/model';
 import { localDocumentAssets, type DocumentAsset } from '@/src/document/assets';
 import { validatePdfBytes, maximumPdfBytes } from '@/src/document/pdf-source';
 import { migrateDocumentData } from '@/src/document/validation';
+import { importDocumentData } from './import-document';
 import { parseMarkdown } from '@/src/markdown/parser';
 import { serializeDocument } from '@/src/markdown/serializer';
 import type { MarkdownDiagnostic } from '@/src/markdown/diagnostics';
@@ -213,7 +214,7 @@ export function createLocalAssetUrls(
   const urls = new Map<string, string>();
   const unresolved: string[] = [];
   const urlByFile = new Map<File, string>();
-  const references = localDocumentAssets(document.children);
+  const references = localDocumentAssets(document.children, document.metadata);
 
   try {
     for (const reference of references) {
@@ -367,7 +368,7 @@ export async function readWorkspaceFiles(
   }
   const result =
     format === 'json'
-      ? { document: migrateDocumentData(JSON.parse(source)), diagnostics: [] }
+      ? { document: importDocumentData(JSON.parse(source)), diagnostics: [] }
       : parseMarkdown(source);
   const { urls: assets, unresolved } = createLocalAssetUrls(
     result.document,

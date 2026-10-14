@@ -33,11 +33,11 @@ export function SaveFormatDialog({
     ? [
         [
           'HTML',
-          '本文・表・グラフデータ・SVG編集情報・原画像・切り抜き・注釈・出典・配置・補足を保持。取り込んだ画像とPDF原本全体を埋め込み、別のブラウザーでPDFのページ・切り抜きも選び直せます。外部URLの画像はリンクのままです。',
+          '本文・表・グラフデータ・SVG編集情報・原画像・切り抜き・注釈・出典・配置・補足・部品ライブラリー・未対応要素の原データを保持。取り込んだ画像とPDF原本全体を埋め込み、別のブラウザーでPDFのページ・切り抜きも選び直せます。外部URLの画像はリンクのままです。',
         ],
         [
           'ZIP',
-          '文書と取り込んだ画像・PDF原本全体を一緒に保存。PDFのページ選択・切り抜き情報も保持します。章別ReportにはプロジェクトZIPを使います。',
+          '文書と取り込んだ画像・PDF原本全体を一緒に保存。PDFのページ選択・切り抜き情報も保持します。章別Report・SlideにはプロジェクトZIPを使います。',
         ],
         [
           'JSON / Markdown',
@@ -49,17 +49,17 @@ export function SaveFormatDialog({
         ],
         [
           'PDF',
-          '完成ページを画像化して保存します。文字の選択・検索やKUMIでの再編集はできません。検索できるPDFにはHTMLを開いて「印刷／PDF保存」を使用してください。',
+          '完成ページを画像化して保存します。文字の選択・検索やKUMIでの再編集はできません。検索できるPDFは「出力比較・印刷」→「印刷／PDF保存」から保存できます。',
         ],
       ]
     : [
         [
           'HTML',
-          'Keeps content, tables, chart data, SVG source, originals, crops, annotations, references, layouts and supplements. Imported images and complete PDF originals are embedded, so PDF pages and crops can be selected again after reopening. Remote images remain links.',
+          'Keeps content, tables, chart data, SVG source, originals, crops, annotations, references, layouts, supplements, reusable parts and unsupported source. Imported images and complete PDF originals are embedded, so PDF pages and crops can be selected again after reopening. Remote images remain links.',
         ],
         [
           'ZIP',
-          'Stores the document, imported images and complete PDF originals, including page selection and crop settings. Use Project ZIP for chapter-based reports.',
+          'Stores the document, imported images and complete PDF originals, including page selection and crop settings. Use Project ZIP for chapter-based reports and slide decks.',
         ],
         [
           'JSON / Markdown',
@@ -71,7 +71,7 @@ export function SaveFormatDialog({
         ],
         [
           'PDF',
-          'Rasterized pages; no searchable text or KUMI re-editing. For searchable text, open HTML and use Print / Save PDF.',
+          'Rasterized pages; no searchable text or KUMI re-editing. For searchable text, use Compare / Print → Print / Save PDF.',
         ],
       ];
   return (

@@ -1,4 +1,6 @@
 'use client';
+import { RoleStyleControls } from './role-style-controls';
+import { createNodeId } from '@/src/document/model';
 
 import { useMemo, useState } from 'react';
 import { useAppPreferences } from '@/components/app-preferences';
@@ -34,6 +36,7 @@ import {
   slideTypographyPresets,
   type SlideDesign,
   readSlideDesignSettings,
+  readSlidePresets,
   createSlideComposite,
 } from '@/src/document/slide-design';
 import { slideDesignMessages } from '@/src/i18n/slide-design';
@@ -127,6 +130,8 @@ function SlideDesignControls({
     () => new Set([getSlidePageId(document, currentPageIndex)]),
   );
   const [error, setError] = useState('');
+  const [presetName, setPresetName] = useState('');
+  const presets = readSlidePresets(document.metadata);
   const [preview, setPreview] = useState(false);
   const [previewIndex, setPreviewIndex] = useState(currentPageIndex);
   const pageIds = pages.map((_, index) => getSlidePageId(document, index));
@@ -159,6 +164,105 @@ function SlideDesignControls({
   return (
     <>
       <fieldset disabled={disabled} className="space-y-3">
+        <details>
+          <summary className="cursor-pointer text-xs">保存したスタイル</summary>
+          <div className="space-y-2 mt-2">
+            <label className="grid gap-1 text-xs">
+              スタイル名
+              <input
+                aria-label="スタイルプリセット名"
+                maxLength={120}
+                value={presetName}
+                onChange={(event) => setPresetName(event.target.value)}
+              />
+            </label>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={
+                !presetName.trim() ||
+                !checked.success ||
+                presets.items.length >= 100
+              }
+              onClick={() => {
+                if (!checked.success) return;
+                const { composite, ...style } = checked.data;
+                const design = composite
+                  ? { ...style, composite: { ...composite, assignments: [] } }
+                  : style;
+                onApply({
+                  ...document.metadata,
+                  slide_presets: {
+                    version: 1,
+                    items: [
+                      ...presets.items,
+                      {
+                        id: createNodeId(),
+                        name: presetName.trim(),
+                        design: JSON.parse(JSON.stringify(design)),
+                      },
+                    ],
+                  },
+                });
+              }}
+            >
+              現在の設定をプリセット保存
+            </Button>
+            {presets.items.map((item) => (
+              <div
+                className="flex flex-wrap gap-1 items-center text-xs"
+                key={item.id}
+              >
+                <span>{item.name}</span>
+                <Button
+                  size="xs"
+                  aria-label={`${item.name}: スタイルを読み込む`}
+                  onClick={() =>
+                    setDraft({
+                      ...item.design,
+                      ...(item.design.composite
+                        ? {
+                            composite: {
+                              ...item.design.composite,
+                              assignments:
+                                draft.composite?.assignments ??
+                                createSlideComposite(pages[currentPageIndex])
+                                  .assignments,
+                            },
+                          }
+                        : {}),
+                    })
+                  }
+                >
+                  設定を読み込む
+                </Button>
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  aria-label={`${item.name}: スタイルを削除`}
+                  onClick={() =>
+                    onApply({
+                      ...document.metadata,
+                      slide_presets: {
+                        ...presets,
+                        items: presets.items.filter(
+                          (entry) => entry.id !== item.id,
+                        ),
+                      },
+                    })
+                  }
+                >
+                  削除
+                </Button>
+              </div>
+            ))}
+            <p className="text-xs">
+              設定を読み込み、変更前後を確認してから適用します。プリセットは文書と一緒に保存され、内容は書き換えません。
+            </p>
+          </div>
+        </details>
+        <RoleStyleControls value={draft} onChange={setDraft} />
+
         <label className="grid gap-1 text-xs">
           {copy.theme}
           <NativeSelect

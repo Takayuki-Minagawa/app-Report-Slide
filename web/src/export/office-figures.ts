@@ -1,3 +1,6 @@
+import { figureWithLabelStyle } from '@/src/document/role-style';
+import { splitDocumentPages } from '@/src/document/semantics';
+import { resolveSlideDesign } from '@/src/document/slide-design';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server.browser';
 import {
@@ -22,9 +25,28 @@ export async function addOfficeFigureImages(
   document: DocumentData,
   images: Map<string, OfficeImage>,
 ): Promise<void> {
-  for (const node of walkDocumentTree(document.children)) {
-    if (node.type !== 'figure' || officeFigureKey(node) === node.attrs.src)
-      continue;
+  const styles = new Map(
+    splitDocumentPages(document).flatMap((nodes, index) =>
+      [...walkDocumentTree(nodes)]
+        .filter((node) => node.type === 'figure')
+        .map(
+          (node) =>
+            [
+              node.attrs.nodeId,
+              document.type === 'slide'
+                ? resolveSlideDesign(document, index).roleStyles?.figureLabel
+                : undefined,
+            ] as const,
+        ),
+    ),
+  );
+  for (const originalNode of walkDocumentTree(document.children)) {
+    if (originalNode.type !== 'figure') continue;
+    const node = figureWithLabelStyle(
+      originalNode,
+      styles.get(originalNode.attrs.nodeId),
+    );
+    if (officeFigureKey(node) === node.attrs.src) continue;
     const original = images.get(node.attrs.src);
     const source = resolveFigureGraphicSource(node, original?.dataUrl);
     if (!source.src)

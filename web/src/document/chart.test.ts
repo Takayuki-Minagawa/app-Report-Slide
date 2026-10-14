@@ -25,6 +25,71 @@ const chart: ChartNode = {
   },
 };
 describe('comparison charts', () => {
+  it('preserves asymmetric error widths and positive log scales through CSV and Markdown', () => {
+    const data = parseChartCsv(
+      'label,x,y,xMinus,xPlus,yMinus,yPlus\nA,10,100,1,2,20,30\nB,20,200,,,0,4',
+    );
+    expect(data[0]).toMatchObject({
+      xMinus: 1,
+      xPlus: 2,
+      yMinus: 20,
+      yPlus: 30,
+    });
+    expect(data[1].xMinus).toBeUndefined();
+    expect(parseChartCsv(chartDataCsv(data))).toEqual(data);
+    const plot = {
+      ...resolveChartPlot(chart.attrs),
+      xScale: 'log' as const,
+      yScale: 'log' as const,
+      errorDescription: '95% CI',
+      referenceId: 'study',
+    };
+    plot.series[0].data = data;
+    const document = validateDocumentData({
+      schemaVersion: 2,
+      type: 'slide',
+      metadata: {},
+      children: [{ ...chart, attrs: { ...chart.attrs, plot } }],
+    });
+    const imported = parseMarkdown(serializeDocument(document));
+    expect(
+      imported.diagnostics.filter((entry) => entry.severity === 'error'),
+    ).toEqual([]);
+    expect(imported.document.children[0].attrs.plot).toEqual(plot);
+    for (const invalid of [
+      { ...plot, xMin: 0 },
+      { ...plot, yMin: -1 },
+      {
+        ...plot,
+        series: [
+          { ...plot.series[0], data: [{ label: 'A', x: 1, y: 1, yMinus: 1 }] },
+        ],
+      },
+      {
+        ...plot,
+        series: [
+          { ...plot.series[0], data: [{ label: 'A', x: 1, y: 1, yPlus: -1 }] },
+        ],
+      },
+    ])
+      expect(chartPlotSchema.safeParse(invalid).success).toBe(false);
+    expect(() =>
+      parseChartCsv('label,x,y,xMinus,xPlus,yMinus,yPlus\nA,1,2,0,0,-1,1'),
+    ).toThrow();
+    expect(
+      chartPlotSchema.safeParse({
+        ...plot,
+        xScale: 'linear',
+        yScale: 'linear',
+        series: [
+          {
+            ...plot.series[0],
+            data: [{ label: 'huge', x: 1, y: 1e308, yPlus: 1e308 }],
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
   it('reads quoted CSV and tabular paste without turning blank cells into zero', () => {
     const data = parseChartCsv('\uFEFFlabel,x,y\r\n"A, B",1,2\r\n"C""D",3,4');
     expect(data[0].label).toBe('A, B');

@@ -7,6 +7,7 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from '@/components/ui/native-select';
+import { readBlockLayout } from '@/src/document/block-layout';
 import { inlineText, type DocumentNode } from '@/src/document/model';
 import {
   createSlideComposite,
@@ -51,6 +52,7 @@ export function CompositeLayoutPanel({
     node: DocumentNode,
     patch: Partial<SlideComposite['assignments'][number]>,
   ) => {
+    if (readBlockLayout(node.attrs.blockLayout).locked) return;
     const existing = value.assignments.find(
       (entry) => entry.nodeId === node.attrs.nodeId,
     );
@@ -62,13 +64,28 @@ export function CompositeLayoutPanel({
       ...existing,
       ...patch,
     };
+    const group = readBlockLayout(node.attrs.blockLayout).groupId;
+    const members = group
+      ? nodes.filter(
+          (item) => readBlockLayout(item.attrs.blockLayout).groupId === group,
+        )
+      : [node];
+    if (members.some((item) => readBlockLayout(item.attrs.blockLayout).locked))
+      return;
+    const ids = new Set(members.map((item) => item.attrs.nodeId));
     onChange({
       ...value,
       assignments: [
-        ...value.assignments.filter(
-          (entry) => entry.nodeId !== node.attrs.nodeId,
-        ),
-        next,
+        ...value.assignments.filter((entry) => !ids.has(entry.nodeId)),
+        ...members.map((item, index) => ({
+          ...value.assignments.find(
+            (entry) => entry.nodeId === item.attrs.nodeId,
+          ),
+          ...next,
+          nodeId: item.attrs.nodeId,
+          nodeIndex: nodes.indexOf(item),
+          order: Math.min(100000, next.order + index),
+        })),
       ],
     });
   };
@@ -201,6 +218,10 @@ export function CompositeLayoutPanel({
               key={node.attrs.nodeId}
               className="space-y-2 border-t pt-2"
               aria-label={label}
+              disabled={
+                readBlockLayout(node.attrs.blockLayout).locked ||
+                !!readBlockLayout(node.attrs.blockLayout).groupId
+              }
             >
               <legend className="max-w-full truncate text-xs font-medium">
                 {index + 1}. {label}

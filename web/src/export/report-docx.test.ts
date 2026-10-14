@@ -5,8 +5,59 @@ import { defaultPageSettings } from '@/src/document/page-settings';
 import { parseMarkdown } from '@/src/markdown/parser';
 import * as officeImages from './office-images';
 import { exportReportDocx } from './report-docx';
+import { resolveChartPlot } from '@/src/document/chart';
+import type { ChartNode } from '@/src/document/model';
 
 afterEach(() => vi.restoreAllMocks());
+
+it('retains log scale settings and asymmetric error data as editable Word text', async () => {
+  const document = source('# Chart');
+  const chart: ChartNode = {
+    type: 'chart',
+    attrs: {
+      nodeId: 'errors',
+      chartType: 'line',
+      data: [{ label: 'A', x: 10, y: 100 }],
+      xLabel: 'Time',
+      yLabel: 'Value',
+      series: 'Observed',
+      alt: 'Errors',
+      width: 100,
+    },
+  };
+  chart.attrs.plot = {
+    ...resolveChartPlot(chart.attrs),
+    xScale: 'log',
+    yScale: 'log',
+    errorDescription: '95 percent interval',
+  };
+  chart.attrs.plot.series[0].data[0] = {
+    label: 'A',
+    x: 10,
+    y: 100,
+    xMinus: 1.25,
+    xPlus: 2.75,
+    yMinus: 20.5,
+    yPlus: 30.5,
+  };
+  document.children.push(chart);
+  const zip = await unpack(
+    (await exportReportDocx(document, new Map(), 'en')).blob,
+  );
+  for (const text of [
+    'xMinus',
+    'xPlus',
+    'yMinus',
+    'yPlus',
+    '1.25',
+    '2.75',
+    '20.5',
+    '30.5',
+    'Scale: X=log, Y=log',
+    '95 percent interval',
+  ])
+    expect(zip.xml().documentElement.textContent).toContain(text);
+});
 
 function source(markdown: string): DocumentData {
   return parseMarkdown(`---\ntype: report\n---\n\n${markdown}`).document;

@@ -269,8 +269,10 @@ function canUsePipeTable(table: TableNode): boolean {
           (cell.attrs.borders !== undefined &&
             cell.attrs.borders !== null &&
             isTableCellBorders(cell.attrs.borders)) ||
+          cell.attrs.fill != null ||
           cell.content.length !== 1 ||
           cell.content[0].attrs.textRuler != null ||
+          cell.content[0].attrs.blockLayout != null ||
           cell.content[0].content?.some(
             (inline) => inline.type === 'hardBreak',
           ),
@@ -429,6 +431,7 @@ export function serializeDocument(document: DocumentData): string {
     },
     {
       lineWidth: 0,
+      aliasDuplicateObjects: false,
     },
   ).trimEnd();
   const body = serializeBlocks(document.children);

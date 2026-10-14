@@ -6,6 +6,8 @@ import * as files from '@/src/workspace/files';
 import * as archive from '@/src/project/archive';
 import { parseMarkdown } from '@/src/markdown/parser';
 import { createReportProject } from '@/src/project/model';
+import { splitDocumentPages } from '@/src/document/semantics';
+import { resolveSlideDesign } from '@/src/document/slide-design';
 import { useDocumentWorkspace } from './use-document-workspace';
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -46,6 +48,124 @@ afterEach(() => {
 });
 
 describe('chapter workspace lifecycle', () => {
+  it('creates and switches four slide chapters without revoking project images and exports either scope', async () => {
+    const revoke = vi.fn();
+    vi.stubGlobal(
+      'URL',
+      Object.assign(class extends URL {}, {
+        createObjectURL: vi.fn(() => 'blob:slide-project-image'),
+        revokeObjectURL: revoke,
+      }),
+    );
+    const hook = renderHook(useDocumentWorkspace, { wrapper });
+    await waitFor(() => expect(hook.result.current.editor).not.toBeNull());
+    await act(async () =>
+      hook.result.current.importFiles([
+        sourceFile(
+          '---\ntype: slide\ntitle: First\n---\n# First\n\n![Retained](same.png)',
+        ),
+        new File(['image'], 'same.png', { type: 'image/png' }),
+      ]),
+    );
+    act(() => hook.result.current.projectActions.createProject());
+    const first = hook.result.current.projectSession!.activeChapterId;
+    expect(hook.result.current.resolveImageUrl('assets/image-1.png')).toBe(
+      'blob:slide-project-image',
+    );
+    for (const title of ['Second', 'Third', 'Fourth'])
+      await act(async () =>
+        hook.result.current.projectActions.addChapter([
+          sourceFile(`---\ntype: slide\ntitle: ${title}\n---\n# ${title}`),
+        ]),
+      );
+    expect(
+      splitDocumentPages(hook.result.current.previewDocument),
+    ).toHaveLength(4);
+    act(() => hook.result.current.projectActions.selectChapter(first));
+    act(() => {
+      hook.result.current.editor!.commands.insertContent('Edited ');
+    });
+    expect(hook.result.current.resolveImageUrl('assets/image-1.png')).toBe(
+      'blob:slide-project-image',
+    );
+    expect(revoke).not.toHaveBeenCalledWith('blob:slide-project-image');
+    act(() => hook.result.current.setExportScope('chapter'));
+    const chapter = hook.result.current.getExportSnapshot();
+    expect(splitDocumentPages(chapter.document)).toHaveLength(1);
+    expect(chapter.assets.get('assets/image-1.png')).toBe(
+      'blob:slide-project-image',
+    );
+    act(() => hook.result.current.setExportScope('project'));
+    const combined = hook.result.current.getExportSnapshot();
+    expect(splitDocumentPages(combined.document)).toHaveLength(4);
+    expect([...combined.assets.keys()][0]).toMatch(/^chapters\//);
+  });
+
+  it('keeps chapter slide design local and cancels page-operation Undo after later editing', async () => {
+    const { result } = await workspace('---\ntype: slide\n---\n# First');
+    act(() => result.current.projectActions.changeSlidePage(0, 'duplicate'));
+    expect(splitDocumentPages(result.current.document)).toHaveLength(2);
+    expect(result.current.projectActions.canUndoSlidePage).toBe(true);
+    act(() => result.current.projectActions.undoSlidePageChange());
+    expect(splitDocumentPages(result.current.document)).toHaveLength(1);
+    act(() => result.current.projectActions.changeSlidePage(0, 'duplicate'));
+    act(() => {
+      result.current.editor!.commands.insertContent('Later edit');
+    });
+    expect(result.current.projectActions.canUndoSlidePage).toBe(false);
+    act(() => result.current.projectActions.undoSlidePageChange());
+    expect(result.current.editor!.getText()).toContain('Later edit');
+  });
+
+  it('provides atomic document-change Undo and consumes an insertion region once without reassigning Undo/Redo', async () => {
+    const { result } = await workspace('---\ntype: slide\n---\n# First');
+    const edited = structuredClone(result.current.document);
+    edited.metadata.custom = 'library-change';
+    act(() => result.current.applyDocumentChange(edited, 'Updated library'));
+    expect(result.current.canUndoDocumentChange).toBe(true);
+    act(() => result.current.undoDocumentChange());
+    expect(result.current.document.metadata.custom).toBeUndefined();
+    act(() => result.current.applyDocumentChange(edited, 'Updated library'));
+    act(() => {
+      result.current.editor!.commands.insertContent('Later edit');
+    });
+    expect(result.current.canUndoDocumentChange).toBe(false);
+    act(() => result.current.setInsertionRegion('right-top'));
+    act(() => {
+      result.current.editor!.commands.insertContent({
+        type: 'figure',
+        attrs: {
+          nodeId: 'inserted-region-figure',
+          src: 'https://example.com/figure.png',
+          alt: 'Inserted',
+        },
+      });
+    });
+    expect(result.current.insertionRegion).toBeUndefined();
+    expect(
+      resolveSlideDesign(
+        result.current.document,
+        0,
+      ).composite?.assignments.find(
+        (entry) => entry.nodeId === 'inserted-region-figure',
+      )?.region,
+    ).toBe('right-top');
+    act(() => {
+      result.current.editor!.commands.undo();
+    });
+    act(() => {
+      result.current.editor!.commands.redo();
+    });
+    expect(
+      resolveSlideDesign(
+        result.current.document,
+        0,
+      ).composite?.assignments.find(
+        (entry) => entry.nodeId === 'inserted-region-figure',
+      )?.region,
+    ).toBe('right-top');
+  });
+
   it('edits only the active chapter, retains changes across switches and resets cross-file undo', async () => {
     const { result } = await workspace();
     const first = result.current.projectSession!.activeChapterId;

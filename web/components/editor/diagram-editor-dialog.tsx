@@ -1,4 +1,5 @@
 'use client';
+import { arrangementCommands, arrangementNames } from '@/src/document/arrange';
 
 /* oxlint-disable jsx-a11y/prefer-tag-over-role */
 // SVG hit targets need vector coordinates; the same controls are available as HTML buttons in the list.
@@ -24,6 +25,7 @@ import {
   type DiagramShape,
 } from '@/src/document/diagram';
 import {
+  arrangeDiagramSelection,
   diagramConnectionPoints,
   diagramSelectionBounds,
   duplicateDiagramSelection,
@@ -519,6 +521,36 @@ function DiagramEditor({
             図形の変更をやり直す
           </Button>
         </div>
+        <details>
+          <summary className="cursor-pointer text-xs">
+            選択図形の整列・均等配置
+          </summary>
+          <div className="flex flex-wrap gap-1">
+            {arrangementCommands.map((command) => (
+              <Button
+                key={command}
+                size="xs"
+                variant="outline"
+                disabled={
+                  locked ||
+                  selection.length <
+                    (command === 'horizontal' || command === 'vertical' ? 3 : 2)
+                }
+                onClick={() =>
+                  commit(
+                    arrangeDiagramSelection(diagram, selection, command),
+                    `${arrangementNames[command]}を適用しました`,
+                  )
+                }
+              >
+                {arrangementNames[command]}
+              </Button>
+            ))}
+          </div>
+          <p className="text-xs">
+            グループは1つとして動かします。均等配置は3つ以上必要です。
+          </p>
+        </details>
         <div className="min-h-0 overflow-auto grid gap-3 lg:grid-cols-[170px_minmax(350px,1fr)_230px]">
           <section aria-label="図解の部品一覧" className="space-y-1">
             <p className="text-xs">一覧で複数選択できます。</p>

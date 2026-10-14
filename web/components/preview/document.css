@@ -339,6 +339,23 @@
   pointer-events: auto;
 }
 
+.figure-reference-details {
+  pointer-events: auto;
+  font-size: 12px;
+  text-align: left;
+}
+.figure-reference-details > summary {
+  cursor: pointer;
+  color: #246089;
+}
+.figure-reference-content {
+  padding: 1rem;
+  background: white;
+  color: #1f2f3e;
+  border: 1px solid #cad4df;
+  overflow-wrap: anywhere;
+}
+
 .slide-positioned-figure[data-selected] {
   outline: 2px solid #1878a8;
   outline-offset: 2px;
@@ -892,4 +909,99 @@
   tbody
   tr:nth-child(even) {
   background: var(--slide-tint);
+}
+
+/* Persisted role styles, scaled against the same 920 px slide canvas. */
+.slide-preview[data-slide-design][data-role-styles~='title']
+  .document-renderer
+  h1 {
+  font-size: var(--role-title-size, inherit);
+  color: var(--role-title-color, inherit);
+  line-height: var(--role-title-leading, inherit);
+  margin-block-start: var(--role-title-before, revert-layer);
+  margin-block-end: var(--role-title-after, revert-layer);
+}
+.slide-preview[data-slide-design][data-role-styles~='heading']
+  .document-renderer
+  :is(h2, h3, h4, h5, h6) {
+  font-size: var(--role-heading-size, inherit);
+  color: var(--role-heading-color, inherit);
+  line-height: var(--role-heading-leading, inherit);
+  margin-block-start: var(--role-heading-before, revert-layer);
+  margin-block-end: var(--role-heading-after, revert-layer);
+}
+.slide-preview[data-slide-design][data-role-styles~='body']
+  .document-renderer
+  p:not([data-block-role]):not(.preview-table-wrap p),
+.slide-preview[data-slide-design][data-role-styles~='body']
+  .document-renderer
+  [data-block-role='body'] {
+  font-size: var(--role-body-size, inherit);
+  color: var(--role-body-color, inherit);
+  line-height: var(--role-body-leading, inherit);
+  margin-block-start: var(--role-body-before, revert-layer);
+  margin-block-end: var(--role-body-after, revert-layer);
+}
+.slide-preview[data-slide-design][data-role-styles~='table']
+  .document-renderer
+  table {
+  font-size: var(--role-table-size, inherit);
+  color: var(--role-table-color, inherit);
+  line-height: var(--role-table-leading, inherit);
+  margin-block-start: var(--role-table-before, revert-layer);
+  margin-block-end: var(--role-table-after, revert-layer);
+}
+.slide-preview[data-slide-design][data-role-styles~='caption']
+  .document-renderer
+  :is(figcaption, caption, .equation-caption) {
+  font-size: var(--role-caption-size, inherit);
+  color: var(--role-caption-color, inherit);
+  line-height: var(--role-caption-leading, inherit);
+  margin-block-start: var(--role-caption-before, revert-layer);
+  margin-block-end: var(--role-caption-after, revert-layer);
+}
+.slide-preview[data-slide-design][data-role-styles~='lead']
+  .document-renderer
+  [data-block-role='lead'] {
+  font-size: var(--role-lead-size, inherit);
+  color: var(--role-lead-color, inherit);
+  line-height: var(--role-lead-leading, inherit);
+  margin-block-start: var(--role-lead-before, revert-layer);
+  margin-block-end: var(--role-lead-after, revert-layer);
+}
+.slide-preview[data-slide-design][data-role-styles~='figureLabel']
+  .document-renderer
+  [data-block-role='figureLabel'] {
+  font-size: var(--role-figureLabel-size, inherit);
+  color: var(--role-figureLabel-color, inherit);
+  line-height: var(--role-figureLabel-leading, inherit);
+  margin-block-start: var(--role-figureLabel-before, revert-layer);
+  margin-block-end: var(--role-figureLabel-after, revert-layer);
+}
+.slide-preview[data-slide-design][data-role-styles~='source']
+  .document-renderer
+  :is(.figure-source, [data-block-role='source']) {
+  font-size: var(--role-source-size, inherit);
+  color: var(--role-source-color, inherit);
+  line-height: var(--role-source-leading, inherit);
+  margin-block-start: var(--role-source-before, revert-layer);
+  margin-block-end: var(--role-source-after, revert-layer);
+}
+.slide-preview[data-slide-design][data-role-styles~='conclusion']
+  .document-renderer
+  [data-block-role='conclusion'] {
+  font-size: var(--role-conclusion-size, inherit);
+  color: var(--role-conclusion-color, inherit);
+  line-height: var(--role-conclusion-leading, inherit);
+  margin-block-start: var(--role-conclusion-before, revert-layer);
+  margin-block-end: var(--role-conclusion-after, revert-layer);
+}
+.slide-preview[data-slide-design][data-role-styles~='note']
+  .document-renderer
+  [data-block-role='note'] {
+  font-size: var(--role-note-size, inherit);
+  color: var(--role-note-color, inherit);
+  line-height: var(--role-note-leading, inherit);
+  margin-block-start: var(--role-note-before, revert-layer);
+  margin-block-end: var(--role-note-after, revert-layer);
 }

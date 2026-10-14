@@ -43,11 +43,53 @@ function Harness() {
         Change title
       </button>
       <output aria-label="Current title">{document.metadata.title}</output>
+      <output aria-label="Saved metadata">
+        {JSON.stringify(document.metadata)}
+      </output>
     </AppPreferencesProvider>
   );
 }
 
 describe('slide design panel', () => {
+  it('saves an explicitly enabled default role alongside subsequent spacing edits in a named preset', async () => {
+    render(<Harness />);
+    expect(screen.getByLabelText('リード文のsize')).toHaveValue(20);
+    fireEvent.click(screen.getByLabelText('リード文の個別設定を使う'));
+    fireEvent.change(screen.getByLabelText('ページ余白 horizontal'), {
+      target: { value: '45' },
+    });
+    fireEvent.change(screen.getByLabelText('スタイルプリセット名'), {
+      target: { value: 'Reading style' },
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: '現在の設定をプリセット保存' }),
+    );
+    const metadata = JSON.parse(
+      screen.getByLabelText('Saved metadata').textContent!,
+    );
+    expect(metadata.slide_presets.items[0]).toMatchObject({
+      name: 'Reading style',
+      design: {
+        roleStyles: { lead: { size: 20 } },
+        spacing: { horizontal: 45 },
+      },
+    });
+    expect(screen.getByLabelText('リード文の個別設定を使う')).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: '変更をプレビュー' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'このデザインを適用' }),
+    );
+    const applied = JSON.parse(
+      screen.getByLabelText('Saved metadata').textContent!,
+    );
+    expect(applied.slide_design.pages[0].design).toMatchObject({
+      roleStyles: { lead: { size: 20 } },
+      spacing: { horizontal: 45 },
+    });
+    fireEvent.click(screen.getByLabelText('リード文の個別設定を使う'));
+    expect(screen.getByLabelText('リード文の個別設定を使う')).not.toBeChecked();
+  });
   it('previews selected scope before applying, cancels without mutation and undoes only design', async () => {
     render(<Harness />);
     fireEvent.change(screen.getByRole('combobox', { name: 'テーマ' }), {

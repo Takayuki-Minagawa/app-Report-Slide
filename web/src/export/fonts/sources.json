@@ -1,0 +1,28 @@
+{
+  "sans": {
+    "family": "Kumi Print Sans JP",
+    "original_family": "Noto Sans JP",
+    "postscript_prefix": "KumiPrintSansJP",
+    "original_postscript_prefix": "NotoSansJP",
+    "revision": "66a36c8c94b1a5d992ee4e7f392fccfe4945767c",
+    "source_url": "https://raw.githubusercontent.com/google/fonts/66a36c8c94b1a5d992ee4e7f392fccfe4945767c/ofl/notosansjp/NotoSansJP%5Bwght%5D.ttf",
+    "source_sha256": "c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f",
+    "license_url": "https://raw.githubusercontent.com/google/fonts/66a36c8c94b1a5d992ee4e7f392fccfe4945767c/ofl/notosansjp/OFL.txt",
+    "license_sha256": "1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9",
+    "license_file": "OFL-Sans.txt",
+    "output": "KumiPrintSansJP.woff2"
+  },
+  "serif": {
+    "family": "Kumi Print Serif JP",
+    "original_family": "Noto Serif JP",
+    "postscript_prefix": "KumiPrintSerifJP",
+    "original_postscript_prefix": "NotoSerifJP",
+    "revision": "8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5",
+    "source_url": "https://raw.githubusercontent.com/google/fonts/8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5/ofl/notoserifjp/NotoSerifJP%5Bwght%5D.ttf",
+    "source_sha256": "2fd527ba12b6a44ec30d796d633360da0aeba6c5d4af1304ce12bb4dc15a7dfc",
+    "license_url": "https://raw.githubusercontent.com/google/fonts/8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5/ofl/notoserifjp/OFL.txt",
+    "license_sha256": "5e0da210fb04058a8c0087985d2d456b931c2579811a49655721d3cf0c36b6d6",
+    "license_file": "OFL-Serif.txt",
+    "output": "KumiPrintSerifJP.woff2"
+  }
+}

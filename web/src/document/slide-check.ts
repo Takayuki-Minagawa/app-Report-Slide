@@ -1,7 +1,13 @@
 import type { DocumentData } from './model';
 import { splitDocumentPages } from './semantics';
-import { resolveSlideDesign } from './slide-design';
+import {
+  applySlideDesign,
+  getSlidePageId,
+  resolveSlideDesign,
+} from './slide-design';
 import { walkDocumentTree } from './traversal';
+import { selectedGroupNodes } from './block-groups';
+import { readBlockLayout } from './block-layout';
 
 /** Geometry is measured at the editor's 920 px reference canvas, not screen zoom. */
 export interface SlideCheckRect {
@@ -155,6 +161,16 @@ export function rasterPixelRatio(
   return Math.min(naturalWidth / width, naturalHeight / height);
 }
 
+function placementLocked(
+  document: DocumentData,
+  pageIndex: number,
+  nodeId: string,
+) {
+  return selectedGroupNodes(document, pageIndex, [nodeId]).some(
+    (node) => readBlockLayout(node.attrs.blockLayout).locked,
+  );
+}
+
 /** Suggestions retain all content and identify the available controls; no automatic shrinking. */
 export function slideCheckSuggestions(
   document: DocumentData,
@@ -183,6 +199,12 @@ export function slideCheckSuggestions(
         node.attrs.nodeId === issue.nodeId,
     ),
   );
+  if (block && placementLocked(document, issue.page - 1, block.attrs.nodeId))
+    return [
+      ja
+        ? '対象または同じグループのブロックは配置がロックされています。「ブロックのまとまり・再利用」でロックを解除してから、配置変更や表の分割を行ってください。'
+        : 'This block or another member of its group is placement-locked. Unlock it in Block groups and reuse before changing its layout or splitting the table.',
+    ];
   const design = resolveSlideDesign(document, issue.page - 1);
   const assignment = design.composite?.assignments.find(
     (entry) => entry.nodeId === block?.attrs.nodeId,
@@ -213,4 +235,77 @@ export function slideCheckSuggestions(
         : 'Keep text readable: restore the table/body font size and try a full-width region or another page.',
     );
   return result;
+}
+
+export type SlideCheckRepairAction = 'split-table' | 'full-width-table';
+/** Only explicit, reversible repairs are offered. Guessing which overlap to move is unsafe. */
+export function slideCheckRepairs(
+  document: DocumentData,
+  issue: SlideCheckIssue,
+): Array<{ nodeId: string; action: SlideCheckRepairAction }> {
+  if (
+    !['overflow', 'overlap', 'small-text', 'footer-overlap'].includes(
+      issue.kind,
+    )
+  )
+    return [];
+  const nodes = splitDocumentPages(document)[issue.page - 1] ?? [];
+  const table = nodes.find(
+    (candidate) =>
+      candidate.type === 'table' &&
+      Array.from(walkDocumentTree([candidate])).some(
+        (node) =>
+          'attrs' in node &&
+          'nodeId' in node.attrs &&
+          node.attrs.nodeId === issue.nodeId,
+      ),
+  );
+  if (!table || placementLocked(document, issue.page - 1, table.attrs.nodeId))
+    return [];
+  const result: Array<{ nodeId: string; action: SlideCheckRepairAction }> = [
+    { nodeId: table.attrs.nodeId, action: 'split-table' },
+  ];
+  const design = resolveSlideDesign(document, issue.page - 1);
+  const assignment = design.composite?.assignments.find(
+    (entry) => entry.nodeId === table.attrs.nodeId,
+  );
+  if (
+    design.layout === 'composite' &&
+    assignment &&
+    !['top', 'bottom'].includes(assignment.region)
+  )
+    result.unshift({ nodeId: table.attrs.nodeId, action: 'full-width-table' });
+  return result;
+}
+
+/** Preserve every node and all other region assignments; only widen the selected table. */
+export function slideCheckRepairMetadata(
+  document: DocumentData,
+  nodeId: string,
+  action: SlideCheckRepairAction,
+) {
+  if (document.type !== 'slide' || action !== 'full-width-table')
+    return undefined;
+  const pageIndex = splitDocumentPages(document).findIndex((nodes) =>
+    nodes.some((node) => node.type === 'table' && node.attrs.nodeId === nodeId),
+  );
+  if (pageIndex < 0 || placementLocked(document, pageIndex, nodeId))
+    return undefined;
+  const design = resolveSlideDesign(document, pageIndex);
+  if (
+    design.layout !== 'composite' ||
+    !design.composite?.assignments.some((entry) => entry.nodeId === nodeId)
+  )
+    return undefined;
+  return applySlideDesign(document, [getSlidePageId(document, pageIndex)], {
+    ...design,
+    composite: {
+      ...design.composite,
+      assignments: design.composite.assignments.map((entry) =>
+        entry.nodeId === nodeId
+          ? { ...entry, region: 'bottom' as const }
+          : entry,
+      ),
+    },
+  });
 }

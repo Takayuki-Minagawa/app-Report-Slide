@@ -1,3 +1,4 @@
+import { roleStylesSchema, paletteSchema, spacingSchema } from './role-style';
 import type { CSSProperties } from 'react';
 import { z } from 'zod';
 import type { DocumentData, DocumentMetadata } from './model';
@@ -75,6 +76,9 @@ export const slideDesignSchema = z.strictObject({
   density: z.enum(slideDensities),
   typography: slideTypographySchema,
   composite: slideCompositeSchema.optional(),
+  roleStyles: roleStylesSchema.optional(),
+  palette: paletteSchema.optional(),
+  spacing: spacingSchema.optional(),
   tableStyle: z
     .strictObject({
       striped: z.boolean(),
@@ -85,6 +89,22 @@ export const slideDesignSchema = z.strictObject({
 });
 export type SlideDesign = z.infer<typeof slideDesignSchema>;
 export type SlideTypography = z.infer<typeof slideTypographySchema>;
+export const slidePresetsSchema = z.strictObject({
+  version: z.literal(1),
+  items: z
+    .array(
+      z.strictObject({
+        id: z.string().min(1).max(128),
+        name: z.string().min(1).max(120),
+        design: slideDesignSchema,
+      }),
+    )
+    .max(100),
+});
+export function readSlidePresets(metadata: DocumentMetadata) {
+  const value = slidePresetsSchema.safeParse(metadata.slide_presets);
+  return value.success ? value.data : { version: 1 as const, items: [] };
+}
 
 export const slideDesignSettingsSchema = z
   .strictObject({
@@ -195,7 +215,7 @@ export function applySlideDesign(
   design: SlideDesign,
 ): DocumentMetadata {
   if (document.type !== 'slide') return document.metadata;
-  const checked = slideDesignSchema.parse(design);
+  const checked = slideDesignSchema.parse(JSON.parse(JSON.stringify(design)));
   const previous = readSlideDesignSettings(document.metadata);
   const targets = new Set(pageIds);
   const pages = splitDocumentPages(document).flatMap((nodes, pageIndex) => {
@@ -304,7 +324,37 @@ export function restoreSlideDesignFromMarkdown(
 
 /** Fonts use the 920 px reference canvas and scale with the actual slide width. */
 export function slideDesignStyle(design: SlideDesign): CSSProperties {
+  const roleTokens = Object.fromEntries(
+    Object.entries(design.roleStyles ?? {}).flatMap(([role, style]) =>
+      style
+        ? [
+            [`--role-${role}-size`, `${(style.size / 920) * 100}cqw`],
+            [`--role-${role}-color`, style.color],
+            [`--role-${role}-leading`, style.lineHeight],
+            [`--role-${role}-before`, `${(style.spaceBefore / 920) * 100}cqw`],
+            [`--role-${role}-after`, `${(style.spaceAfter / 920) * 100}cqw`],
+          ]
+        : [],
+    ),
+  );
   return {
+    ...roleTokens,
+    ...(design.palette
+      ? {
+          background: design.palette.background,
+          '--slide-ink': design.palette.ink,
+          '--slide-accent': design.palette.accent,
+          '--slide-tint': design.palette.tint,
+        }
+      : {}),
+    ...(design.spacing
+      ? {
+          '--slide-inset-x': `${(design.spacing.horizontal / 920) * 100}cqw`,
+          '--slide-inset-y': `${(design.spacing.vertical / 920) * 100}cqw`,
+          '--slide-gap': `${(design.spacing.gap / 920) * 100}cqw`,
+          '--slide-leading': design.spacing.lineHeight,
+        }
+      : {}),
     ...Object.fromEntries(
       Object.entries(design.typography).map(([role, size]) => [
         `--slide-${role}-size`,

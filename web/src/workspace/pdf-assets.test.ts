@@ -1,3 +1,8 @@
+import {
+  registerBlockLibraryItem,
+  insertBlockLibraryItem,
+} from '@/src/document/block-groups';
+import { readBlockLibrary } from '@/src/document/block-library';
 import { webcrypto } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { unzipSync, zipSync, strToU8 } from 'fflate';
@@ -220,6 +225,53 @@ describe('PDF original asset persistence', () => {
       ).toBe(true);
     },
   );
+
+  it('keeps library-only original PDFs and images through HTML and ZIP after the source figure is removed', async () => {
+    let document = source('slide');
+    document = registerBlockLibraryItem(
+      document,
+      0,
+      [document.children[0].attrs.nodeId],
+      'Reusable PDF evidence',
+    );
+    document = {
+      ...document,
+      children: [
+        { type: 'paragraph', attrs: { nodeId: 'empty' }, content: [] },
+      ],
+    };
+    const html = await exportSlideHtml(document, initialAssets(), 'ja');
+    const imported = importHtml(html.html);
+    expect([...imported.assets.keys()]).toEqual([
+      'assets/page.png',
+      pdfSource.asset,
+    ]);
+    const archive = await writeDocumentArchive(
+      imported.document,
+      imported.assets,
+    );
+    const reopened = await readDocumentArchive(
+      file(archive, 'library.zip', 'application/zip'),
+    );
+    const next = insertBlockLibraryItem(
+      reopened.document,
+      0,
+      readBlockLibrary(reopened.document.metadata).items[0],
+    );
+    const figure = next.children.find((node) => node.type === 'figure')!;
+    expect(figure.attrs.figureEdit?.crop).toEqual({
+      x: 10,
+      y: 20,
+      width: 70,
+      height: 40,
+    });
+    expect(figure.attrs.figureEdit?.pdfSource).toEqual(pdfSource);
+    expect(
+      new Uint8Array(
+        await readBlob(blobs.get(reopened.assets.get(pdfSource.asset)!)!),
+      ),
+    ).toEqual(new Uint8Array(Array.from(bytes)));
+  });
 
   it('reimports Markdown plus a PDF by its original filename and keeps PDF bytes in recovery', async () => {
     const document = source();

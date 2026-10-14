@@ -15,6 +15,10 @@ export const chartPointSchema = z.strictObject({
   label: z.string().max(80),
   x: z.number(),
   y: z.number(),
+  xMinus: z.number().nonnegative().optional(),
+  xPlus: z.number().nonnegative().optional(),
+  yMinus: z.number().nonnegative().optional(),
+  yPlus: z.number().nonnegative().optional(),
 });
 export const chartSeriesSchema = z.strictObject({
   name: z.string().max(100),
@@ -29,6 +33,10 @@ export const chartPlotSchema = z
     series: z.array(chartSeriesSchema).min(1).max(8),
     orientation: z.enum(['vertical', 'horizontal']),
     showValues: z.boolean(),
+    xScale: z.enum(['linear', 'log']).optional(),
+    yScale: z.enum(['linear', 'log']).optional(),
+    errorDescription: z.string().max(300).optional(),
+    referenceId: z.string().max(128).optional(),
     xUnit: z.string().max(80),
     yUnit: z.string().max(80),
     xMin: z.number().nullable(),
@@ -48,6 +56,33 @@ export const chartPlotSchema = z
     for (const axis of ['x', 'y'] as const) {
       const low = value[`${axis}Min`],
         high = value[`${axis}Max`];
+      const logarithmic = value[`${axis}Scale`] === 'log';
+      if (
+        logarithmic &&
+        ((low !== null && low <= 0) || (high !== null && high <= 0))
+      )
+        ctx.addIssue({
+          code: 'custom',
+          path: [`${axis}Min`],
+          message: 'Log axes require positive bounds',
+        });
+      value.series.forEach((series, seriesIndex) =>
+        series.data.forEach((point, pointIndex) => {
+          const lower = point[axis] - (point[`${axis}Minus`] ?? 0);
+          const upper = point[axis] + (point[`${axis}Plus`] ?? 0);
+          if (
+            !Number.isFinite(lower) ||
+            !Number.isFinite(upper) ||
+            (logarithmic && lower <= 0)
+          )
+            ctx.addIssue({
+              code: 'custom',
+              path: ['series', seriesIndex, 'data', pointIndex, axis],
+              message:
+                'Error endpoints must be finite; log data and endpoints must be positive',
+            });
+        }),
+      );
       if (low !== null && high !== null && low >= high)
         ctx.addIssue({
           code: 'custom',
@@ -128,22 +163,51 @@ export function parseChartCsv(source: string): ChartSeries['data'] {
   if (quoted) throw new Error('CSVの引用符が閉じていません');
   row.push(field);
   if (row.some((cell) => cell.trim())) rows.push(row);
-  if (
-    rows[0]?.map((cell) => cell.trim().toLowerCase()).join(',') === 'label,x,y'
-  )
-    rows.shift();
+  const errorKeys = ['xMinus', 'xPlus', 'yMinus', 'yPlus'] as const;
+  const header = rows[0]?.map((cell) => cell.trim());
+  const extended =
+    header?.join(',').toLowerCase() === 'label,x,y,xminus,xplus,yminus,yplus';
+  if (extended || header?.join(',').toLowerCase() === 'label,x,y') rows.shift();
   const parsed = rows.map((cells) => {
-    if (cells.length !== 3 || cells[1].trim() === '' || cells[2].trim() === '')
-      throw new Error('各行は label,x,y の3列で、xとyに数値が必要です');
-    return { label: cells[0].trim(), x: Number(cells[1]), y: Number(cells[2]) };
+    if (
+      cells.length !== (extended ? 7 : 3) ||
+      cells[1].trim() === '' ||
+      cells[2].trim() === ''
+    )
+      throw new Error('label,x,y の3列、またはヘッダー付きの7列が必要です');
+    return {
+      label: cells[0].trim(),
+      x: Number(cells[1]),
+      y: Number(cells[2]),
+      ...(extended
+        ? Object.fromEntries(
+            errorKeys.flatMap((key, index) =>
+              cells[index + 3].trim() === ''
+                ? []
+                : [[key, Number(cells[index + 3])]],
+            ),
+          )
+        : {}),
+    };
   });
   return z.array(chartPointSchema).min(1).max(200).parse(parsed);
 }
 export function chartDataCsv(data: ChartSeries['data']): string {
-  return data
-    .map(
-      (point) =>
-        `${/[",\n\r]/.test(point.label) ? '"' + point.label.replaceAll('"', '""') + '"' : point.label},${point.x},${point.y}`,
-    )
-    .join('\n');
+  const keys = ['xMinus', 'xPlus', 'yMinus', 'yPlus'] as const;
+  const extended = data.some((point) =>
+    keys.some((key) => point[key] !== undefined),
+  );
+  return [
+    ...(extended ? ['label,x,y,xMinus,xPlus,yMinus,yPlus'] : []),
+    ...data.map((point) =>
+      [
+        /[",\n\r]/.test(point.label)
+          ? '"' + point.label.replaceAll('"', '""') + '"'
+          : point.label,
+        point.x,
+        point.y,
+        ...(extended ? keys.map((key) => point[key] ?? '') : []),
+      ].join(','),
+    ),
+  ].join('\n');
 }

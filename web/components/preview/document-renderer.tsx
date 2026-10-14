@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import katex from 'katex';
+import { ReferenceSource } from './reference-source';
 import { ChartGraphic } from './chart-graphic';
 import { FigureGraphic, resolveFigureGraphicSource } from './figure-graphic';
 import {
@@ -41,6 +42,9 @@ import {
   type TableHeaderNode,
   type TableNode,
 } from '@/src/document/model';
+import { figureWithLabelStyle } from '@/src/document/role-style';
+import { tableFillTextColor } from '@/src/document/table-fill';
+import { readBlockLayout } from '@/src/document/block-layout';
 import { tableCellBorderStyle } from '@/src/document/table';
 import { textRulerStyle } from '@/src/document/text-ruler';
 import {
@@ -70,6 +74,7 @@ const AnalysisContext = createContext<DocumentAnalysis | null>(null);
 const LocaleContext = createContext<AppLocale>('ja');
 const FigureReferencesContext = createContext<FigureReference[]>([]);
 const SlideContext = createContext(false);
+const RoleStylesContext = createContext<SlideDesign['roleStyles']>(undefined);
 const FigureInteractionContext = createContext<FigureInteraction | undefined>(
   undefined,
 );
@@ -148,24 +153,33 @@ function FigureSource({
 }: {
   node: Extract<DocumentNode, { type: 'figure' }>;
 }) {
+  const { locale } = useDocumentCopy();
   const references = useContext(FigureReferencesContext);
   const edit = readFigureEdit(node.attrs.figureEdit);
   const text = figureSourceText(edit, references);
-  if (!text) return null;
-  const reference = references.find(
-    (entry) => entry.id === edit?.source?.referenceId,
-  );
-  const url = safeResourceUrl(reference?.url ?? '', 'link');
   return (
-    <small className="figure-source" style={{ display: 'block' }}>
-      {url ? (
-        <a href={url} target="_blank" rel="noopener noreferrer">
-          {text}
-        </a>
-      ) : (
-        text
+    <ReferenceSource
+      reference={references.find(
+        (entry) => entry.id === edit?.source?.referenceId,
       )}
-    </small>
+      sourceText={text}
+      locale={locale}
+    />
+  );
+}
+function SharedSource({ referenceId }: { referenceId?: string | null }) {
+  const { locale } = useDocumentCopy();
+  const references = useContext(FigureReferencesContext);
+  return (
+    <ReferenceSource
+      reference={references.find((entry) => entry.id === referenceId)}
+      locale={locale}
+      sourceText={
+        referenceId && !references.some((entry) => entry.id === referenceId)
+          ? referenceId
+          : undefined
+      }
+    />
   );
 }
 
@@ -181,6 +195,7 @@ interface DocumentRendererProps {
   speakerNotes?: boolean;
   slideLayout?: SlideDesign['layout'];
   slideComposite?: SlideDesign['composite'];
+  roleStyles?: SlideDesign['roleStyles'];
 }
 
 function MathContent({ display, latex }: { display: boolean; latex: string }) {
@@ -518,15 +533,22 @@ function SlidePlacedFigure({
   );
 }
 function FigureBlock({
-  node,
+  node: originalNode,
   resolveImageUrl,
 }: {
   node: Extract<DocumentNode, { type: 'figure' }>;
   resolveImageUrl: ImageUrlResolver;
 }) {
   const { copy } = useDocumentCopy();
+  const node = figureWithLabelStyle(
+    originalNode,
+    useContext(RoleStylesContext)?.figureLabel,
+  );
   const slide = useContext(SlideContext);
-  const figureInteraction = useContext(FigureInteractionContext);
+  const interaction = useContext(FigureInteractionContext);
+  const figureInteraction = readBlockLayout(node.attrs.blockLayout).locked
+    ? { ...interaction, onPlacementChange: undefined }
+    : interaction;
   const [failedSrc, setFailedSrc] = useState<string | undefined>(undefined);
   const figureSource = resolveFigureGraphicSource(
     node,
@@ -689,7 +711,11 @@ function BlockNode({
     }
     case 'paragraph':
       return (
-        <p data-node-id={key} style={textRulerStyle(node.attrs.textRuler)}>
+        <p
+          data-node-id={key}
+          data-block-role={readBlockLayout(node.attrs.blockLayout).role}
+          style={textRulerStyle(node.attrs.textRuler)}
+        >
           {renderInline(node.content, resolveImageUrl)}
         </p>
       );
@@ -765,6 +791,7 @@ function BlockNode({
       return (
         <div id={anchorId(key)} data-node-id={key}>
           <ChartGraphic node={node} />
+          <SharedSource referenceId={node.attrs.plot?.referenceId} />
         </div>
       );
     case 'blockMath':
@@ -837,6 +864,8 @@ function BlockNode({
                         rowSpan={cell.attrs.rowspan ?? 1}
                         style={{
                           textAlign: cell.attrs.align ?? undefined,
+                          backgroundColor: cell.attrs.fill ?? undefined,
+                          color: tableFillTextColor(cell.attrs.fill),
                           ...tableCellBorderStyle(cell.attrs.borders),
                         }}
                       >
@@ -851,6 +880,7 @@ function BlockNode({
               ))}
             </tbody>
           </table>
+          <SharedSource referenceId={node.attrs.sourceReferenceId} />
         </div>
       );
     }
@@ -872,6 +902,7 @@ export function DocumentRenderer({
   speakerNotes = false,
   slideLayout,
   slideComposite,
+  roleStyles,
 }: DocumentRendererProps) {
   const copy = messages[locale];
   const computed = useMemo(
@@ -957,101 +988,104 @@ export function DocumentRenderer({
       <LocaleContext.Provider value={locale}>
         <AnalysisContext.Provider value={computed}>
           <SlideContext.Provider value={document.type === 'slide'}>
-            <FigureInteractionContext.Provider value={figureInteraction}>
-              <FootnoteContext.Provider value={footnoteNumbers}>
-                <div className="document-renderer">
-                  {showToc &&
-                    !speakerNotes &&
-                    document.metadata.toc === true &&
-                    computed.outline.length > 0 && (
-                      <nav
-                        className="document-toc"
-                        aria-label={copy.preview.toc}
-                      >
-                        <h2>{copy.preview.toc}</h2>
-                        <ol>
-                          {computed.outline.map((entry) => (
-                            <li
-                              key={entry.nodeId}
-                              style={{
-                                paddingLeft: `${((entry.level ?? 1) - 1) * 16}px`,
-                              }}
-                            >
-                              <a
-                                href={`#${encodeURIComponent(anchorId(entry.nodeId))}`}
+            <RoleStylesContext.Provider value={roleStyles}>
+              <FigureInteractionContext.Provider value={figureInteraction}>
+                <FootnoteContext.Provider value={footnoteNumbers}>
+                  <div className="document-renderer">
+                    {showToc &&
+                      !speakerNotes &&
+                      document.metadata.toc === true &&
+                      computed.outline.length > 0 && (
+                        <nav
+                          className="document-toc"
+                          aria-label={copy.preview.toc}
+                        >
+                          <h2>{copy.preview.toc}</h2>
+                          <ol>
+                            {computed.outline.map((entry) => (
+                              <li
+                                key={entry.nodeId}
+                                style={{
+                                  paddingLeft: `${((entry.level ?? 1) - 1) * 16}px`,
+                                }}
                               >
-                                {entry.number ? `${entry.number} ` : ''}
-                                {entry.title}
+                                <a
+                                  href={`#${encodeURIComponent(anchorId(entry.nodeId))}`}
+                                >
+                                  {entry.number ? `${entry.number} ` : ''}
+                                  {entry.title}
+                                </a>
+                              </li>
+                            ))}
+                          </ol>
+                        </nav>
+                      )}
+                    {compositeGroups ? (
+                      <>
+                        {compositeGroups.title &&
+                          renderBlocks([compositeGroups.title])}
+                        {renderRegion('full')}
+                        <div
+                          className="slide-composite-grid"
+                          data-reverse={composite?.reverseColumns || undefined}
+                        >
+                          {!composite?.reverseColumns && renderRegion('left')}
+                          <div className="slide-composite-sidebar">
+                            {renderRegion('right-top')}
+                            {renderRegion('right-bottom')}
+                          </div>
+                          {composite?.reverseColumns && renderRegion('left')}
+                        </div>
+                        {renderRegion('bottom')}
+                        {renderBlocks(compositeGroups.manual)}
+                      </>
+                    ) : layoutGroups ? (
+                      <>
+                        {layoutGroups.title &&
+                          renderBlocks([layoutGroups.title])}
+                        <div className="slide-design-columns">
+                          {layoutGroups.columns.map((column, index) => (
+                            <div key={index} className="slide-design-column">
+                              {renderBlocks(column)}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      renderBlocks(blocks)
+                    )}
+                    {footnotes.length > 0 && (
+                      <ol
+                        className="document-footnotes"
+                        aria-label={copy.preview.footnotes}
+                      >
+                        {footnotes.map((footnote) => {
+                          const number = footnoteNumbers.get(footnote) ?? 0;
+                          return (
+                            <li
+                              key={number}
+                              id={footnoteId(number)}
+                              value={number}
+                            >
+                              <span className="footnote-text">
+                                {footnote.attrs.text}
+                              </span>{' '}
+                              <a
+                                className="footnote-back"
+                                href={`#${footnoteReferenceId(number)}`}
+                                aria-label={copy.preview.footnoteBack(number)}
+                              >
+                                ↩
                               </a>
                             </li>
-                          ))}
-                        </ol>
-                      </nav>
+                          );
+                        })}
+                      </ol>
                     )}
-                  {compositeGroups ? (
-                    <>
-                      {compositeGroups.title &&
-                        renderBlocks([compositeGroups.title])}
-                      {renderRegion('full')}
-                      <div
-                        className="slide-composite-grid"
-                        data-reverse={composite?.reverseColumns || undefined}
-                      >
-                        {!composite?.reverseColumns && renderRegion('left')}
-                        <div className="slide-composite-sidebar">
-                          {renderRegion('right-top')}
-                          {renderRegion('right-bottom')}
-                        </div>
-                        {composite?.reverseColumns && renderRegion('left')}
-                      </div>
-                      {renderRegion('bottom')}
-                      {renderBlocks(compositeGroups.manual)}
-                    </>
-                  ) : layoutGroups ? (
-                    <>
-                      {layoutGroups.title && renderBlocks([layoutGroups.title])}
-                      <div className="slide-design-columns">
-                        {layoutGroups.columns.map((column, index) => (
-                          <div key={index} className="slide-design-column">
-                            {renderBlocks(column)}
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    renderBlocks(blocks)
-                  )}
-                  {footnotes.length > 0 && (
-                    <ol
-                      className="document-footnotes"
-                      aria-label={copy.preview.footnotes}
-                    >
-                      {footnotes.map((footnote) => {
-                        const number = footnoteNumbers.get(footnote) ?? 0;
-                        return (
-                          <li
-                            key={number}
-                            id={footnoteId(number)}
-                            value={number}
-                          >
-                            <span className="footnote-text">
-                              {footnote.attrs.text}
-                            </span>{' '}
-                            <a
-                              className="footnote-back"
-                              href={`#${footnoteReferenceId(number)}`}
-                              aria-label={copy.preview.footnoteBack(number)}
-                            >
-                              ↩
-                            </a>
-                          </li>
-                        );
-                      })}
-                    </ol>
-                  )}
-                </div>
-              </FootnoteContext.Provider>
-            </FigureInteractionContext.Provider>
+                  </div>
+                </FootnoteContext.Provider>
+              </FigureInteractionContext.Provider>
+            </RoleStylesContext.Provider>
           </SlideContext.Provider>
         </AnalysisContext.Provider>
       </LocaleContext.Provider>

@@ -18,6 +18,8 @@ export const diagramShapeSchema = z
     stroke: color,
     strokeWidth: z.number().min(0).max(12),
     fontSize: z.number().min(8).max(72),
+    textColor: color.optional(),
+    textLineHeight: z.number().min(1).max(2.5).optional(),
     locked: z.boolean(),
     groupId: identifier.optional(),
   })
@@ -48,6 +50,8 @@ export const diagramConnectionSchema = z
     strokeWidth: z.number().min(0.5).max(12),
     dash: z.enum(['solid', 'dashed']),
     label: z.string().max(300),
+    labelColor: color.optional(),
+    labelFontSize: z.number().min(8).max(72).optional(),
     locked: z.boolean(),
   })
   .strict();

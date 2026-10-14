@@ -1,4 +1,5 @@
 import { resolveChartPlot } from '@/src/document/chart';
+import { tableFillTextColor } from '@/src/document/table-fill';
 import {
   AlignmentType,
   Bookmark,
@@ -95,6 +96,7 @@ interface BlockContext {
   numbering?: IParagraphOptions['numbering'];
   alignment?: IParagraphOptions['alignment'];
   bold?: boolean;
+  color?: string;
 }
 
 /** Produce a real Word document, keeping text, lists and tables editable. */
@@ -178,6 +180,7 @@ export async function exportReportDocx(
     nodes: InlineNode[] | undefined,
     width: number,
     bold = false,
+    color?: string,
   ): ParagraphChild[] {
     return (nodes ?? []).flatMap((node): ParagraphChild[] => {
       switch (node.type) {
@@ -185,11 +188,16 @@ export async function exportReportDocx(
           const marks = node.marks ?? [];
           const run = new TextRun({
             text: node.text,
+            color,
             bold: bold || marks.some((mark) => mark.type === 'bold'),
             italics: marks.some((mark) => mark.type === 'italic'),
             strike: marks.some((mark) => mark.type === 'strike'),
             ...(marks.some((mark) => mark.type === 'code')
-              ? { font: 'Courier New', shading: { fill: 'F1F5F9' } }
+              ? {
+                  font: 'Courier New',
+                  color: '111827',
+                  shading: { fill: 'F1F5F9' },
+                }
               : {}),
           });
           const link = marks.find((mark) => mark.type === 'link')?.attrs?.href;
@@ -202,18 +210,28 @@ export async function exportReportDocx(
         case 'inlineMath':
           warnings.add(copy.math);
           return [
-            new TextRun({ text: node.attrs.latex, font: 'Cambria Math' }),
+            new TextRun({
+              text: node.attrs.latex,
+              font: 'Cambria Math',
+              color,
+            }),
           ];
         case 'inlineImage':
           return [image(node.attrs.src, node.attrs.alt, width)];
         case 'reference': {
           const target = analysis.labels.get(node.attrs.target);
-          if (!target) return [new TextRun(`[@${node.attrs.target}]`)];
+          if (!target)
+            return [new TextRun({ text: `[@${node.attrs.target}]`, color })];
           warnings.add(copy.numbering);
           return [
             new InternalHyperlink({
               anchor: anchors.get(target.nodeId)!,
-              children: [new TextRun(formatSemanticReference(target, locale))],
+              children: [
+                new TextRun({
+                  text: formatSemanticReference(target, locale),
+                  color,
+                }),
+              ],
             }),
           ];
         }
@@ -255,7 +273,7 @@ export async function exportReportDocx(
     const target = analysis.targets.get(node.attrs.nodeId);
     const runs = [
       ...(target?.number ? [new TextRun(`${target.number} `)] : []),
-      ...inline(node.content, rulerWidth, context.bold),
+      ...inline(node.content, rulerWidth, context.bold, context.color),
     ];
     if (target?.number) warnings.add(copy.numbering);
     return new Paragraph({
@@ -372,8 +390,11 @@ export async function exportReportDocx(
               rowSpan: cell.attrs.rowspan,
               width: { size: cellWidth, type: WidthType.DXA },
               borders,
-              shading:
-                cell.type === 'tableHeader' ? { fill: 'F1F5F9' } : undefined,
+              shading: cell.attrs.fill
+                ? { fill: cell.attrs.fill.slice(1) }
+                : cell.type === 'tableHeader'
+                  ? { fill: 'F1F5F9' }
+                  : undefined,
               children: cell.content.map((child) =>
                 paragraph(child, {
                   width: Math.max(300, cellWidth - 200),
@@ -381,6 +402,7 @@ export async function exportReportDocx(
                   depth: 0,
                   alignment: cell.attrs.align ?? undefined,
                   bold: cell.type === 'tableHeader',
+                  color: tableFillTextColor(cell.attrs.fill)?.slice(1),
                 }),
               ),
             });
@@ -530,6 +552,12 @@ export async function exportReportDocx(
         case 'chart': {
           warnings.add(copy.chart);
           const plot = resolveChartPlot(node.attrs);
+          const errorKeys = ['xMinus', 'xPlus', 'yMinus', 'yPlus'] as const;
+          const hasErrors = plot.series.some((series) =>
+            series.data.some((point) =>
+              errorKeys.some((key) => point[key] !== undefined),
+            ),
+          );
           const rows = [
             [
               'Series',
@@ -540,6 +568,7 @@ export async function exportReportDocx(
               [node.attrs.yLabel || 'y', plot.yUnit]
                 .filter(Boolean)
                 .join(' / '),
+              ...(hasErrors ? errorKeys : []),
             ],
             ...plot.series.flatMap((series) =>
               series.data.map((entry) => [
@@ -547,6 +576,11 @@ export async function exportReportDocx(
                 entry.label,
                 String(entry.x),
                 String(entry.y),
+                ...(hasErrors
+                  ? errorKeys.map((key) =>
+                      entry[key] === undefined ? '' : String(entry[key]),
+                    )
+                  : []),
               ]),
             ),
           ];
@@ -556,6 +590,12 @@ export async function exportReportDocx(
               node.attrs.series,
               node.attrs.alt,
               plot.source,
+              plot.errorDescription,
+              ...(plot.xScale === 'log' || plot.yScale === 'log'
+                ? [
+                    `Scale: X=${plot.xScale ?? 'linear'}, Y=${plot.yScale ?? 'linear'}`,
+                  ]
+                : []),
               plot.nature !== 'unspecified' ? plot.nature : '',
             ]
               .filter((text): text is string => Boolean(text))

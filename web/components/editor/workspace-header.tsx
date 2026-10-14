@@ -40,6 +40,9 @@ interface WorkspaceHeaderProps {
   htmlExporting: boolean;
   exportOffice: () => Promise<void>;
   exportPdf: () => Promise<void>;
+  openOutputPreview: () => void;
+  exportScope?: 'project' | 'chapter';
+  setExportScope?: (scope: 'project' | 'chapter') => void;
   binaryExporting: 'office' | 'pdf' | null;
   openNavigator: () => void;
   openProperties: () => void;
@@ -59,6 +62,9 @@ export function WorkspaceHeader({
   htmlExporting,
   exportOffice,
   exportPdf,
+  openOutputPreview,
+  exportScope,
+  setExportScope,
   binaryExporting,
   openNavigator,
   openProperties,
@@ -123,6 +129,23 @@ export function WorkspaceHeader({
       </div>
 
       <div className="workspace-header-actions flex min-w-72 justify-end gap-1.5">
+        {project && setExportScope && (
+          <select
+            aria-label={locale === 'ja' ? '出力範囲' : 'Export scope'}
+            value={exportScope}
+            onChange={(event) =>
+              setExportScope(event.target.value as 'project' | 'chapter')
+            }
+            className="max-w-32 rounded border bg-background text-xs"
+          >
+            <option value="project">
+              {locale === 'ja' ? '含める章すべて' : 'Included chapters'}
+            </option>
+            <option value="chapter">
+              {locale === 'ja' ? 'この章' : 'This chapter'}
+            </option>
+          </select>
+        )}
         <SaveFormatDialog document={document} project={project} />
         <Button
           aria-label={copy.workspace.showDocumentPanel}
@@ -208,16 +231,14 @@ export function WorkspaceHeader({
           <Redo2 />
         </Button>
         <Separator orientation="vertical" className="mx-1 h-6 self-center" />
-        {!project && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => void saveArchive()}
-            title={copy.workspace.saveArchive}
-          >
-            <FolderArchive data-icon="inline-start" /> ZIP
-          </Button>
-        )}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void saveArchive()}
+          title={copy.workspace.saveArchive}
+        >
+          <FolderArchive data-icon="inline-start" /> ZIP
+        </Button>
         <Button
           size="sm"
           variant="outline"
@@ -273,6 +294,19 @@ export function WorkspaceHeader({
         >
           <Save data-icon="inline-start" />{' '}
           {project ? copy.project.saveChapterMarkdown : 'Markdown'}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={exporting}
+          onClick={openOutputPreview}
+          aria-label={
+            locale === 'ja'
+              ? '出力比較・検索できるPDF'
+              : 'Output comparison / searchable PDF'
+          }
+        >
+          {locale === 'ja' ? '出力比較・印刷' : 'Compare / Print'}
         </Button>
       </div>
     </header>

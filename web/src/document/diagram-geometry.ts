@@ -1,3 +1,4 @@
+import { arrangeRectangles, type Arrangement } from './arrange';
 import { createNodeId } from './model';
 import type {
   Diagram,
@@ -281,5 +282,26 @@ export function duplicateDiagramSelection(
       ...shapes.map((shape) => shape.id),
       ...connections.map((edge) => edge.id),
     ],
+  };
+}
+
+export function arrangeDiagramSelection(
+  diagram: Diagram,
+  selection: readonly string[],
+  command: Arrangement,
+): Diagram {
+  const selected = expandedDiagramSelection(diagram, selection);
+  const positions = arrangeRectangles(
+    diagram.shapes.filter((shape) => selected.includes(shape.id)),
+    command,
+  );
+  if (!positions.size) return diagram;
+  return {
+    ...diagram,
+    shapes: diagram.shapes.map((shape) =>
+      positions.has(shape.id)
+        ? { ...shape, ...positions.get(shape.id)! }
+        : shape,
+    ),
   };
 }

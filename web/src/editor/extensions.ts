@@ -1,3 +1,4 @@
+import { tableFillTextColor } from '@/src/document/table-fill';
 import {
   Extension,
   Node,
@@ -21,6 +22,7 @@ import {
   isCalloutType,
   normalizeFootnoteText,
 } from '@/src/document/model';
+import { blockLayoutSchema } from '@/src/document/block-layout';
 import { isTextRuler, textRulerStyle } from '@/src/document/text-ruler';
 import { validateDocumentData } from '@/src/document/validation';
 import {
@@ -101,6 +103,45 @@ const DocumentAttributes = Extension.create({
   addGlobalAttributes() {
     return [
       {
+        types: [
+          'paragraph',
+          'heading',
+          'figure',
+          'table',
+          'chart',
+          'blockMath',
+          'blockquote',
+          'codeBlock',
+          'bulletList',
+          'orderedList',
+          'horizontalRule',
+        ],
+        attributes: {
+          blockLayout: {
+            default: null,
+            parseHTML: (element) => {
+              try {
+                const result = blockLayoutSchema.safeParse(
+                  JSON.parse(
+                    element.getAttribute('data-kumi-block-layout') ?? 'null',
+                  ),
+                );
+                return result.success ? result.data : null;
+              } catch {
+                return null;
+              }
+            },
+            renderHTML: (attrs) =>
+              blockLayoutSchema.safeParse(attrs.blockLayout).success
+                ? {
+                    'data-kumi-block-layout': JSON.stringify(attrs.blockLayout),
+                    'data-block-role': attrs.blockLayout.role,
+                  }
+                : {},
+          },
+        },
+      },
+      {
         types: ['paragraph', 'heading'],
         attributes: {
           textRuler: {
@@ -160,6 +201,20 @@ const DocumentAttributes = Extension.create({
         },
       },
       {
+        types: ['table'],
+        attributes: {
+          sourceReferenceId: {
+            default: null,
+            parseHTML: (element) =>
+              element.getAttribute('data-source-reference-id'),
+            renderHTML: (attrs) =>
+              attrs.sourceReferenceId
+                ? { 'data-source-reference-id': attrs.sourceReferenceId }
+                : {},
+          },
+        },
+      },
+      {
         types: ['blockquote'],
         attributes: {
           callout: {
@@ -191,6 +246,23 @@ const DocumentAttributes = Extension.create({
       {
         types: ['tableHeader', 'tableCell'],
         attributes: {
+          fill: {
+            default: null,
+            parseHTML: (element) =>
+              /^#[0-9a-f]{6}$/i.test(
+                element.getAttribute('data-kumi-fill') ?? '',
+              )
+                ? element.getAttribute('data-kumi-fill')
+                : null,
+            renderHTML: (attrs) =>
+              typeof attrs.fill === 'string' &&
+              /^#[0-9a-f]{6}$/i.test(attrs.fill)
+                ? {
+                    'data-kumi-fill': attrs.fill,
+                    style: `background-color:${attrs.fill};color:${tableFillTextColor(attrs.fill)}`,
+                  }
+                : {},
+          },
           align: {
             default: null,
             parseHTML: (element) => {

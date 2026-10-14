@@ -4,6 +4,7 @@ import { parseMarkdown } from '@/src/markdown/parser';
 import type { ChartNode, DocumentData, TableNode } from '@/src/document/model';
 import * as officeImages from './office-images';
 import { exportSlidePptx } from './slide-pptx';
+import { resolveChartPlot } from '@/src/document/chart';
 
 function slides(body: string, metadata = '') {
   return parseMarkdown(
@@ -33,6 +34,49 @@ function slideCount(files: Record<string, Uint8Array>) {
 afterEach(() => vi.restoreAllMocks());
 
 describe('editable PowerPoint export', () => {
+  it('retains asymmetric error widths and log scale settings in chart source notes', async () => {
+    const document = slides('# Chart');
+    const chart: ChartNode = {
+      type: 'chart',
+      attrs: {
+        nodeId: 'errors',
+        chartType: 'line',
+        data: [{ label: 'A', x: 10, y: 100 }],
+        xLabel: 'Time',
+        yLabel: 'Value',
+        series: 'Observed',
+        alt: 'Errors',
+        width: 100,
+      },
+    };
+    chart.attrs.plot = {
+      ...resolveChartPlot(chart.attrs),
+      xScale: 'log',
+      yScale: 'log',
+      errorDescription: '95 percent interval',
+    };
+    chart.attrs.plot.series[0].data[0] = {
+      label: 'A',
+      x: 10,
+      y: 100,
+      xMinus: 1.25,
+      xPlus: 2.75,
+      yMinus: 20.5,
+      yPlus: 30.5,
+    };
+    document.children.push(chart);
+    const files = await unpack(
+      (await exportSlidePptx(document, new Map(), 'en')).blob,
+    );
+    const notes = xml(files, 'ppt/notesSlides/notesSlide1.xml').textContent;
+    for (const text of [
+      'label,x,y,xMinus,xPlus,yMinus,yPlus',
+      'A,10,100,1.25,2.75,20.5,30.5',
+      'Scale: X=log, Y=log',
+      '95 percent interval',
+    ])
+      expect(notes).toContain(text);
+  });
   it('preserves empty slides and explicit page boundaries without mutating the source', async () => {
     const source = slides(
       '::: slidebreak\n:::\n\n# First\n\n::: pagebreak\n:::\n\n::: slidebreak\n:::',

@@ -1,3 +1,4 @@
+import { blockLayoutSchema } from '@/src/document/block-layout';
 import type { DocumentNode } from '@/src/document/model';
 import { labelPattern, semanticTypes } from '@/src/document/semantics';
 import {
@@ -12,7 +13,7 @@ export function parseBlockAttributes(
   source: string,
   node: DocumentNode | undefined,
 ): Record<string, unknown> {
-  if (!node || (node.type !== 'paragraph' && !semanticTypes.has(node.type)))
+  if (!node)
     throw new Error('属性行は段落・見出し・図・表・式の直後に指定してください');
   if (!source.endsWith('}')) throw new Error('属性行の末尾に } が必要です');
   let rest = source.slice(1, -1).trim();
@@ -35,6 +36,8 @@ export function parseBlockAttributes(
         'slide_layout',
         'text_ruler',
         'figure_edit',
+        'source_reference',
+        'block_layout',
       ].includes(key) ||
       parsedKeys.has(key)
     )
@@ -50,6 +53,18 @@ export function parseBlockAttributes(
       throw new Error(
         'ラベルは英字から始まる128文字以内の英数字・:._-で指定してください',
       );
+    if (key === 'block_layout') {
+      const parsed = blockLayoutSchema.safeParse(
+        typeof value === 'string' ? JSON.parse(value) : null,
+      );
+      if (!parsed.success)
+        throw new Error('block_layoutの形式を確認してください');
+      attrs.blockLayout = parsed.data;
+      rest = rest.slice(match[0].length);
+      continue;
+    }
+    if (node.type !== 'paragraph' && !semanticTypes.has(node.type))
+      throw new Error('このブロックではblock_layoutだけを指定できます');
     if (node.type === 'paragraph' && key !== 'text_ruler') {
       throw new Error('段落にはtext_rulerだけを指定できます');
     }
@@ -85,6 +100,19 @@ export function parseBlockAttributes(
           'slide_layoutはスライド内に収まるx,y,width,heightを指定してください',
         );
       attrs.slidePlacement = placement;
+      rest = rest.slice(match[0].length);
+      continue;
+    }
+    if (key === 'source_reference') {
+      if (
+        node.type !== 'table' ||
+        typeof value !== 'string' ||
+        value.length > 128
+      )
+        throw new Error(
+          'source_referenceは表の文献ID（128文字以内）を指定してください',
+        );
+      attrs.sourceReferenceId = value;
       rest = rest.slice(match[0].length);
       continue;
     }
@@ -124,8 +152,11 @@ export function parseBlockAttributes(
 }
 
 export function serializeBlockAttributes(node: DocumentNode): string {
-  if (node.type !== 'paragraph' && !semanticTypes.has(node.type)) return '';
   const attrs: string[] = [];
+  if (node.attrs.blockLayout)
+    attrs.push(
+      `block_layout=${JSON.stringify(JSON.stringify(node.attrs.blockLayout))}`,
+    );
   if (semanticTypes.has(node.type) && node.attrs.label)
     attrs.push(`#${node.attrs.label}`);
   if (
@@ -135,6 +166,10 @@ export function serializeBlockAttributes(node: DocumentNode): string {
     const { left, right, firstLine } = node.attrs.textRuler;
     attrs.push(`text_ruler=${left},${right},${firstLine}`);
   }
+  if (node.type === 'table' && node.attrs.sourceReferenceId)
+    attrs.push(
+      `source_reference=${JSON.stringify(node.attrs.sourceReferenceId)}`,
+    );
   if (node.type === 'figure') {
     if (node.attrs.figureEdit)
       attrs.push(

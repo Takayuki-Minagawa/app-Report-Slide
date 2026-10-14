@@ -1,4 +1,7 @@
 import { walkDocumentTree, type DocumentTreeNode } from './traversal';
+import { readBlockLibrary } from './block-library';
+import { preservedContentAssets } from './preserved-content';
+import type { DocumentMetadata } from './model';
 import { pdfSourceSchema } from './pdf-source';
 
 export interface DocumentAsset {
@@ -12,6 +15,7 @@ export const isLocalDocumentAsset = (source: string) =>
 /** One enumeration for rendering originals, archive persistence and asset cleanup. */
 export function referencedAssets(
   nodes: readonly DocumentTreeNode[],
+  metadata: DocumentMetadata = {},
 ): DocumentAsset[] {
   const sources = new Map<string, DocumentAsset>();
   const add = (entry: DocumentAsset) => {
@@ -20,7 +24,11 @@ export function referencedAssets(
       throw new Error('同じ素材を画像とPDF原本の両方には指定できません。');
     sources.set(entry.source, entry);
   };
-  for (const node of walkDocumentTree(nodes)) {
+  for (const entry of preservedContentAssets(metadata)) add(entry);
+  const libraryNodes = readBlockLibrary(metadata).items.flatMap(
+    (item) => item.nodes,
+  );
+  for (const node of walkDocumentTree([...nodes, ...libraryNodes])) {
     if (node.type !== 'figure' && node.type !== 'inlineImage') continue;
     add({ source: node.attrs.src.trim(), kind: 'image' });
     if (node.type !== 'figure' || !node.attrs.figureEdit?.pdfSource) continue;
@@ -32,8 +40,9 @@ export function referencedAssets(
 
 export function localDocumentAssets(
   nodes: readonly DocumentTreeNode[],
+  metadata: DocumentMetadata = {},
 ): DocumentAsset[] {
-  return referencedAssets(nodes).filter(({ source }) =>
+  return referencedAssets(nodes, metadata).filter(({ source }) =>
     isLocalDocumentAsset(source),
   );
 }
