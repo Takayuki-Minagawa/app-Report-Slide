@@ -1,5 +1,7 @@
 'use client';
 
+/* oxlint-disable jsx-a11y/no-noninteractive-tabindex -- The named original-image scroll region needs keyboard focus for arrow-key scrolling. */
+
 import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,11 +54,13 @@ export function PdfExtractionReview({
   const [tsvError, setTsvError] = useState('');
   const [tsvDraft, setTsvDraft] = useState(false);
   const [status, setStatus] = useState('');
+  const [previewZoom, setPreviewZoom] = useState(100);
   const [completedRevision, setCompletedRevision] = useState(0);
   const reviewHeading = useRef<HTMLHeadingElement>(null);
   const reviewGrid = useRef<HTMLTableElement>(null);
   const gridHintId = useId();
   const columnHintId = useId();
+  const previewHintId = useId();
 
   useEffect(() => {
     if (!completedRevision) return;
@@ -82,6 +86,7 @@ export function PdfExtractionReview({
       setTsvDraft(false);
       onDraftChange(false);
       setStatus('');
+      setPreviewZoom(100);
     });
     return () => {
       current.revision++;
@@ -326,25 +331,64 @@ export function PdfExtractionReview({
           </h3>
           <div className="grid gap-4 md:grid-cols-[minmax(160px,0.6fr)_minmax(0,1fr)]">
             <div className="min-w-0 md:sticky md:top-2 md:self-start">
-              <strong className="text-xs">
-                {t('読み取り範囲の原本', 'Original recognition region')}
-              </strong>
-              {rendered && (
-                <svg
-                  aria-label={t(
-                    'PDF読み取りの原本',
-                    'PDF recognition original',
-                  )}
-                  viewBox={`${(crop.x * rendered.width) / 100} ${(crop.y * rendered.height) / 100} ${(crop.width * rendered.width) / 100} ${(crop.height * rendered.height) / 100}`}
-                  className="mt-2 max-h-[40vh] w-full border bg-white"
+              <label className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <strong>
+                  {t('読み取り範囲の原本', 'Original recognition region')}
+                </strong>
+                <select
+                  aria-label={t('PDF原本の表示倍率', 'PDF original zoom')}
+                  className="rounded border p-1.5"
+                  value={previewZoom}
+                  onChange={(event) =>
+                    setPreviewZoom(Number(event.target.value))
+                  }
                 >
-                  <image
-                    href={rendered.url}
-                    width={rendered.width}
-                    height={rendered.height}
-                  />
-                </svg>
-              )}
+                  {[100, 150, 200, 300].map((value) => (
+                    <option key={value} value={value}>
+                      {value}%
+                      {value === 100
+                        ? t('（幅に合わせる）', ' (fit width)')
+                        : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <section
+                aria-label={t(
+                  'PDF原本の拡大確認',
+                  'Review enlarged PDF original',
+                )}
+                aria-describedby={previewHintId}
+                tabIndex={0}
+                className="mt-2 max-h-[40vh] overflow-auto rounded border bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                {rendered && (
+                  <svg
+                    aria-label={t(
+                      'PDF読み取りの原本',
+                      'PDF recognition original',
+                    )}
+                    viewBox={`${(crop.x * rendered.width) / 100} ${(crop.y * rendered.height) / 100} ${(crop.width * rendered.width) / 100} ${(crop.height * rendered.height) / 100}`}
+                    className="block max-w-none"
+                    style={{ width: `${previewZoom}%`, height: 'auto' }}
+                  >
+                    <image
+                      href={rendered.url}
+                      width={rendered.width}
+                      height={rendered.height}
+                    />
+                  </svg>
+                )}
+              </section>
+              <p
+                id={previewHintId}
+                className="mt-2 text-xs text-muted-foreground"
+              >
+                {t(
+                  '倍率を上げて小さい文字を確認できます。原本の枠内は縦横にスクロールでき、枠にフォーカスすると矢印キーでも移動できます。',
+                  'Increase zoom to inspect small text. Scroll vertically or horizontally inside the original frame, or focus the frame and use the arrow keys.',
+                )}
+              </p>
             </div>
             <fieldset disabled={disabled || busy} className="min-w-0 space-y-3">
               <div className="flex flex-wrap items-center gap-3 text-xs">

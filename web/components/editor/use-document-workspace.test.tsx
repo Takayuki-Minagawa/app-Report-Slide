@@ -2,6 +2,9 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import { AppPreferencesProvider } from '@/components/app-preferences';
+import type { FigureNode } from '@/src/document/model';
+import type { ExtractionResult } from '@/src/document/extraction';
+import type { PdfFigureImport } from './pdf-import-dialog';
 import { useDocumentWorkspace } from './use-document-workspace';
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -36,6 +39,126 @@ async function workspace() {
 
 beforeEach(() => window.localStorage.clear());
 afterEach(() => vi.unstubAllGlobals());
+
+describe('PDF figure updates', () => {
+  it.each(['report', 'slide'] as const)(
+    '%s keeps reviewed evidence for a DPI update and removes it for a different region',
+    async (type) => {
+      let serial = 0;
+      vi.stubGlobal(
+        'URL',
+        Object.assign(class extends URL {}, {
+          createObjectURL: () => `blob:pdf-update-${++serial}`,
+          revokeObjectURL: vi.fn(),
+        }),
+      );
+      const { result, unmount } = await workspace();
+      if (type === 'slide') act(() => result.current.createDocument('slide'));
+      const bytes = new TextEncoder().encode('%PDF-1.7\n%%EOF\n');
+      const pdf = new File([bytes], 'inspection.pdf', {
+        type: 'application/pdf',
+      });
+      Object.defineProperty(pdf, 'arrayBuffer', {
+        value: async () => bytes.buffer,
+      });
+      const evidence: ExtractionResult = {
+        mode: 'table',
+        method: 'ocr',
+        text: 'Sample\tValue\nA\t12.5',
+        rawText: 'Sample\tValue\nA\tl2.5',
+        rows: [
+          ['Sample', 'Value'],
+          ['A', '12.5'],
+        ],
+        rawRows: [
+          ['Sample', 'Value'],
+          ['A', 'l2.5'],
+        ],
+        numericValues: [
+          [null, null],
+          [null, 12.5],
+        ],
+        header: true,
+        language: 'eng',
+        confidence: 87,
+        warnings: [],
+      };
+      const value: PdfFigureImport = {
+        pdf,
+        image: new File(['page image'], 'page.png', { type: 'image/png' }),
+        fileName: pdf.name,
+        page: 2,
+        pageCount: 3,
+        dpi: 144,
+        imageSize: { width: 800, height: 1000 },
+        crop: { x: 10, y: 20, width: 70, height: 50 },
+        reference: {
+          id: 'inspection',
+          title: 'Inspection',
+          authors: '',
+          year: '',
+          url: '',
+        },
+        printedPage: '12',
+        figureNumber: 'Table 1',
+        target: 'after-block',
+        extraction: evidence,
+      };
+      await act(async () => result.current.applyPdfFigure(value));
+      const selectedFigure = () =>
+        result.current.document.children.find(
+          (node): node is FigureNode => node.type === 'figure',
+        )!;
+      const original = selectedFigure();
+      const originalTable = result.current.document.children.find(
+        (node) => node.type === 'table',
+      );
+      expect(original.attrs.figureEdit?.extraction).toEqual(evidence);
+      expect(originalTable).toBeDefined();
+
+      const update: PdfFigureImport = {
+        ...value,
+        existingAsset: original.attrs.figureEdit!.pdfSource!.asset,
+        replaceNodeId: original.attrs.nodeId,
+        extraction: undefined,
+        dpi: 288,
+        imageSize: { width: 1600, height: 2000 },
+        image: new File(['higher resolution page'], 'page-288.png', {
+          type: 'image/png',
+        }),
+        crop: { ...value.crop },
+      };
+      await act(async () => result.current.applyPdfFigure(update));
+      expect(selectedFigure().attrs.figureEdit?.pdfSource).toMatchObject({
+        asset: update.existingAsset,
+        page: 2,
+        dpi: 288,
+      });
+      expect(selectedFigure().attrs.figureEdit?.extraction).toEqual(evidence);
+      expect(selectedFigure().attrs.src).not.toBe(original.attrs.src);
+      expect(
+        result.current.document.children.filter(
+          (node) => node.type === 'table',
+        ),
+      ).toEqual([originalTable]);
+
+      await act(async () =>
+        result.current.applyPdfFigure({
+          ...update,
+          crop: { ...update.crop, width: 50 },
+        }),
+      );
+      expect(selectedFigure().attrs.figureEdit?.crop?.width).toBe(50);
+      expect(selectedFigure().attrs.figureEdit?.extraction).toBeUndefined();
+      expect(
+        result.current.document.children.filter(
+          (node) => node.type === 'table',
+        ),
+      ).toEqual([originalTable]);
+      unmount();
+    },
+  );
+});
 
 describe('asynchronous document import', () => {
   it('previews external HTML without replacing the document until confirmed', async () => {
@@ -529,5 +652,194 @@ describe('asynchronous document import', () => {
         'blob:reclaim-3',
       ]);
     });
+  });
+});
+
+describe('normal image insertion', () => {
+  it.each(['report', 'slide'] as const)(
+    'inserts PNG/JPEG/WebP after a block in %s and preserves assets through Undo/Redo',
+    async (type) => {
+      let serial = 0;
+      const revokeUrl = vi.fn();
+      vi.stubGlobal(
+        'URL',
+        Object.assign(class extends URL {}, {
+          createObjectURL: () => `blob:normal-${++serial}`,
+          revokeObjectURL: revokeUrl,
+        }),
+      );
+      const { result, unmount } = await workspace();
+      act(() => result.current.createDocument(type));
+      await waitFor(() => expect(result.current.document.type).toBe(type));
+      await act(() =>
+        result.current.editor!.commands.setContent({
+          type: 'doc',
+          content: [
+            {
+              type: 'paragraph',
+              attrs: { nodeId: 'before-image' },
+              content: [{ type: 'text', text: '画像の前' }],
+            },
+            {
+              type: 'paragraph',
+              attrs: { nodeId: 'after-image' },
+              content: [{ type: 'text', text: '画像の後' }],
+            },
+          ],
+        }),
+      );
+      act(() => result.current.focusNode('before-image'));
+      for (const [extension, mime] of [
+        ['png', 'image/png'],
+        ['jpg', 'image/jpeg'],
+        ['webp', 'image/webp'],
+      ]) {
+        act(() => {
+          expect(
+            result.current.insertImage(
+              new File(['image'], `sample.${extension}`, { type: mime }),
+              'after-block',
+            ).ok,
+          ).toBe(true);
+        });
+      }
+      const figures = result.current.document.children.filter(
+        (node) => node.type === 'figure',
+      );
+      expect(figures).toHaveLength(3);
+      expect(result.current.document.children.map((node) => node.type)).toEqual(
+        ['paragraph', 'figure', 'figure', 'figure', 'paragraph'],
+      );
+      expect(figures.every((node) => !node.attrs.slidePlacement)).toBe(true);
+      expect(result.current.selectedNode?.nodeId).toBe(figures[2].attrs.nodeId);
+      const source = figures[2].attrs.src;
+      expect(result.current.resolveImageUrl(source)).toBe('blob:normal-3');
+      act(() => {
+        result.current.editor!.commands.undo();
+      });
+      expect(revokeUrl).not.toHaveBeenCalled();
+      act(() => {
+        result.current.editor!.commands.redo();
+      });
+      expect(
+        result.current.document.children.some(
+          (node) => node.type === 'figure' && node.attrs.src === source,
+        ),
+      ).toBe(true);
+      expect(result.current.resolveImageUrl(source)).toBe('blob:normal-3');
+      unmount();
+      expect(revokeUrl).toHaveBeenCalledTimes(3);
+    },
+  );
+
+  it('places figures outside selected table cells and honors the end of the current page', async () => {
+    let serial = 0;
+    vi.stubGlobal(
+      'URL',
+      Object.assign(class extends URL {}, {
+        createObjectURL: () => `blob:target-${++serial}`,
+        revokeObjectURL: vi.fn(),
+      }),
+    );
+    const { result, unmount } = await workspace();
+    await act(async () => {
+      await result.current.importFiles([
+        sourceFile(
+          'table.md',
+          markdown('Image target') +
+            '\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\nページ末尾\n\n::: pagebreak\n:::\n\n次ページ',
+        ),
+      ]);
+    });
+    const table = result.current.document.children.find(
+      (node) => node.type === 'table',
+    )!;
+    const normalizedTable = result.current
+      .editor!.getJSON()
+      .content!.find((node) => node.type === 'table');
+    let cellPosition = 0;
+    result.current.editor!.state.doc.descendants((node, position) => {
+      if (!cellPosition && node.type.name === 'tableCell')
+        cellPosition = position + 2;
+    });
+    await act(() =>
+      result.current.editor!.commands.setTextSelection(cellPosition),
+    );
+    act(() => {
+      result.current.insertImage(
+        new File(['one'], 'after-table.png', { type: 'image/png' }),
+        'after-block',
+      );
+    });
+    const tableIndex = result.current.document.children.findIndex(
+      (node) => node.attrs.nodeId === table.attrs.nodeId,
+    );
+    expect(result.current.document.children[tableIndex + 1].type).toBe(
+      'figure',
+    );
+    expect(result.current.document.children[tableIndex + 2].type).toBe(
+      'paragraph',
+    );
+    act(() => {
+      result.current.insertImage(
+        new File(['two'], 'page-end.png', { type: 'image/png' }),
+        'page-end',
+      );
+    });
+    const breakIndex = result.current.document.children.findIndex(
+      (node) => node.type === 'pageBreak',
+    );
+    expect(result.current.document.children[breakIndex - 1]).toMatchObject({
+      type: 'figure',
+      attrs: { alt: 'page-end' },
+    });
+    expect(result.current.document.children[tableIndex]).toEqual(
+      normalizedTable,
+    );
+    unmount();
+  });
+
+  it('rejects invalid/oversized inputs without changing text and releases assets if insertion is refused', async () => {
+    const createUrl = vi.fn(() => 'blob:rejected-image');
+    const revokeUrl = vi.fn();
+    vi.stubGlobal(
+      'URL',
+      Object.assign(class extends URL {}, {
+        createObjectURL: createUrl,
+        revokeObjectURL: revokeUrl,
+      }),
+    );
+    const { result, unmount } = await workspace();
+    const before = result.current.document;
+    const tooLarge = new File(['image'], 'too-large.png', {
+      type: 'image/png',
+    });
+    Object.defineProperty(tooLarge, 'size', { value: 20 * 1024 * 1024 + 1 });
+    act(() => {
+      expect(result.current.insertImage(tooLarge, 'after-block')).toMatchObject(
+        { ok: false, message: expect.stringContaining('20MB') },
+      );
+      expect(
+        result.current.insertImage(
+          new File(['text'], 'notes.txt', { type: 'text/plain' }),
+          'after-block',
+        ).ok,
+      ).toBe(false);
+    });
+    expect(createUrl).not.toHaveBeenCalled();
+    expect(result.current.document).toEqual(before);
+    act(() => result.current.editor!.setEditable(false));
+    const lockedDocument = result.current.document;
+    act(() => {
+      expect(
+        result.current.insertImage(
+          new File(['image'], 'rejected.png', { type: 'image/png' }),
+          'after-block',
+        ).ok,
+      ).toBe(false);
+    });
+    expect(result.current.document).toEqual(lockedDocument);
+    expect(revokeUrl).toHaveBeenCalledExactlyOnceWith('blob:rejected-image');
+    unmount();
   });
 });

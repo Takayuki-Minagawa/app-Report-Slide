@@ -334,6 +334,7 @@ export function EditorWorkspace() {
           focusNode={workspace.focusNode}
           applyAttributes={workspace.applyAttributes}
           insertSlideImage={workspace.insertSlideImage}
+          insertImage={workspace.insertImage}
           changeView={workspace.changeView}
           updateMarkdown={workspace.updateMarkdown}
           applyMarkdown={workspace.applyMarkdown}

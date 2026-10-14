@@ -100,6 +100,49 @@ for (const viewport of [
       exact: true,
     });
     await expect(insert).toBeInViewport();
+    const original = dialog.getByLabel('PDF読み取りの原本', { exact: true });
+    const viewBox = await original.getAttribute('viewBox');
+    const originalImage = await original.locator('image').getAttribute('href');
+    const originalWidth = await original.evaluate(
+      (svg) => svg.getBoundingClientRect().width,
+    );
+    const cropHeight = await dialog
+      .getByLabel('PDF範囲 height', { exact: true })
+      .inputValue();
+    const zoom = dialog.getByLabel('PDF原本の表示倍率', { exact: true });
+    await zoom.selectOption('300');
+    await expect
+      .poll(() => original.evaluate((svg) => svg.getBoundingClientRect().width))
+      .toBeCloseTo(originalWidth * 3, 0);
+    const originalFrame = dialog.getByRole('region', {
+      name: 'PDF原本の拡大確認',
+      exact: true,
+    });
+    await originalFrame.focus();
+    await originalFrame.press('ArrowRight');
+    await expect
+      .poll(() => originalFrame.evaluate((frame) => frame.scrollLeft))
+      .toBeGreaterThan(0);
+    await originalFrame.press('ArrowDown');
+    await expect
+      .poll(() => originalFrame.evaluate((frame) => frame.scrollTop))
+      .toBeGreaterThan(0);
+    await expectFixedControls(dialog);
+    await expect(original).toHaveAttribute('viewBox', viewBox!);
+    await expect(original.locator('image')).toHaveAttribute(
+      'href',
+      originalImage!,
+    );
+    await expect(
+      dialog.getByLabel('PDF範囲 height', { exact: true }),
+    ).toHaveValue(cropHeight);
+    await expect(dialog.getByLabel('PDF表 2-2', { exact: true })).toHaveValue(
+      '1,234.5',
+    );
+    await zoom.selectOption('100');
+    await expect
+      .poll(() => original.evaluate((svg) => svg.getBoundingClientRect().width))
+      .toBeCloseTo(originalWidth, 0);
     const firstValue = dialog.getByLabel('PDF表 2-2', { exact: true });
     const secondValue = dialog.getByLabel('PDF表 3-2', { exact: true });
     await expect(firstValue).toHaveAccessibleDescription(/見出し Value/);

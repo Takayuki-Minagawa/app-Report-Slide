@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import type { Editor } from '@tiptap/react';
 import {
   Bold,
@@ -44,20 +44,28 @@ import {
 } from '@/src/editor/block-commands';
 import { createConceptFigure } from '@/src/document/figure-edit';
 import { createStructuredDiagramFigure } from '@/src/document/diagram';
+import { imageFileAccept } from '@/src/workspace/files';
 
 export function FormatToolbar({
   editor,
   documentType,
   onOpenPdf,
+  onInsertImage,
 }: {
   editor: Editor | null;
   documentType: DocumentType;
   onOpenPdf?: (target: BlockInsertionTarget) => void;
+  onInsertImage?: (
+    file: File,
+    target: BlockInsertionTarget,
+  ) => { ok: boolean; message: string };
 }) {
   const { copy, locale } = useAppPreferences();
   const [insertionTarget, setInsertionTarget] =
     useState<BlockInsertionTarget>('after-block');
   const [insertionResult, setInsertionResult] = useState('');
+  const [imageError, setImageError] = useState('');
+  const imageInput = useRef<HTMLInputElement>(null);
   const ja = locale === 'ja';
   const insert = (value: Parameters<typeof insertDocumentBlock>[1]) => {
     if (!editor) return;
@@ -79,6 +87,43 @@ export function FormatToolbar({
       role="toolbar"
       aria-label={copy.workspace.format}
     >
+      {onInsertImage && (
+        <>
+          <input
+            ref={imageInput}
+            type="file"
+            accept={imageFileAccept}
+            aria-label={ja ? '挿入する画像ファイル' : 'Image file to insert'}
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (!file) return;
+              const result = onInsertImage(file, insertionTarget);
+              setImageError(result.ok ? '' : result.message);
+              setInsertionResult(result.ok ? result.message : '');
+            }}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!editor || inNotes}
+            onClick={() => imageInput.current?.click()}
+            title={
+              ja
+                ? 'PNG・JPEG・WebP・GIF・SVGを現在の挿入先に追加（1件20 MB以内）'
+                : 'Insert PNG, JPEG, WebP, GIF or SVG at the selected target (20 MB per image)'
+            }
+          >
+            {copy.workspace.insertImage}
+          </Button>
+          {imageError && (
+            <p role="alert" className="text-xs text-destructive">
+              {imageError}
+            </p>
+          )}
+        </>
+      )}
       <Button
         variant="outline"
         size="sm"

@@ -41,6 +41,10 @@ interface WorkspaceEditorProps {
   focusNode: (nodeId: string) => void;
   applyAttributes: (nodeId: string, attrs: Record<string, unknown>) => void;
   insertSlideImage: (file: File, slideIndex: number) => void;
+  insertImage: (
+    file: File,
+    target: BlockInsertionTarget,
+  ) => { ok: boolean; message: string };
   changeView: (view: WorkspaceView) => void;
   updateMarkdown: (source: string) => void;
   applyMarkdown: () => void;
@@ -64,6 +68,7 @@ export function WorkspaceEditor({
   focusNode,
   applyAttributes,
   insertSlideImage,
+  insertImage,
   changeView,
   updateMarkdown,
   applyMarkdown,
@@ -126,6 +131,7 @@ export function WorkspaceEditor({
             editor={editor}
             documentType={document.type}
             onOpenPdf={openPdfImport}
+            onInsertImage={insertImage}
           />
           <TableToolbar editor={editor} documentType={document.type} />
           <ScrollArea className="min-h-0 flex-1">

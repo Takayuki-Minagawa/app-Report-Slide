@@ -27,6 +27,7 @@ import {
 } from '@/src/document/semantics';
 import { walkDocumentTree } from '@/src/document/traversal';
 import { referencedAssets } from '@/src/document/assets';
+import { pdfExtractionForUpdate } from '@/src/document/pdf-figure-update';
 import { officeFeatureWarnings } from '@/src/export/format-capabilities';
 import { createFigureAuthoringSample } from '@/src/workspace/figure-authoring-sample';
 import {
@@ -38,6 +39,7 @@ import { updateDocumentNode } from '@/src/editor/document-commands';
 import {
   insertDocumentBlock,
   insertionPage,
+  type BlockInsertionTarget,
 } from '@/src/editor/block-commands';
 import type { PdfFigureImport } from './pdf-import-dialog';
 import {
@@ -350,6 +352,7 @@ export function useDocumentWorkspace() {
     handleSelectionUpdate,
     refreshSelection,
     clearSelection,
+    focusNode: focusDocumentNode,
   } = selection;
   const chapterFile = projectSession?.project.chapters.find(
     (chapter) => chapter.id === projectSession.activeChapterId,
@@ -803,6 +806,107 @@ export function useDocumentWorkspace() {
       setRecoveryRestoring(false);
     }
   };
+
+  const insertImage = useCallback(
+    (
+      file: File,
+      target: BlockInsertionTarget,
+    ): { ok: boolean; message: string } => {
+      if (!editor || documentWriteLocked || markdownDirty) {
+        return {
+          ok: false,
+          message:
+            locale === 'ja'
+              ? 'ビジュアル編集で画像を挿入してください。未適用のMarkdownは先に適用してください。'
+              : 'Insert images in visual editing. Apply pending Markdown changes first.',
+        };
+      }
+      const previousAssets = assetStore.assets;
+      const previousHistory = new Set(pdfHistoryAssets.current);
+      let asset: { source: string; url: string } | undefined;
+      let registered = false;
+      try {
+        asset = createInsertedImageAsset(
+          file,
+          previousAssets,
+          imageSources(
+            currentDocument(editor, document).children,
+            document.metadata,
+          ),
+          assetStore.bytes,
+          (source) =>
+            chapterFile ? resolveProjectPath(chapterFile, source) : source,
+        );
+        const path = chapterFile
+          ? resolveProjectPath(chapterFile, asset.source)
+          : asset.source;
+        // Keep normal inserted figures available to Undo/Redo just like PDF
+        // figures. The Slide placement picker keeps its existing reclaim policy.
+        pdfHistoryAssets.current.add(path);
+        replaceAssets(new Map([...previousAssets, [path, asset.url]]));
+        registered = true;
+        const page = insertionPage(editor, target);
+        const nodeId = createNodeId();
+        if (
+          !insertDocumentBlock(
+            editor,
+            {
+              type: 'figure',
+              attrs: {
+                nodeId,
+                src: asset.source,
+                alt: file.name.replace(/\.[^.]+$/, ''),
+                title: null,
+                width: 100,
+                align: 'center',
+              },
+            },
+            target,
+          )
+        )
+          throw new WorkspaceStatusError(statusMessage('unableToInsertImage'));
+        focusDocumentNode(editor, nodeId);
+        const message =
+          locale === 'ja'
+            ? `${page}ページに「${file.name}」を挿入しました。選択中の図はPropertiesからOCRで読み取れます。`
+            : `Inserted “${file.name}” on page ${page}. Use Properties to read the selected image with OCR.`;
+        setStatus({
+          kind: 'success',
+          title: statusMessage('imageInserted'),
+          description: message,
+        });
+        return { ok: true, message };
+      } catch (error) {
+        pdfHistoryAssets.current = previousHistory;
+        if (registered) replaceAssets(previousAssets);
+        else if (asset) revokeAssetUrls(new Map([[asset.source, asset.url]]));
+        const description = describeWorkspaceError(error, 'unableToLoad');
+        setStatus({
+          kind: 'error',
+          title: statusMessage('unableToInsertImage'),
+          description,
+        });
+        return {
+          ok: false,
+          message:
+            statusDescriptionText(description, copy, locale) ??
+            copy.status.unableToInsertImage,
+        };
+      }
+    },
+    [
+      assetStore,
+      chapterFile,
+      copy,
+      document,
+      documentWriteLocked,
+      editor,
+      locale,
+      markdownDirty,
+      replaceAssets,
+      focusDocumentNode,
+    ],
+  );
 
   const insertSlideImage = useCallback(
     (file: File, slideIndex: number) => {
@@ -1494,7 +1598,12 @@ export function useDocumentWorkspace() {
           `${value.fileName} p.${value.page}`.slice(0, 200),
         svgSource: undefined,
         diagram: undefined,
-        extraction,
+        extraction: pdfExtractionForUpdate(old?.attrs.figureEdit ?? undefined, {
+          asset: pdfAsset,
+          page: value.page,
+          crop: value.crop,
+          extraction,
+        }),
         annotations: samePage ? old?.attrs.figureEdit?.annotations : undefined,
         crop: cropped ? value.crop : undefined,
         imageSize: value.imageSize,
@@ -1766,6 +1875,7 @@ export function useDocumentWorkspace() {
     pendingHtmlImport,
     confirmHtmlImport,
     cancelHtmlImport,
+    insertImage,
     insertSlideImage,
     applyPdfFigure,
     updateMarkdown,
