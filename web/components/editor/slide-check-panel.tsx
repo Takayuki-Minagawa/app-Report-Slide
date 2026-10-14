@@ -443,6 +443,7 @@ export function SlideCheckPanel({
         if (
           !edit?.imageSize ||
           edit.svgSource ||
+          edit.diagram ||
           /^(data:image\/svg\+xml)|\.svg(?:[?#]|$)/i.test(node.attrs.src)
         )
           continue;

@@ -5,11 +5,13 @@ import { useEditor, type Editor } from '@tiptap/react';
 import { useAppPreferences } from '@/components/app-preferences';
 import {
   createDefaultDocument,
+  createNodeId,
   toEditorDocument,
   type DocumentData,
   type DocumentMetadata,
   type DocumentNode,
   type DocumentType,
+  type FigureNode,
 } from '@/src/document/model';
 import {
   pageSettingsSchema,
@@ -23,8 +25,20 @@ import {
   type SemanticNode,
 } from '@/src/document/semantics';
 import { walkDocumentTree } from '@/src/document/traversal';
+import { referencedAssets } from '@/src/document/assets';
 import { officeFeatureWarnings } from '@/src/export/format-capabilities';
 import { createFigureAuthoringSample } from '@/src/workspace/figure-authoring-sample';
+import {
+  figureEditSchema,
+  figureReferences,
+  figureReferencesSchema,
+} from '@/src/document/figure-edit';
+import { updateDocumentNode } from '@/src/editor/document-commands';
+import {
+  insertDocumentBlock,
+  insertionPage,
+} from '@/src/editor/block-commands';
+import type { PdfFigureImport } from './pdf-import-dialog';
 import { createEditorExtensions } from '@/src/editor/extensions';
 import { defaultSlideImagePlacement } from '@/src/document/slide-layout';
 import { parseMarkdown, type ParseMarkdownResult } from '@/src/markdown/parser';
@@ -42,6 +56,7 @@ import {
 import {
   assetByteTotal,
   createInsertedImageAsset,
+  createInsertedPdfAsset,
   readWorkspaceFiles,
   revokeAssetUrls,
   downloadDocument,
@@ -107,10 +122,15 @@ function currentDocument(
 }
 
 function imageSources(nodes: readonly DocumentNode[]): Set<string> {
+  return new Set(referencedAssets(nodes).map(({ source }) => source));
+}
+
+function pdfFigureAssets(nodes: readonly DocumentNode[]): Set<string> {
   const sources = new Set<string>();
   for (const node of walkDocumentTree(nodes)) {
-    if (node.type !== 'figure' && node.type !== 'inlineImage') continue;
+    if (node.type !== 'figure' || !node.attrs.figureEdit?.pdfSource) continue;
     sources.add(node.attrs.src);
+    sources.add(node.attrs.figureEdit.pdfSource.asset);
   }
   return sources;
 }
@@ -191,6 +211,8 @@ export function useDocumentWorkspace() {
   const [markdownDirty, setMarkdownDirty] = useState(false);
   const [assetStore] = useState(() => new ImageAssetStore());
   const [assets, setAssets] = useState<AssetUrls>(() => assetStore.assets);
+  // PDF edits can replace rendered pages. Keep those blobs until the editor history is replaced.
+  const pdfHistoryAssets = useRef(pdfFigureAssets(initialDocument.children));
   const [recoveryCandidates, setRecoveryCandidates] = useState<
     WorkspaceRecovery[]
   >([]);
@@ -258,7 +280,10 @@ export function useDocumentWorkspace() {
   const pruneUnusedSlideAssets = useCallback(
     (nodes: readonly DocumentNode[]) =>
       replaceAssets(
-        retainedAssetsForSources(assetStore.assets, imageSources(nodes)),
+        retainedAssetsForSources(
+          assetStore.assets,
+          new Set([...imageSources(nodes), ...pdfHistoryAssets.current]),
+        ),
       ),
     [assetStore, replaceAssets],
   );
@@ -417,6 +442,7 @@ export function useDocumentWorkspace() {
       }
 
       invalidatePendingImport();
+      pdfHistoryAssets.current = pdfFigureAssets(next.children);
       const sourceAssets = options.assets ?? assetStore.assets;
       if (next.type === 'slide') {
         replaceAssets(
@@ -644,6 +670,7 @@ export function useDocumentWorkspace() {
       editor.schema.nodeFromJSON(toEditorDocument(restoredDocument));
       restoredAssets = restoreRecoveryAssets(pendingRecovery.assets);
       invalidatePendingImport();
+      pdfHistoryAssets.current = pdfFigureAssets(restoredDocument.children);
       replaceAssets(restoredAssets);
       restoredAssets = undefined;
       setDocument(restoredDocument);
@@ -1232,6 +1259,185 @@ export function useDocumentWorkspace() {
     setDocumentDirty(true);
   };
 
+  /** Keep the original PDF and page image together, including the assets needed by Undo. */
+  const applyPdfFigure = async (value: PdfFigureImport) => {
+    if (
+      !editor ||
+      editor.isDestroyed ||
+      documentWriteLocked ||
+      projectActions.busy
+    )
+      throw new Error(
+        locale === 'ja'
+          ? '編集できる状態で取り込んでください。'
+          : 'Return to the editor before importing.',
+      );
+    const request = ++importRevision.current;
+    const previous = assetStore.assets;
+    const next = new Map(previous);
+    const created = new Map<string, string>();
+    const current = currentDocument(editor, document);
+    const old = value.replaceNodeId
+      ? [...walkDocumentTree(current.children)].find(
+          (node): node is FigureNode =>
+            node.type === 'figure' && node.attrs.nodeId === value.replaceNodeId,
+        )
+      : undefined;
+    if (value.replaceNodeId && !old)
+      throw new Error(
+        locale === 'ja'
+          ? '更新対象の図がありません。'
+          : 'The figure no longer exists.',
+      );
+    const assetPath = (source: string) =>
+      chapterFile ? resolveProjectPath(chapterFile, source) : source;
+    const occupied = imageSources(current.children);
+    let registered = false;
+    const previousHistory = new Set(pdfHistoryAssets.current);
+    try {
+      let pdfAsset = value.existingAsset;
+      if (pdfAsset && !previous.get(assetPath(pdfAsset))?.startsWith('blob:'))
+        throw new Error(
+          locale === 'ja'
+            ? '元PDFが見つかりません。PDFを選択し直してください。'
+            : 'The original PDF is missing. Select its file again.',
+        );
+      if (!pdfAsset) {
+        const original = await createInsertedPdfAsset(
+          value.pdf,
+          next,
+          occupied,
+          assetByteTotal(next),
+          assetPath,
+        );
+        pdfAsset = original.source;
+        const path = assetPath(original.source);
+        next.set(path, original.url);
+        created.set(path, original.url);
+        occupied.add(original.source);
+      }
+      const image = createInsertedImageAsset(
+        value.image,
+        next,
+        occupied,
+        assetByteTotal(next),
+        assetPath,
+      );
+      const imagePath = assetPath(image.source);
+      next.set(imagePath, image.url);
+      created.set(imagePath, image.url);
+      if (request !== importRevision.current || editor.isDestroyed)
+        throw new Error(
+          locale === 'ja'
+            ? '文書が変更されたため取り込みを中止しました。'
+            : 'The document changed during import. Please retry.',
+        );
+      const samePage =
+        old?.attrs.figureEdit?.pdfSource?.asset === pdfAsset &&
+        old?.attrs.figureEdit?.pdfSource?.page === value.page;
+      const cropped =
+        value.crop.x > 0 ||
+        value.crop.y > 0 ||
+        value.crop.width < 100 ||
+        value.crop.height < 100;
+      const edit = figureEditSchema.parse({
+        ...old?.attrs.figureEdit,
+        version: 1,
+        name:
+          old?.attrs.figureEdit?.name ||
+          `${value.fileName} p.${value.page}`.slice(0, 200),
+        svgSource: undefined,
+        diagram: undefined,
+        annotations: samePage ? old?.attrs.figureEdit?.annotations : undefined,
+        crop: cropped ? value.crop : undefined,
+        imageSize: value.imageSize,
+        pdfSource: {
+          asset: pdfAsset,
+          fileName: value.fileName,
+          page: value.page,
+          pageCount: value.pageCount,
+          dpi: value.dpi,
+        },
+        source: {
+          referenceId: value.reference.id,
+          origin: cropped ? 'cropped' : 'original',
+          pdfPage: String(value.page),
+          printedPage: value.printedPage,
+          figureNumber: value.figureNumber,
+          note: old?.attrs.figureEdit?.source?.note ?? '',
+        },
+      });
+      const references = figureReferences(previewDocument.metadata).filter(
+        (reference) => reference.id !== value.reference.id,
+      );
+      references.push(value.reference);
+      figureReferencesSchema.parse(references);
+      const figure: FigureNode = {
+        type: 'figure',
+        attrs: {
+          ...old?.attrs,
+          nodeId: old?.attrs.nodeId ?? createNodeId(),
+          src: image.source,
+          alt:
+            old?.attrs.alt ||
+            `${value.reference.title || value.fileName} p.${value.page}`,
+          title: old?.attrs.title ?? null,
+          width: old?.attrs.width ?? 100,
+          align: old?.attrs.align ?? 'center',
+          figureEdit: edit,
+        },
+      };
+      // Install before the synchronous editor transaction so both rendering and Undo resolve the source.
+      for (const path of created.keys()) pdfHistoryAssets.current.add(path);
+      pdfHistoryAssets.current.add(assetPath(pdfAsset));
+      if (old) {
+        pdfHistoryAssets.current.add(assetPath(old.attrs.src));
+        if (old.attrs.figureEdit?.pdfSource)
+          pdfHistoryAssets.current.add(
+            assetPath(old.attrs.figureEdit.pdfSource.asset),
+          );
+      }
+      replaceAssets(next);
+      registered = true;
+      const pageNumber = insertionPage(editor, value.target);
+      const changed = old
+        ? updateDocumentNode(
+            editor,
+            old.attrs.nodeId,
+            figure.attrs,
+            document.type,
+          )
+        : insertDocumentBlock(editor, figure, value.target);
+      if (!changed)
+        throw new Error(
+          locale === 'ja'
+            ? '図を挿入できませんでした。'
+            : 'Could not insert the figure.',
+        );
+      updateMetadata({ figure_references: references });
+      setDocumentDirty(true);
+      markProjectEdited();
+      selection.focusNode(editor, figure.attrs.nodeId);
+      setView('visual');
+      setStatus({
+        kind: 'success',
+        title:
+          locale === 'ja'
+            ? old
+              ? 'PDFの図を更新しました'
+              : `${pageNumber}ページにPDFの図を挿入しました`
+            : old
+              ? 'PDF figure updated'
+              : `PDF figure inserted on page ${pageNumber}`,
+      });
+    } catch (error) {
+      pdfHistoryAssets.current = previousHistory;
+      if (registered) replaceAssets(previous);
+      else revokeAssetUrls(created);
+      throw error;
+    }
+  };
+
   /** Reader supplements belong to the edited chapter, not the project's combined page IDs. */
   const updateReaderSupplements = (updates: DocumentMetadata) => {
     if (documentWriteLocked) return;
@@ -1316,6 +1522,7 @@ export function useDocumentWorkspace() {
     confirmHtmlImport,
     cancelHtmlImport,
     insertSlideImage,
+    applyPdfFigure,
     updateMarkdown,
     applyMarkdown,
     createDocument,

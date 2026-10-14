@@ -11,7 +11,8 @@ import { prepareRenderedFigureSvg, type OfficeImage } from './office-images';
 
 export function officeFigureKey(node: FigureNode): string {
   const edit = readFigureEdit(node.attrs.figureEdit);
-  return edit && (edit.svgSource || edit.crop || edit.annotations?.length)
+  return edit &&
+    (edit.diagram || edit.svgSource || edit.crop || edit.annotations?.length)
     ? `kumi-figure:${node.attrs.nodeId}`
     : node.attrs.src;
 }

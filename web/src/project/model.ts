@@ -308,6 +308,24 @@ function assembleChapterNode(
       ...result,
       attrs: { ...('attrs' in result ? result.attrs : {}), src: source },
     } as typeof node;
+    if (result.type === 'figure' && result.attrs.figureEdit?.pdfSource) {
+      result = {
+        ...result,
+        attrs: {
+          ...result.attrs,
+          figureEdit: {
+            ...result.attrs.figureEdit,
+            pdfSource: {
+              ...result.attrs.figureEdit.pdfSource,
+              asset: resolveProjectPath(
+                chapter.file,
+                result.attrs.figureEdit.pdfSource.asset,
+              ),
+            },
+          },
+        },
+      };
+    }
   }
   if ('content' in result && result.content) {
     result = {

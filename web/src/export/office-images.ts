@@ -4,7 +4,10 @@ import type { AppLocale } from '@/src/i18n/messages';
 import { safeResourceUrl } from '@/src/security/resource-url';
 import type { AssetUrls } from '@/src/workspace/files';
 import { bytesToBase64 } from './embedded-images';
-import { readFigureEdit } from '@/src/document/figure-edit';
+import {
+  readFigureEdit,
+  editableFigureSvgSource,
+} from '@/src/document/figure-edit';
 import { sanitizeSvgSource } from '@/src/security/svg-source';
 
 export interface OfficeImage {
@@ -210,7 +213,9 @@ export async function prepareOfficeImages(
     // An editable SVG is an independent replacement. Only this figure can skip
     // its original; another figure/inline image sharing the same URL still needs it.
     if (node.type === 'figure') {
-      const svgSource = readFigureEdit(node.attrs.figureEdit)?.svgSource;
+      const svgSource = editableFigureSvgSource(
+        readFigureEdit(node.attrs.figureEdit),
+      );
       if (svgSource) {
         try {
           sanitizeSvgSource(svgSource);

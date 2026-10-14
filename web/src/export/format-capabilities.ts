@@ -3,6 +3,7 @@ import { walkDocumentTree } from '@/src/document/traversal';
 import { readFigureEdit } from '@/src/document/figure-edit';
 import type { AppLocale } from '@/src/i18n/messages';
 import { resolveChartPlot } from '@/src/document/chart';
+import { localDocumentAssets } from '@/src/document/assets';
 
 /** State concrete affected objects rather than implying every format is an editable archive. */
 export function officeFeatureWarnings(
@@ -26,17 +27,23 @@ export function officeFeatureWarnings(
     if (!edit) continue;
     const name =
       edit.name || node.attrs.caption || node.attrs.alt || node.attrs.nodeId;
-    if (edit.crop || edit.annotations?.length || edit.svgSource)
+    if (edit.pdfSource)
       warnings.push(
         ja
-          ? `図「${name}」: OfficeではSVG・切り抜き・注釈を1枚の画像として配置します。内部を再編集する原本はHTMLまたはZIPで保存してください。`
-          : `Figure “${name}”: Office combines SVG, crop and annotations into one image. Keep HTML or ZIP to edit the individual parts.`,
+          ? `図「${name}」: OfficeにはPDFページの表示画像を配置します。PDF原本・ページの再選択・切り抜きの再編集は保持しません。PDF原本を残すにはHTMLまたはZIPを保存してください。`
+          : `Figure “${name}”: Office contains the rendered PDF page image. It does not retain the original PDF, page selection or crop editing. Save HTML or ZIP to keep the PDF original.`,
       );
-    if (edit.svgSource || edit.source)
+    if (edit.crop || edit.annotations?.length || edit.svgSource || edit.diagram)
       warnings.push(
         ja
-          ? `図「${name}」: SVGの編集ソースと出典の関連情報はOffice内で再編集できません。原本はHTMLまたはZIPで保存してください。`
-          : `Figure “${name}”: SVG source and linked reference editing are not retained in Office. Keep HTML or ZIP as the editable original.`,
+          ? `図「${name}」: OfficeではSVG・構造化図解の部品・切り抜き・注釈を1枚の画像として配置します。内部を再編集する原本はHTMLまたはZIPで保存してください。`
+          : `Figure “${name}”: Office combines SVG, structured diagram parts, crop and annotations into one image. Keep HTML or ZIP to edit the individual parts.`,
+      );
+    if (edit.svgSource || edit.source || edit.diagram)
+      warnings.push(
+        ja
+          ? `図「${name}」: SVGの編集ソース・構造化図解の部品・出典の関連情報はOffice内で再編集できません。原本はHTMLまたはZIPで保存してください。`
+          : `Figure “${name}”: SVG source, structured diagram parts and linked reference editing are not retained in Office. Keep HTML or ZIP as the editable original.`,
       );
   }
   if (document.metadata.reader_supplements)
@@ -55,14 +62,5 @@ export function officeFeatureWarnings(
 }
 
 export function referencedLocalImages(document: DocumentData): string[] {
-  return [
-    ...new Set(
-      [...walkDocumentTree(document.children)].flatMap((node) =>
-        (node.type === 'figure' || node.type === 'inlineImage') &&
-        !/^(?:data:|https?:|\/\/)/i.test(node.attrs.src)
-          ? [node.attrs.src]
-          : [],
-      ),
-    ),
-  ];
+  return localDocumentAssets(document.children).map(({ source }) => source);
 }

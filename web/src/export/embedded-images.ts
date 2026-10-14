@@ -1,5 +1,6 @@
 import type { DocumentData } from '@/src/document/model';
-import { walkDocumentTree } from '@/src/document/traversal';
+import { referencedAssets } from '@/src/document/assets';
+import { validatePdfBytes } from '@/src/document/pdf-source';
 import { safeResourceUrl } from '@/src/security/resource-url';
 import type { AssetUrls } from '@/src/workspace/files';
 import { WorkspaceStatusError, statusMessage } from '@/src/workspace/status';
@@ -33,13 +34,10 @@ export async function embedSlideImages(
   document: DocumentData,
   assets: AssetUrls,
 ) {
-  const sources = new Set<string>();
-  for (const node of walkDocumentTree(document.children)) {
-    if (node.type === 'figure' || node.type === 'inlineImage') {
-      const source = safeResourceUrl(node.attrs.src, 'image');
-      if (source) sources.add(source);
-    }
-  }
+  const references = referencedAssets(document.children);
+  const sources = references.flatMap(({ source, kind }) =>
+    kind === 'pdf' || safeResourceUrl(source, 'image') ? [source] : [],
+  );
   const external = [...sources].filter((source) => /^https?:/i.test(source));
   const local = [...sources].filter(
     (source) => !/^(?:https?:|data:)/i.test(source),
@@ -54,6 +52,7 @@ export async function embedSlideImages(
 
   const embedded = new Map<string, string>();
   const byUrl = new Map<string, string>();
+  let totalBytes = 0;
   // Sequential conversion bounds peak memory when several large attachments are used.
   for (const source of local) {
     const url = assets.get(source)!;
@@ -62,11 +61,20 @@ export async function embedSlideImages(
       try {
         const response = await fetch(url);
         if (!response.ok) throw new Error('Unreadable attachment');
-        const mime = imageMime(source, response.headers.get('content-type'));
+        const pdf =
+          references.find((entry) => entry.source === source)?.kind === 'pdf';
+        const mime = pdf
+          ? 'application/pdf'
+          : imageMime(source, response.headers.get('content-type'));
         if (!mime) throw new Error('Unsupported image format');
         const bytes = new Uint8Array(await response.arrayBuffer());
         if (bytes.byteLength > 20 * 1024 * 1024)
           throw new Error('Attachment too large');
+        if (pdf)
+          validatePdfBytes(bytes, response.headers.get('content-type') || mime);
+        totalBytes += bytes.byteLength;
+        if (totalBytes > 50 * 1024 * 1024)
+          throw new Error('Attachments too large');
         data = 'data:' + mime + ';base64,' + bytesToBase64(bytes);
         byUrl.set(url, data);
       } catch {

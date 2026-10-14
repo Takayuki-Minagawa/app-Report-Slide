@@ -14,12 +14,14 @@ import {
   figureReferences,
   figureReferenceSchema,
   readFigureEdit,
+  editableFigureSvgSource,
   type FigureAnnotation,
   type FigureEdit,
   type FigureReference,
 } from '@/src/document/figure-edit';
 import { sanitizeSvgSource } from '@/src/security/svg-source';
 import { resolveSafeImageUrl } from '@/src/security/resource-url';
+import { DiagramEditorDialog } from './diagram-editor-dialog';
 
 const emptySource = {
   referenceId: '',
@@ -100,8 +102,9 @@ export function FigureEditProperties({
       let next = { ...edit, imageSize: imageSize ?? edit.imageSize };
       const attrs: Record<string, unknown> = {};
       let sanitized = false;
-      if (edit.svgSource) {
-        const svg = sanitizeSvgSource(edit.svgSource);
+      const displaySvg = editableFigureSvgSource(edit);
+      if (displaySvg) {
+        const svg = sanitizeSvgSource(displaySvg);
         next = { ...next, imageSize: { width: svg.width, height: svg.height } };
         // Preserve attrs.src as the original image. The renderer uses a sanitized SVG copy.
         sanitized = svg.changed;
@@ -150,110 +153,133 @@ export function FigureEditProperties({
         />
       </label>
       <p className="text-xs text-muted-foreground">
-        {edit.svgSource
-          ? 'SVGソースを編集できる図です。ラベルと矢印は下の操作またはソースで変更できます。'
-          : '画像として配置しています。画像内の文字は直接編集できません。SVG原本を指定するとソースを編集できます。'}
+        {edit.diagram
+          ? '構造化図解です。矩形・楕円・文字・線を部品としてドラッグ編集できます。接続線は図形に追従します。'
+          : edit.svgSource
+            ? 'SVGソースを編集できる図です。ラベルと矢印は下の操作またはソースで変更できます。'
+            : '画像として配置しています。画像内の文字は直接編集できません。SVG原本を指定するとソースを編集できます。'}
       </p>
-      <details className="space-y-2">
-        <summary>SVGソース・ラベルを編集</summary>
-        <label className="property-field">
-          SVG原本を読み込む
-          <input
-            type="file"
-            accept=".svg,image/svg+xml"
-            onChange={async (event) => {
-              const file = event.target.files?.[0];
-              if (!file) return;
-              try {
-                if (file.size > 1_000_000)
-                  throw new Error('SVGソースは1 MB以内にしてください。');
-                const text = await file.text();
-                sanitizeSvgSource(text);
-                setEdit((value) => ({ ...value, svgSource: text }));
-                setMessage(
-                  'SVG原本を読み込みました。図の編集を適用してください。',
-                );
-              } catch (error) {
-                setMessage(
-                  error instanceof Error
-                    ? error.message
-                    : 'SVGを開けませんでした。',
-                );
-              }
-              event.target.value = '';
-            }}
-          />
-        </label>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() =>
-            setEdit({
-              ...edit,
-              svgSource: conceptDiagramSvg,
-              source: { ...source, origin: 'concept', note: '実測値ではない' },
-            })
-          }
-        >
-          3状態のSVG模式図に差し替え
-        </Button>
-        {svgElements.labels.map((label, index) => (
-          <label className="property-field" key={index}>
-            SVGラベル {index + 1}
-            <Input
-              value={label}
-              onChange={(event) =>
-                modifySvg((document) => {
-                  document.querySelectorAll('text')[index].textContent =
-                    event.target.value;
-                })
-              }
+      {edit.diagram && (
+        <DiagramEditorDialog
+          diagram={edit.diagram}
+          disabled={disabled}
+          onApply={(diagram) => {
+            onApply(node.attrs.nodeId, {
+              figureEdit: {
+                ...edit,
+                diagram,
+                imageSize: { width: diagram.width, height: diagram.height },
+              },
+            });
+          }}
+        />
+      )}
+      {!edit.diagram && (
+        <details className="space-y-2">
+          <summary>SVGソース・ラベルを編集</summary>
+          <label className="property-field">
+            SVG原本を読み込む
+            <input
+              type="file"
+              accept=".svg,image/svg+xml"
+              onChange={async (event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                try {
+                  if (file.size > 1_000_000)
+                    throw new Error('SVGソースは1 MB以内にしてください。');
+                  const text = await file.text();
+                  sanitizeSvgSource(text);
+                  setEdit((value) => ({ ...value, svgSource: text }));
+                  setMessage(
+                    'SVG原本を読み込みました。図の編集を適用してください。',
+                  );
+                } catch (error) {
+                  setMessage(
+                    error instanceof Error
+                      ? error.message
+                      : 'SVGを開けませんでした。',
+                  );
+                }
+                event.target.value = '';
+              }}
             />
           </label>
-        ))}
-        {Array.from({ length: svgElements.arrows }, (_, index) => (
           <Button
-            key={index}
             size="sm"
             variant="outline"
             onClick={() =>
-              modifySvg((document) => {
-                const arrow = document.querySelectorAll(
-                  '[marker-end], [marker-start]',
-                )[index];
-                const start = arrow.getAttribute('marker-start');
-                const end = arrow.getAttribute('marker-end');
-                arrow.removeAttribute('marker-start');
-                arrow.removeAttribute('marker-end');
-                if (end) arrow.setAttribute('marker-start', end);
-                if (start) arrow.setAttribute('marker-end', start);
-                for (const marker of document.querySelectorAll('marker'))
-                  marker.setAttribute('orient', 'auto-start-reverse');
+              setEdit({
+                ...edit,
+                svgSource: conceptDiagramSvg,
+                source: {
+                  ...source,
+                  origin: 'concept',
+                  note: '実測値ではない',
+                },
               })
             }
           >
-            矢印 {index + 1} の向きを反転
+            3状態のSVG模式図に差し替え
           </Button>
-        ))}
-        <label
-          className="property-field"
-          htmlFor={`figure-svg-${node.attrs.nodeId}`}
-        >
-          SVGソース
-          <Textarea
-            id={`figure-svg-${node.attrs.nodeId}`}
-            className="font-mono text-xs"
-            rows={8}
-            value={edit.svgSource ?? ''}
-            onChange={(event) =>
-              setEdit({ ...edit, svgSource: event.target.value || undefined })
-            }
-          />
-        </label>
-        <p className="text-xs text-muted-foreground">
-          ソース原本を保存します。表示用コピーでは実行要素・外部参照・埋込画像・styleを除きます。
-        </p>
-      </details>
+          {svgElements.labels.map((label, index) => (
+            <label className="property-field" key={index}>
+              SVGラベル {index + 1}
+              <Input
+                value={label}
+                onChange={(event) =>
+                  modifySvg((document) => {
+                    document.querySelectorAll('text')[index].textContent =
+                      event.target.value;
+                  })
+                }
+              />
+            </label>
+          ))}
+          {Array.from({ length: svgElements.arrows }, (_, index) => (
+            <Button
+              key={index}
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                modifySvg((document) => {
+                  const arrow = document.querySelectorAll(
+                    '[marker-end], [marker-start]',
+                  )[index];
+                  const start = arrow.getAttribute('marker-start');
+                  const end = arrow.getAttribute('marker-end');
+                  arrow.removeAttribute('marker-start');
+                  arrow.removeAttribute('marker-end');
+                  if (end) arrow.setAttribute('marker-start', end);
+                  if (start) arrow.setAttribute('marker-end', start);
+                  for (const marker of document.querySelectorAll('marker'))
+                    marker.setAttribute('orient', 'auto-start-reverse');
+                })
+              }
+            >
+              矢印 {index + 1} の向きを反転
+            </Button>
+          ))}
+          <label
+            className="property-field"
+            htmlFor={`figure-svg-${node.attrs.nodeId}`}
+          >
+            SVGソース
+            <Textarea
+              id={`figure-svg-${node.attrs.nodeId}`}
+              className="font-mono text-xs"
+              rows={8}
+              value={edit.svgSource ?? ''}
+              onChange={(event) =>
+                setEdit({ ...edit, svgSource: event.target.value || undefined })
+              }
+            />
+          </label>
+          <p className="text-xs text-muted-foreground">
+            ソース原本を保存します。表示用コピーでは実行要素・外部参照・埋込画像・styleを除きます。
+          </p>
+        </details>
+      )}
       <details className="space-y-2">
         <summary>原画像の切り抜き・注釈</summary>
         <p className="text-xs text-muted-foreground">

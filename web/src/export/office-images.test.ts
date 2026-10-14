@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DocumentData } from '@/src/document/model';
 import { prepareOfficeImages } from './office-images';
+import { createStructuredDiagram } from '@/src/document/diagram';
 
 const png =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
@@ -54,6 +55,16 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Office image preparation', () => {
+  it('renders a structured diagram independently of its missing original image', async () => {
+    const document = withImages(['missing.png']);
+    document.children[0].attrs.figureEdit = {
+      version: 1,
+      diagram: createStructuredDiagram(),
+    };
+    const { images } = await prepareOfficeImages(document, new Map(), 'en');
+    expect(images.size).toBe(0);
+    expect(fetch).not.toHaveBeenCalled();
+  });
   const svgSource =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 40"><rect width="80" height="40"/></svg>';
   it.each(['missing.png', 'https://example.com/old.png'])(

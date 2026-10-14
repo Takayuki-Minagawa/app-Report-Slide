@@ -1,5 +1,6 @@
 import type { DocumentData } from '@/src/document/model';
 import { walkDocumentTree } from '@/src/document/traversal';
+import { localDocumentAssets, type DocumentAsset } from '@/src/document/assets';
 import type { AssetUrls } from '@/src/workspace/files';
 import {
   isLocalProjectImage,
@@ -17,32 +18,47 @@ export function prepareChapter(
   const document: DocumentData = structuredClone(chapter.document);
   const assets = new Map<string, string>();
   const remappedSources = new Map<string, string>();
-  for (const node of walkDocumentTree(document.children)) {
-    if (node.type !== 'figure' && node.type !== 'inlineImage') continue;
-    const source = node.attrs.src.trim();
-    if (!isLocalProjectImage(source)) continue;
+  const remap = (value: string, kind: 'image' | 'pdf') => {
+    if (!isLocalProjectImage(value)) return value;
+    const source = value.trim();
     let next = remappedSources.get(source);
     if (!next) {
       const extension =
-        /\.(png|jpe?g|gif|webp|svg)(?:[?#].*)?$/i.exec(source)?.[1] ?? 'png';
-      next = `assets/image-${remappedSources.size + 1}.${extension.toLowerCase()}`;
+        kind === 'pdf'
+          ? 'pdf'
+          : (/\.(png|jpe?g|gif|webp|svg)(?:[?#].*)?$/i.exec(source)?.[1] ??
+            'png');
+      next = `assets/${kind}-${remappedSources.size + 1}.${extension.toLowerCase()}`;
       remappedSources.set(source, next);
       const url = sourceAssets.get(source);
       if (url) assets.set(resolveProjectPath(chapter.file, next), url);
     }
-    node.attrs.src = next;
+    return next;
+  };
+  for (const node of walkDocumentTree(document.children)) {
+    if (node.type !== 'figure' && node.type !== 'inlineImage') continue;
+    node.attrs.src = remap(node.attrs.src, 'image');
+    if (node.type === 'figure' && node.attrs.figureEdit?.pdfSource) {
+      node.attrs.figureEdit.pdfSource.asset = remap(
+        node.attrs.figureEdit.pdfSource.asset,
+        'pdf',
+      );
+    }
   }
   return { chapter: { ...chapter, document }, assets };
 }
 
 export function chapterImagePaths(chapter: ReportChapter): string[] {
-  const paths = new Set<string>();
-  for (const node of walkDocumentTree(chapter.document.children)) {
-    if (node.type !== 'figure' && node.type !== 'inlineImage') continue;
-    if (isLocalProjectImage(node.attrs.src))
-      paths.add(resolveProjectPath(chapter.file, node.attrs.src));
-  }
-  return [...paths];
+  return chapterAssetReferences(chapter).map(({ source }) => source);
+}
+
+export function chapterAssetReferences(
+  chapter: ReportChapter,
+): DocumentAsset[] {
+  return localDocumentAssets(chapter.document.children).map((entry) => ({
+    ...entry,
+    source: resolveProjectPath(chapter.file, entry.source),
+  }));
 }
 
 export function pruneProjectAssets(

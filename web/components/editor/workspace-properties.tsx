@@ -17,6 +17,7 @@ import {
   documentTitle,
   type DocumentData,
   type DocumentMetadata,
+  type FigureNode,
 } from '@/src/document/model';
 import {
   documentThemes,
@@ -68,6 +69,7 @@ interface WorkspacePropertiesProps {
   resolveImageUrl: (source: string) => string;
   updateMetadata: (metadata: DocumentMetadata) => void;
   focusNode: (nodeId: string) => void;
+  onEditPdf?: (node: FigureNode) => void;
 }
 
 export function WorkspaceProperties({
@@ -93,6 +95,7 @@ export function WorkspaceProperties({
   resolveImageUrl,
   updateMetadata,
   focusNode,
+  onEditPdf,
 }: WorkspacePropertiesProps) {
   const { copy, locale } = useAppPreferences();
   const [referenceTarget, setReferenceTarget] = useState('');
@@ -266,17 +269,32 @@ export function WorkspaceProperties({
                   />
                 )}
                 {selectedSemantic?.type === 'figure' && (
-                  <FigureEditProperties
-                    key={`figure-edit:${selectedSemantic.attrs.nodeId}:${JSON.stringify(selectedSemantic.attrs.figureEdit)}`}
-                    node={selectedSemantic}
-                    metadata={document.metadata}
-                    resolveImageUrl={resolveImageUrl}
-                    disabled={documentWriteLocked}
-                    onApply={applyAttributes}
-                    onMetadataChange={(metadata) =>
-                      updateMetadata(metadata as DocumentMetadata)
-                    }
-                  />
+                  <>
+                    {selectedSemantic.attrs.figureEdit?.pdfSource &&
+                      onEditPdf && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={documentWriteLocked}
+                          onClick={() => onEditPdf(selectedSemantic)}
+                        >
+                          {locale === 'ja'
+                            ? '元PDFから範囲を取り直す'
+                            : 'Recrop from original PDF'}
+                        </Button>
+                      )}
+                    <FigureEditProperties
+                      key={`figure-edit:${selectedSemantic.attrs.nodeId}:${JSON.stringify(selectedSemantic.attrs.figureEdit)}`}
+                      node={selectedSemantic}
+                      metadata={document.metadata}
+                      resolveImageUrl={resolveImageUrl}
+                      disabled={documentWriteLocked}
+                      onApply={applyAttributes}
+                      onMetadataChange={(metadata) =>
+                        updateMetadata(metadata as DocumentMetadata)
+                      }
+                    />
+                  </>
                 )}
                 {(selectedNode.type === 'inlineMath' ||
                   selectedNode.type === 'blockMath') && (

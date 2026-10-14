@@ -28,20 +28,20 @@ export function SaveFormatDialog({
   const ja = locale === 'ja';
   const title = ja ? '保存形式の違い' : 'Save format details';
   const warnings = open ? officeFeatureWarnings(document, locale) : [];
-  const localImages = open ? referencedLocalImages(document) : [];
+  const localAssets = open ? referencedLocalImages(document) : [];
   const rows = ja
     ? [
         [
           'HTML',
-          '本文・表・グラフデータ・SVG編集情報・原画像・切り抜き・注釈・出典・配置・補足を保持。取り込んだ画像を埋め込み、別のブラウザーで再編集できます。外部URLの画像はリンクのままです。',
+          '本文・表・グラフデータ・SVG編集情報・原画像・切り抜き・注釈・出典・配置・補足を保持。取り込んだ画像とPDF原本全体を埋め込み、別のブラウザーでPDFのページ・切り抜きも選び直せます。外部URLの画像はリンクのままです。',
         ],
         [
           'ZIP',
-          '文書と取り込んだ画像を一緒に保存。再編集用の原本に向いています。章別ReportにはプロジェクトZIPを使います。',
+          '文書と取り込んだ画像・PDF原本全体を一緒に保存。PDFのページ選択・切り抜き情報も保持します。章別ReportにはプロジェクトZIPを使います。',
         ],
         [
           'JSON / Markdown',
-          '編集データは保持しますが、参照するローカル画像ファイルは同梱しません。Markdownの拡張設定はYAML・KUMI専用ブロック・属性に保存します。',
+          '編集データ・PDFのページ選択・切り抜き情報は保持しますが、ローカル画像とPDF原本ファイルは同梱しません。再編集には元ファイルも必要です。Markdownの拡張設定はYAML・KUMI専用ブロック・属性に保存します。',
         ],
         [
           'PPTX / Word',
@@ -55,15 +55,15 @@ export function SaveFormatDialog({
     : [
         [
           'HTML',
-          'Keeps content, tables, chart data, SVG source, originals, crops, annotations, references, layouts and supplements. Imported images are embedded for reopening in another browser; remote images remain links.',
+          'Keeps content, tables, chart data, SVG source, originals, crops, annotations, references, layouts and supplements. Imported images and complete PDF originals are embedded, so PDF pages and crops can be selected again after reopening. Remote images remain links.',
         ],
         [
           'ZIP',
-          'Stores the document and imported images together for re-editing. Use Project ZIP for chapter-based reports.',
+          'Stores the document, imported images and complete PDF originals, including page selection and crop settings. Use Project ZIP for chapter-based reports.',
         ],
         [
           'JSON / Markdown',
-          'Retains editing data but does not bundle referenced local image files. Markdown uses YAML, KUMI blocks and attributes for advanced structures.',
+          'Retains editing data, PDF page selection and crop settings, but does not bundle local images or PDF originals. Keep the source files for re-editing. Markdown uses YAML, KUMI blocks and attributes for advanced structures.',
         ],
         [
           'PPTX / Word',
@@ -114,15 +114,15 @@ export function SaveFormatDialog({
                 : 'Full HTML combines included chapters. Project ZIP also retains chapter structure and excluded chapters.'}
             </p>
           )}
-          {localImages.length > 0 && (
+          {localAssets.length > 0 && (
             <section className="text-xs">
               <h3 className="font-medium">
                 {ja
-                  ? `JSON／Markdownでは別途必要な画像（${localImages.length}件）`
-                  : `Images needed separately for JSON / Markdown (${localImages.length})`}
+                  ? `JSON／Markdownでは別途必要な画像・PDF原本（${localAssets.length}件）`
+                  : `Images and PDF originals needed separately for JSON / Markdown (${localAssets.length})`}
               </h3>
               <ul className="list-disc pl-5">
-                {localImages.map((src) => (
+                {localAssets.map((src) => (
                   <li key={src} className="break-all">
                     {src}
                   </li>

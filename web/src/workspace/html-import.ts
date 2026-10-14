@@ -15,6 +15,8 @@ import {
 import { resolveDocumentTheme } from '@/src/document/metadata';
 import { splitDocumentPages } from '@/src/document/semantics';
 import { walkDocumentTree } from '@/src/document/traversal';
+import { referencedAssets } from '@/src/document/assets';
+import { validatePdfBytes } from '@/src/document/pdf-source';
 import { safeResourceUrl } from '@/src/security/resource-url';
 import {
   editableHtmlFormat,
@@ -83,10 +85,23 @@ function decodeBase64(value: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
-function imageData(value: string): {
+function imageData(
+  value: string,
+  kind: 'image' | 'pdf' = 'image',
+): {
   bytes: Uint8Array<ArrayBuffer>;
   mime: string;
 } {
+  if (kind === 'pdf') {
+    const pdf = /^data:application\/pdf;base64,([a-z\d+/]*={0,2})$/i.exec(
+      value,
+    );
+    if (!pdf || pdf[1].length > Math.ceil(maximumImageBytes / 3) * 4)
+      throw new Error('PDF原本の埋込形式またはサイズが不正です。');
+    const bytes = decodeBase64(pdf[1]);
+    validatePdfBytes(bytes);
+    return { bytes, mime: 'application/pdf' };
+  }
   const match =
     /^data:(image\/(?:png|jpe?g|webp|gif|svg\+xml))(;base64|;charset=utf-8)?,([\s\S]*)$/i.exec(
       value,
@@ -212,7 +227,8 @@ class ImportAssets {
   private serial = 0;
   private byData = new Map<string, string>();
 
-  add(data: string, source?: string): string {
+  add(data: string, source?: string, kind: 'image' | 'pdf' = 'image'): string {
+    const decoded = imageData(data, kind);
     const previous = this.byData.get(data);
     if (previous) {
       if (!source) return previous;
@@ -221,7 +237,6 @@ class ImportAssets {
       this.urls.set(source, this.urls.get(previous)!);
       return source;
     }
-    const decoded = imageData(data);
     let bytes = decoded.bytes;
     const mime = decoded.mime;
     this.total += bytes.byteLength;
@@ -295,13 +310,8 @@ function restoreEmbedded(
   )
     throw new Error('編集用HTMLに未知の項目があります。');
   const document = migrateDocumentData(value.document);
-  const sources = new Set(
-    [...walkDocumentTree(document.children)].flatMap((node) =>
-      node.type === 'figure' || node.type === 'inlineImage'
-        ? [node.attrs.src.trim()]
-        : [],
-    ),
-  );
+  const references = referencedAssets(document.children);
+  const sources = new Map(references.map(({ source, kind }) => [source, kind]));
   for (const asset of value.assets) {
     if (
       !record(asset) ||
@@ -311,14 +321,16 @@ function restoreEmbedded(
       /^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(asset.source)
     )
       throw new Error('編集用HTMLの画像参照が不正です。');
-    assets.add(asset.data, asset.source);
+    assets.add(asset.data, asset.source, sources.get(asset.source));
   }
-  const local = [...sources].filter(
+  const local = [...sources.keys()].filter(
     (source) => !/^(?:https?:|data:)/i.test(source),
   );
   if (local.some((source) => !assets.urls.has(source)))
     throw new Error('編集用HTMLの画像データが不足しています。');
-  const remote = [...sources].filter((source) => /^https?:/i.test(source));
+  const remote = [...sources.keys()].filter((source) =>
+    /^https?:/i.test(source),
+  );
   const previousReport = document.metadata.html_import;
   const previousWarnings =
     record(previousReport) && Array.isArray(previousReport.warnings)

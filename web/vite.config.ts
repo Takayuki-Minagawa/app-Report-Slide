@@ -3,6 +3,7 @@ import tailwindcss from '@tailwindcss/postcss';
 import vinext, { type NextConfig } from 'vinext';
 import { defineConfig } from 'vite';
 import hostingConfig from './.openai/hosting.json' with { type: 'json' };
+import { pdfAssetsPlugin } from './build/pdf-assets-plugin';
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   '00000000-0000-4000-8000-000000000000';
@@ -73,6 +74,7 @@ export default defineConfig(async () => {
             'pptxgenjs',
             'jspdf',
             'html-to-image',
+            'pdfjs-dist',
           ],
         },
       },
@@ -81,6 +83,7 @@ export default defineConfig(async () => {
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,
     plugins: [
+      pdfAssetsPlugin(isGitHubPagesBuild ? pagesBasePath : ''),
       vinext({ nextConfig }),
       sites(),
       cloudflare({

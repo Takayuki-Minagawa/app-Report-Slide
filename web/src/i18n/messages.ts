@@ -498,7 +498,7 @@ export const messages: Record<AppLocale, UiMessages> = {
         `画像以外の添付ファイルは読み込めません: ${files}`,
       markdownTooLarge: 'Markdownファイルは5MB以下にしてください',
       imageTooLarge: '画像ファイルは1件20MB以下にしてください',
-      imagesTooLarge: '画像ファイルの合計は50MB以下にしてください',
+      imagesTooLarge: '画像とPDF原本の合計は50MB以下にしてください',
       imageInserted: '画像をスライドへ配置しました',
       unableToInsertImage: '画像を挿入できませんでした',
       unresolvedImages: (sources) =>
@@ -868,7 +868,8 @@ export const messages: Record<AppLocale, UiMessages> = {
         `Only image attachments can be imported: ${files}`,
       markdownTooLarge: 'Markdown files must be 5 MB or smaller',
       imageTooLarge: 'Each image must be 20 MB or smaller',
-      imagesTooLarge: 'The combined image size must be 50 MB or smaller',
+      imagesTooLarge:
+        'The combined image and original PDF size must be 50 MB or smaller',
       imageInserted: 'Placed the image on the slide',
       unableToInsertImage: 'Could not insert the image',
       unresolvedImages: (sources) =>

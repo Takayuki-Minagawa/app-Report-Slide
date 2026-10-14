@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { DocumentData } from '@/src/document/model';
-import { walkDocumentTree } from '@/src/document/traversal';
+import { documentAssetMime, localDocumentAssets } from '@/src/document/assets';
+import { validatePdfBytes } from '@/src/document/pdf-source';
 import { migrateDocumentData } from '@/src/document/validation';
 import { projectLimits, readZip, writeZip } from '@/src/project/archive';
 import { ReportProjectError, safeProjectPath } from '@/src/project/model';
@@ -19,27 +20,14 @@ const manifestSchema = z.strictObject({
   ),
 });
 
-function imageMime(source: string): string | undefined {
-  const ext = source.split(/[?#]/, 1)[0].split('.').at(-1)?.toLowerCase();
-  return {
-    png: 'image/png',
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    gif: 'image/gif',
-    webp: 'image/webp',
-    svg: 'image/svg+xml',
-  }[ext ?? ''];
-}
+const imageMime = documentAssetMime;
 
 function localSources(document: DocumentData): string[] {
-  const sources = new Set<string>();
-  for (const node of walkDocumentTree(document.children)) {
-    if (node.type !== 'figure' && node.type !== 'inlineImage') continue;
-    const source = node.attrs.src;
-    if (!/^[a-z][a-z\d+.-]*:/i.test(source) && !source.startsWith('/'))
-      sources.add(source);
-  }
-  return [...sources];
+  return localDocumentAssets(document.children).map(({ source, kind }) => {
+    if ((imageMime(source) === 'application/pdf') !== (kind === 'pdf'))
+      throw new ReportProjectError('unsupportedFile', source);
+    return source;
+  });
 }
 
 /** The image entries use generated names, so original nested paths and duplicate basenames remain distinct. */
@@ -60,6 +48,8 @@ export async function writeDocumentArchive(
     const response = await fetch(url);
     if (!response.ok) throw new ReportProjectError('missingImage', image);
     const bytes = new Uint8Array(await response.arrayBuffer());
+    if (mime === 'application/pdf')
+      validatePdfBytes(bytes, response.headers.get('content-type') || mime);
     total += bytes.byteLength;
     if (
       bytes.byteLength > projectLimits.fileBytes ||
@@ -67,11 +57,13 @@ export async function writeDocumentArchive(
     )
       throw new ReportProjectError('archiveTooLarge');
     const extension =
-      mime === 'image/jpeg'
-        ? 'jpg'
-        : mime === 'image/svg+xml'
-          ? 'svg'
-          : mime.slice(6);
+      mime === 'application/pdf'
+        ? 'pdf'
+        : mime === 'image/jpeg'
+          ? 'jpg'
+          : mime === 'image/svg+xml'
+            ? 'svg'
+            : mime.slice(6);
     const file = `assets/${String(index + 1).padStart(4, '0')}.${extension}`;
     entries[file] = bytes;
     images.push({ source: image, file });
@@ -136,6 +128,7 @@ export async function readDocumentArchive(
       throw new ReportProjectError('invalidArchive');
     expected.add(path);
     mapped.set(image.source, path);
+    if (imageMime(path) === 'application/pdf') validatePdfBytes(entries[path]);
   }
   if (
     localSources(document).some((source) => !mapped.has(source)) ||

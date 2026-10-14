@@ -1,5 +1,6 @@
 import { documentTitle, type DocumentData } from '@/src/document/model';
-import { walkDocumentTree } from '@/src/document/traversal';
+import { localDocumentAssets, type DocumentAsset } from '@/src/document/assets';
+import { validatePdfBytes, maximumPdfBytes } from '@/src/document/pdf-source';
 import { migrateDocumentData } from '@/src/document/validation';
 import { parseMarkdown } from '@/src/markdown/parser';
 import { serializeDocument } from '@/src/markdown/serializer';
@@ -46,6 +47,70 @@ export const imageFileAccept =
   'image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.svg';
 
 let insertedAssetSerial = 0;
+const validatedPdfFiles = new WeakSet<File>();
+
+function isPdfAsset(file: File): boolean {
+  return (
+    /^application\/pdf(?:;|$)/i.test(file.type) ||
+    (!file.type && /\.pdf$/i.test(file.name))
+  );
+}
+
+async function validatePdfFile(file: File): Promise<void> {
+  if (!isPdfAsset(file)) throw new Error('PDFファイルを選択してください。');
+  if (file.size > maximumPdfBytes)
+    throw new Error('PDF原本が20 MiBを超えています。');
+  validatePdfBytes(
+    new Uint8Array(await file.arrayBuffer()),
+    file.type || 'application/pdf',
+  );
+  validatedPdfFiles.add(file);
+}
+
+export async function createInsertedPdfAsset(
+  file: File,
+  assets: AssetUrls,
+  occupiedSources: ReadonlySet<string> = new Set(),
+  existingAssetBytes = 0,
+  resolveSource: (source: string) => string = (source) => source,
+): Promise<{ source: string; url: string }> {
+  if (existingAssetBytes + file.size > maximumTotalAssetBytes)
+    throw new WorkspaceStatusError(statusMessage('imagesTooLarge'));
+  await validatePdfFile(file);
+  let source: string;
+  const stem = Array.from(
+    file.name
+      .replace(/\.pdf$/i, '')
+      .trim()
+      .replace(/[\\/:*?"<>|#]/g, '-')
+      .replace(/^\.+/, ''),
+  ).map((character) =>
+    character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127
+      ? '-'
+      : character,
+  );
+  let filename = '';
+  for (const character of stem) {
+    const encoded = encodeURIComponent(character).replace(
+      /[!'()*]/g,
+      (value) => '%' + value.charCodeAt(0).toString(16).toUpperCase(),
+    );
+    if (filename.length + encoded.length > 150) break;
+    filename += encoded;
+  }
+  filename = 'source-' + (filename || 'original') + '.pdf';
+  do {
+    insertedAssetSerial += 1;
+    source = `assets/pdf-${insertedAssetSerial}/${filename}`;
+  } while (assets.has(resolveSource(source)) || occupiedSources.has(source));
+  return {
+    source,
+    url: registerAssetUrl(
+      URL.createObjectURL(new Blob([file], { type: 'application/pdf' })),
+      file.size,
+    ),
+  };
+}
 
 export type DocumentFileFormat = 'markdown' | 'json';
 
@@ -98,6 +163,7 @@ export function createInsertedImageAsset(
   assets: AssetUrls,
   occupiedSources: ReadonlySet<string> = new Set(),
   existingAssetBytes = 0,
+  resolveSource: (source: string) => string = (source) => source,
 ): { source: string; url: string } {
   if (!isImageAsset(file))
     throw new WorkspaceStatusError(
@@ -114,7 +180,7 @@ export function createInsertedImageAsset(
   do {
     insertedAssetSerial += 1;
     source = 'assets/placed-image-' + insertedAssetSerial + '/' + filename;
-  } while (assets.has(source) || occupiedSources.has(source));
+  } while (assets.has(resolveSource(source)) || occupiedSources.has(source));
   return {
     source,
     url: registerAssetUrl(URL.createObjectURL(file), file.size),
@@ -131,15 +197,12 @@ function normalizedAssetPath(value: string): string {
   return decoded.replace(/^(?:\.\/)+/, '').replace(/^\/+/, '');
 }
 
-function localImageSources(document: DocumentData): string[] {
-  const sources = new Set<string>();
-  for (const node of walkDocumentTree(document.children)) {
-    if (node.type !== 'figure' && node.type !== 'inlineImage') continue;
-    const source = node.attrs.src.trim();
-    if (!/^[a-z][a-z\d+.-]*:/i.test(source) && !source.startsWith('/'))
-      sources.add(source);
-  }
-  return [...sources];
+function matchesAssetBasename(asset: DocumentAsset, file: File): boolean {
+  return (
+    normalizedAssetPath(file.name).split('/').at(-1) ===
+      normalizedAssetPath(asset.source).split('/').at(-1) ||
+    (asset.kind === 'pdf' && file.name === asset.fileName)
+  );
 }
 
 export function createLocalAssetUrls(
@@ -150,9 +213,11 @@ export function createLocalAssetUrls(
   const urls = new Map<string, string>();
   const unresolved: string[] = [];
   const urlByFile = new Map<File, string>();
+  const references = localDocumentAssets(document.children);
 
   try {
-    for (const source of localImageSources(document)) {
+    for (const reference of references) {
+      const { source, kind } = reference;
       if (resolvedSources.has(source)) continue;
       const normalizedSource = normalizedAssetPath(source);
       const exactMatches = files.filter((file) => {
@@ -164,23 +229,34 @@ export function createLocalAssetUrls(
           candidate.endsWith(`/${normalizedSource}`)
         );
       });
-      const basename = normalizedSource.split('/').at(-1);
       const matches =
         exactMatches.length > 0
           ? exactMatches
-          : files.filter(
-              (file) =>
-                normalizedAssetPath(file.name).split('/').at(-1) === basename,
-            );
+          : files.filter((file) => matchesAssetBasename(reference, file));
 
       if (matches.length !== 1) {
         unresolved.push(source);
         continue;
       }
       const file = matches[0];
+      // Different original PDFs may share a filename. Only their full relative paths identify them safely.
+      if (
+        kind === 'pdf' &&
+        exactMatches.length === 0 &&
+        references.filter(
+          (entry) => entry.kind === 'pdf' && matchesAssetBasename(entry, file),
+        ).length > 1
+      ) {
+        unresolved.push(source);
+        continue;
+      }
+      if (kind === 'pdf' && !validatedPdfFiles.has(file))
+        throw new Error('PDF原本を検証してから取り込んでください。');
       let url = urlByFile.get(file);
       if (!url) {
-        url = registerAssetUrl(URL.createObjectURL(file), file.size);
+        const blob =
+          kind === 'pdf' ? new Blob([file], { type: 'application/pdf' }) : file;
+        url = registerAssetUrl(URL.createObjectURL(blob), file.size);
         urlByFile.set(file, url);
       }
       urls.set(source, url);
@@ -229,10 +305,12 @@ export async function readWorkspaceFiles(
     throw new WorkspaceStatusError(statusMessage('selectOneSource'));
   const file = sources[0];
   const imageFiles = files.filter(
-    (candidate) => candidate !== file && isImageAsset(candidate),
+    (candidate) =>
+      candidate !== file && (isImageAsset(candidate) || isPdfAsset(candidate)),
   );
   const unsupported = files.filter(
-    (candidate) => candidate !== file && !isImageAsset(candidate),
+    (candidate) =>
+      candidate !== file && !isImageAsset(candidate) && !isPdfAsset(candidate),
   );
   if (unsupported.length > 0)
     throw new WorkspaceStatusError(
@@ -246,6 +324,10 @@ export async function readWorkspaceFiles(
     throw new Error('HTMLが150 MiBを超えています。');
   if (format !== 'html' && file.size > 5 * 1024 * 1024)
     throw new WorkspaceStatusError(statusMessage('markdownTooLarge'));
+
+  for (const attachment of imageFiles) {
+    if (isPdfAsset(attachment)) await validatePdfFile(attachment);
+  }
 
   const source = await file.text();
   if (format === 'html') {

@@ -1,5 +1,8 @@
 import { z } from 'zod';
+import { pdfSourceSchema } from './pdf-source';
 import { createNodeId, type DocumentMetadata, type FigureNode } from './model';
+import { diagramSchema } from './diagram';
+import { diagramSvg } from './diagram-svg';
 
 const percentage = z.number().min(0).max(100);
 export const figureCropSchema = z
@@ -42,8 +45,10 @@ export const figureAnnotationSchema = z
 export const figureEditSchema = z
   .object({
     version: z.literal(1),
+    pdfSource: pdfSourceSchema.optional(),
     name: z.string().max(200).optional(),
     svgSource: z.string().min(1).max(1_000_000).optional(),
+    diagram: diagramSchema.optional(),
     crop: figureCropSchema.optional(),
     imageSize: z
       .object({
@@ -101,6 +106,12 @@ export type FigureReference = z.infer<typeof figureReferenceSchema>;
 export function readFigureEdit(value: unknown): FigureEdit | undefined {
   const result = figureEditSchema.safeParse(value);
   return result.success ? result.data : undefined;
+}
+/** A structured diagram owns its content; an unrelated SVG source is kept as the external-source mode. */
+export function editableFigureSvgSource(
+  edit: FigureEdit | undefined,
+): string | undefined {
+  return edit?.diagram ? diagramSvg(edit.diagram) : edit?.svgSource;
 }
 export function figureReferences(
   metadata: DocumentMetadata,

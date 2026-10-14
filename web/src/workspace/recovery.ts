@@ -1,6 +1,7 @@
 import type { DocumentData } from '@/src/document/model';
 import type { ReportProject } from '@/src/project/model';
 import { registerAssetUrl, revokeAssetUrls, type AssetUrls } from './files';
+import { maximumPdfBytes, validatePdfBytes } from '@/src/document/pdf-source';
 
 const databaseName = 'kumi-workspace-recovery';
 const storeName = 'drafts';
@@ -237,7 +238,11 @@ export async function captureRecoveryAssets(
   const blobByUrl = new Map<string, Promise<Blob | null>>();
   const records = await Promise.all(
     [...assets].map(async ([path, url]) => {
-      if (!url.startsWith('blob:')) return null;
+      const pdf = /\.pdf$/i.test(path);
+      if (!url.startsWith('blob:')) {
+        if (pdf) throw new Error('PDF原本を復元用に保存できませんでした。');
+        return null;
+      }
       let copy = blobByUrl.get(url);
       if (!copy) {
         copy = fetch(url)
@@ -246,6 +251,15 @@ export async function captureRecoveryAssets(
         blobByUrl.set(url, copy);
       }
       const blob = await copy;
+      if (pdf) {
+        if (!blob) throw new Error('PDF原本を復元用に保存できませんでした。');
+        if (blob.size > maximumPdfBytes)
+          throw new Error('PDF原本が20 MiBを超えています。');
+        validatePdfBytes(
+          new Uint8Array(await blob.slice(0, 8).arrayBuffer()),
+          blob.type,
+        );
+      }
       return blob ? { path, blob } : null;
     }),
   );
@@ -256,13 +270,29 @@ export function restoreRecoveryAssets(
   assets: readonly RecoveryAsset[],
 ): AssetUrls {
   const urls = new Map<string, string>();
+  const urlByBlob = new Map<Blob, string>();
+  let total = 0;
   try {
     for (const asset of assets) {
       if (!asset.path || urls.has(asset.path)) continue;
-      urls.set(
-        asset.path,
-        registerAssetUrl(URL.createObjectURL(asset.blob), asset.blob.size),
-      );
+      if (
+        /\.pdf$/i.test(asset.path) &&
+        (asset.blob.type !== 'application/pdf' ||
+          asset.blob.size > maximumPdfBytes)
+      )
+        throw new Error('復元用PDF原本の形式またはサイズが不正です。');
+      let url = urlByBlob.get(asset.blob);
+      if (!url) {
+        total += asset.blob.size;
+        if (asset.blob.size > 20 * 1024 * 1024 || total > 50 * 1024 * 1024)
+          throw new Error('復元用素材のサイズ上限を超えています。');
+        url = registerAssetUrl(
+          URL.createObjectURL(asset.blob),
+          asset.blob.size,
+        );
+        urlByBlob.set(asset.blob, url);
+      }
+      urls.set(asset.path, url);
     }
     return urls;
   } catch (error) {

@@ -4,7 +4,11 @@
 // Inline SVG is the semantic image and preserves vector annotations in exports.
 
 import type { FigureNode } from '@/src/document/model';
-import { readFigureEdit, svgDataUrl } from '@/src/document/figure-edit';
+import {
+  readFigureEdit,
+  svgDataUrl,
+  editableFigureSvgSource,
+} from '@/src/document/figure-edit';
 import { sanitizeSvgSource } from '@/src/security/svg-source';
 
 export interface FigureGraphicSource {
@@ -17,7 +21,9 @@ export function resolveFigureGraphicSource(
   node: FigureNode,
   originalSource: string | undefined,
 ): FigureGraphicSource {
-  const sourceSvg = readFigureEdit(node.attrs.figureEdit)?.svgSource;
+  const sourceSvg = editableFigureSvgSource(
+    readFigureEdit(node.attrs.figureEdit),
+  );
   if (sourceSvg && typeof DOMParser !== 'undefined') {
     try {
       const svg = sanitizeSvgSource(sourceSvg);

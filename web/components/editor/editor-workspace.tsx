@@ -17,6 +17,9 @@ import { SlideCheckPanel } from './slide-check-panel';
 import { ReaderSupplementProperties } from './reader-supplement-properties';
 import { slideNavigationPages } from '@/src/document/slide-navigation';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import { PdfImportDialog } from './pdf-import-dialog';
+import type { FigureNode } from '@/src/document/model';
+import type { BlockInsertionTarget } from '@/src/editor/block-commands';
 
 export function EditorWorkspace() {
   const workspace = useDocumentWorkspace();
@@ -25,6 +28,10 @@ export function EditorWorkspace() {
   const [navigatorOpen, setNavigatorOpen] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [pdfImport, setPdfImport] = useState<{
+    node?: FigureNode;
+    target: BlockInsertionTarget;
+  } | null>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   const visualView = workspace.view === 'visual';
   // Search covers the visual editor only; other views keep the browser's own find.
@@ -163,6 +170,10 @@ export function EditorWorkspace() {
       resolveImageUrl={workspace.resolvePreviewImageUrl}
       updateMetadata={workspace.updateMetadata}
       focusNode={focusTarget}
+      onEditPdf={(node) => {
+        setPropertiesOpen(false);
+        setPdfImport({ node, target: 'after-block' });
+      }}
     />
   );
 
@@ -222,6 +233,7 @@ export function EditorWorkspace() {
           updateMarkdown={workspace.updateMarkdown}
           applyMarkdown={workspace.applyMarkdown}
           discardMarkdown={workspace.discardMarkdown}
+          openPdfImport={(target) => setPdfImport({ target })}
         />
         {properties()}
       </section>
@@ -251,6 +263,16 @@ export function EditorWorkspace() {
         onRestore={() => void workspace.restoreRecovery()}
         onDiscard={() => void workspace.discardRecovery()}
       />
+      {pdfImport && (
+        <PdfImportDialog
+          node={pdfImport.node}
+          target={pdfImport.target}
+          metadata={workspace.previewDocument.metadata}
+          resolveAssetUrl={workspace.resolveImageUrl}
+          onApply={workspace.applyPdfFigure}
+          onClose={() => setPdfImport(null)}
+        />
+      )}
       <HtmlImportDialog
         importResult={workspace.pendingHtmlImport}
         locale={locale}

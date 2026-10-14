@@ -236,7 +236,7 @@ export function ProjectPanel({
             ref={chapterInput}
             className="sr-only"
             type="file"
-            accept=".md,.markdown,.json,image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.svg"
+            accept=".md,.markdown,.json,image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.svg,application/pdf,.pdf"
             multiple
             aria-label={labels.addChapterFiles}
             disabled={disabled}

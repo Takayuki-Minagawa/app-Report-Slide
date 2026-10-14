@@ -21,6 +21,7 @@ import {
 } from '@/src/document/page-settings';
 import { pageSettingsMessages } from '@/src/i18n/page-settings';
 import { FormatToolbar } from './format-toolbar';
+import type { BlockInsertionTarget } from '@/src/editor/block-commands';
 import { TableToolbar } from './table-toolbar';
 import { TextRulerBar } from './text-ruler';
 
@@ -44,6 +45,7 @@ interface WorkspaceEditorProps {
   updateMarkdown: (source: string) => void;
   applyMarkdown: () => void;
   discardMarkdown: () => void;
+  openPdfImport?: (target: BlockInsertionTarget) => void;
 }
 
 export function WorkspaceEditor({
@@ -66,6 +68,7 @@ export function WorkspaceEditor({
   updateMarkdown,
   applyMarkdown,
   discardMarkdown,
+  openPdfImport,
 }: WorkspaceEditorProps) {
   const { copy, locale } = useAppPreferences();
   const settings = resolvePageSettings((previewDocument ?? document).metadata);
@@ -119,7 +122,11 @@ export function WorkspaceEditor({
 
       {view === 'visual' && (
         <>
-          <FormatToolbar editor={editor} documentType={document.type} />
+          <FormatToolbar
+            editor={editor}
+            documentType={document.type}
+            onOpenPdf={openPdfImport}
+          />
           <TableToolbar editor={editor} documentType={document.type} />
           <ScrollArea className="min-h-0 flex-1">
             <div className="editor-stage">

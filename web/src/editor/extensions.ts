@@ -5,7 +5,11 @@ import {
   type Extensions,
 } from '@tiptap/core';
 import { Image } from '@tiptap/extension-image';
-import { readFigureEdit, svgDataUrl } from '@/src/document/figure-edit';
+import {
+  readFigureEdit,
+  svgDataUrl,
+  editableFigureSvgSource,
+} from '@/src/document/figure-edit';
 import { sanitizeSvgSource } from '@/src/security/svg-source';
 import { Mathematics } from '@tiptap/extension-mathematics';
 import { TableKit } from '@tiptap/extension-table';
@@ -413,11 +417,10 @@ function createFigureExtension(resolveImageUrl: (source: string) => string) {
           : 'center';
       let resolvedSource = resolveSafeImageUrl(src, resolveImageUrl);
       const sourceEdit = readFigureEdit(figureEdit);
-      if (sourceEdit?.svgSource && typeof DOMParser !== 'undefined') {
+      const editableSvg = editableFigureSvgSource(sourceEdit);
+      if (editableSvg && typeof DOMParser !== 'undefined') {
         try {
-          resolvedSource = svgDataUrl(
-            sanitizeSvgSource(sourceEdit.svgSource).source,
-          );
+          resolvedSource = svgDataUrl(sanitizeSvgSource(editableSvg).source);
         } catch {
           /* Preserve the original if source is invalid. */
         }

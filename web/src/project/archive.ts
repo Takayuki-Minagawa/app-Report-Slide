@@ -16,7 +16,9 @@ import {
 } from '@/src/markdown/serializer';
 import type { MarkdownDiagnostic } from '@/src/markdown/diagnostics';
 import { registerAssetUrl, revokeAssetUrls } from '@/src/workspace/files';
-import { chapterImagePaths } from './assets';
+import { chapterImagePaths, chapterAssetReferences } from './assets';
+import { documentAssetMime } from '@/src/document/assets';
+import { validatePdfBytes } from '@/src/document/pdf-source';
 import {
   projectFileName,
   maximumProjectChapters,
@@ -63,19 +65,7 @@ const manifestSchema = z
   })
   .strict();
 
-function imageMime(path: string): string | undefined {
-  const extension = path.split('.').at(-1)?.toLowerCase();
-  return (
-    {
-      png: 'image/png',
-      jpg: 'image/jpeg',
-      jpeg: 'image/jpeg',
-      gif: 'image/gif',
-      webp: 'image/webp',
-      svg: 'image/svg+xml',
-    } as Record<string, string>
-  )[extension ?? ''];
-}
+const imageMime = documentAssetMime;
 
 export async function readZip(
   data: Uint8Array,
@@ -238,10 +228,17 @@ export async function readReportProject(file: File): Promise<ImportedProject> {
     ...project.chapters.map((chapter) => chapter.file),
   ]);
   const images = new Set(project.chapters.flatMap(chapterImagePaths));
+  for (const { source, kind } of project.chapters.flatMap(
+    chapterAssetReferences,
+  )) {
+    if ((imageMime(source) === 'application/pdf') !== (kind === 'pdf'))
+      throw new ReportProjectError('unsupportedFile', source);
+  }
   for (const path of images) {
     if (!entries[path]) throw new ReportProjectError('missingImage', path);
     if (!imageMime(path) || sources.has(path))
       throw new ReportProjectError('unsupportedFile', path);
+    if (imageMime(path) === 'application/pdf') validatePdfBytes(entries[path]);
   }
   for (const path of Object.keys(entries)) {
     if (!sources.has(path) && !images.has(path))
@@ -270,6 +267,12 @@ export async function writeReportProject(
   const entries: Record<string, Uint8Array> = Object.create(null);
   const manifest = manifestFromProject(project);
   const images = new Set(project.chapters.flatMap(chapterImagePaths));
+  for (const { source, kind } of project.chapters.flatMap(
+    chapterAssetReferences,
+  )) {
+    if ((imageMime(source) === 'application/pdf') !== (kind === 'pdf'))
+      throw new ReportProjectError('unsupportedFile', source);
+  }
   const pathKey = (path: string) =>
     safeProjectPath(path).normalize('NFC').toLowerCase();
   const reserved = new Set(
@@ -325,7 +328,13 @@ export async function writeReportProject(
       throw new ReportProjectError('missingImage', path);
     const response = await fetch(url);
     if (!response.ok) throw new ReportProjectError('missingImage', path);
-    addEntry(path, new Uint8Array(await response.arrayBuffer()));
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (imageMime(path) === 'application/pdf')
+      validatePdfBytes(
+        bytes,
+        response.headers.get('content-type') || 'application/pdf',
+      );
+    addEntry(path, bytes);
   }
   addEntry(
     projectFileName,

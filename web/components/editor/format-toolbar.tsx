@@ -43,13 +43,16 @@ import {
   type BlockInsertionTarget,
 } from '@/src/editor/block-commands';
 import { createConceptFigure } from '@/src/document/figure-edit';
+import { createStructuredDiagramFigure } from '@/src/document/diagram';
 
 export function FormatToolbar({
   editor,
   documentType,
+  onOpenPdf,
 }: {
   editor: Editor | null;
   documentType: DocumentType;
+  onOpenPdf?: (target: BlockInsertionTarget) => void;
 }) {
   const { copy, locale } = useAppPreferences();
   const [insertionTarget, setInsertionTarget] =
@@ -76,6 +79,24 @@ export function FormatToolbar({
       role="toolbar"
       aria-label={copy.workspace.format}
     >
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={!editor || inNotes}
+        onClick={() => insert(createStructuredDiagramFigure())}
+      >
+        {ja ? '図形で図解を作る' : 'Create a shape diagram'}
+      </Button>
+      {onOpenPdf && (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!editor || inNotes}
+          onClick={() => onOpenPdf(insertionTarget)}
+        >
+          {ja ? 'PDFから図を追加' : 'Add figure from PDF'}
+        </Button>
+      )}
       <FormatButton
         label={copy.workspace.bold}
         active={editor?.isActive('bold')}
