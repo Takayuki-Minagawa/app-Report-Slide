@@ -33,6 +33,9 @@ import {
   moveDiagramSelection,
   removeDiagramSelection,
   resizeDiagramSelection,
+  stackDiagramShapes,
+  nextDiagramPaintOrder,
+  explicitDiagramPaintOrder,
 } from '@/src/document/diagram-geometry';
 import { diagramSvg } from '@/src/document/diagram-svg';
 import { svgDataUrl } from '@/src/document/figure-edit';
@@ -126,7 +129,7 @@ function DiagramEditor({
     past: Diagram[];
     current: Diagram;
     future: Diagram[];
-  }>({ past: [], current: initial, future: [] });
+  }>({ past: [], current: explicitDiagramPaintOrder(initial), future: [] });
   const [selected, setSelected] = useState<string[]>(
     initial.shapes[0] ? [initial.shapes[0].id] : [],
   );
@@ -470,6 +473,7 @@ function DiagramEditor({
                   kind,
                   diagram.shapes.length + 1,
                 );
+                item.paintOrder = nextDiagramPaintOrder(diagram);
                 commit({ ...diagram, shapes: [...diagram.shapes, item] });
                 setSelected([item.id]);
               }}
@@ -494,6 +498,7 @@ function DiagramEditor({
                   arrow,
                   diagram.connections.length + 1,
                 );
+                item.paintOrder = nextDiagramPaintOrder(diagram);
                 commit({
                   ...diagram,
                   connections: [...diagram.connections, item],
@@ -985,19 +990,7 @@ function DiagramEditor({
                   variant="outline"
                   disabled={!bounds || locked}
                   onClick={() => {
-                    const chosen = diagram.shapes.filter((item) =>
-                      selection.includes(item.id),
-                    );
-                    const others = diagram.shapes.filter(
-                      (item) => !selection.includes(item.id),
-                    );
-                    commit({
-                      ...diagram,
-                      shapes:
-                        direction === 'front'
-                          ? [...others, ...chosen]
-                          : [...chosen, ...others],
-                    });
+                    commit(stackDiagramShapes(diagram, selection, direction));
                   }}
                 >
                   {direction === 'front' ? '図形を最前面へ' : '図形を最背面へ'}

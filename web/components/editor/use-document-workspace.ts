@@ -39,6 +39,10 @@ import {
   insertionPage,
 } from '@/src/editor/block-commands';
 import type { PdfFigureImport } from './pdf-import-dialog';
+import {
+  extractionBlocks,
+  extractionResultSchema,
+} from '@/src/document/extraction';
 import { createEditorExtensions } from '@/src/editor/extensions';
 import { defaultSlideImagePlacement } from '@/src/document/slide-layout';
 import { parseMarkdown, type ParseMarkdownResult } from '@/src/markdown/parser';
@@ -1389,6 +1393,9 @@ export function useDocumentWorkspace() {
 
   /** Keep the original PDF and page image together, including the assets needed by Undo. */
   const applyPdfFigure = async (value: PdfFigureImport) => {
+    const extraction = value.extraction
+      ? extractionResultSchema.parse(value.extraction)
+      : undefined;
     if (
       !editor ||
       editor.isDestroyed ||
@@ -1476,6 +1483,7 @@ export function useDocumentWorkspace() {
           `${value.fileName} p.${value.page}`.slice(0, 200),
         svgSource: undefined,
         diagram: undefined,
+        extraction,
         annotations: samePage ? old?.attrs.figureEdit?.annotations : undefined,
         crop: cropped ? value.crop : undefined,
         imageSize: value.imageSize,
@@ -1535,7 +1543,13 @@ export function useDocumentWorkspace() {
             figure.attrs,
             document.type,
           )
-        : insertDocumentBlock(editor, figure, value.target);
+        : insertDocumentBlock(
+            editor,
+            extraction
+              ? [figure, ...extractionBlocks(extraction, value.reference.id)]
+              : figure,
+            value.target,
+          );
       if (!changed)
         throw new Error(
           locale === 'ja'
@@ -1553,10 +1567,14 @@ export function useDocumentWorkspace() {
           locale === 'ja'
             ? old
               ? 'PDFの図を更新しました'
-              : `${pageNumber}ページにPDFの図を挿入しました`
+              : extraction
+                ? `${pageNumber}ページに原本と読み取り結果を挿入しました`
+                : `${pageNumber}ページにPDFの図を挿入しました`
             : old
               ? 'PDF figure updated'
-              : `PDF figure inserted on page ${pageNumber}`,
+              : extraction
+                ? `Original and extracted content inserted on page ${pageNumber}`
+                : `PDF figure inserted on page ${pageNumber}`,
       });
     } catch (error) {
       pdfHistoryAssets.current = previousHistory;

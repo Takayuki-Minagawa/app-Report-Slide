@@ -27,6 +27,8 @@ import {
 } from '@/src/document/figure-edit';
 import type { BlockInsertionTarget } from '@/src/editor/block-commands';
 import type { openPdf } from '@/src/pdf/pdf-renderer';
+import type { ExtractionResult } from '@/src/document/extraction';
+import { PdfExtractionReview } from './pdf-extraction-review';
 
 type PdfSession = Awaited<ReturnType<typeof openPdf>>;
 type Crop = NonNullable<FigureEdit['crop']>;
@@ -46,6 +48,7 @@ export interface PdfFigureImport {
   figureNumber: string;
   target: BlockInsertionTarget;
   replaceNodeId?: string;
+  extraction?: ExtractionResult;
 }
 
 /** Render only the page chosen by the user. The original PDF and full page remain separate from the crop. */
@@ -104,6 +107,8 @@ export function PdfImportDialog({
   );
   const [busy, setBusy] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [recognizing, setRecognizing] = useState(false);
+  const [extraction, setExtraction] = useState<ExtractionResult>();
   const [error, setError] = useState('');
   const resources = useRef<{
     revision: number;
@@ -275,8 +280,16 @@ export function PdfImportDialog({
     });
   };
   const validReference = figureReferenceSchema.safeParse(reference).success;
-  const apply = async () => {
-    if (!file || !rendered || !session || !validReference || busy || applying)
+  const apply = async (reviewed?: ExtractionResult) => {
+    if (
+      !file ||
+      !rendered ||
+      !session ||
+      !validReference ||
+      busy ||
+      applying ||
+      recognizing
+    )
       return;
     setApplying(true);
     setError('');
@@ -298,6 +311,7 @@ export function PdfImportDialog({
         figureNumber,
         target,
         replaceNodeId: node?.attrs.nodeId,
+        ...(reviewed ? { extraction: reviewed } : {}),
       });
       onClose();
     } catch (cause) {
@@ -636,8 +650,8 @@ export function PdfImportDialog({
             </details>
             <p className="text-xs text-muted-foreground">
               {t(
-                '文献情報は確認して入力してください。表の数値や文字は自動抽出しません。',
-                'Check and enter the reference details. Table values and text are not extracted automatically.',
+                '文献情報は確認して入力してください。文字・表の読み取り結果は、原本と照合してから挿入できます。',
+                'Check the reference details. Recognized text and tables can be inserted after review against the original.',
               )}
             </p>
             {node && page !== original?.page && (
@@ -650,6 +664,18 @@ export function PdfImportDialog({
             )}
           </fieldset>
         </div>
+        {!node && (
+          <PdfExtractionReview
+            session={session}
+            page={page}
+            rendered={rendered}
+            crop={crop}
+            ja={ja}
+            disabled={applying || busy}
+            onChange={setExtraction}
+            onBusyChange={setRecognizing}
+          />
+        )}
         {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}
@@ -667,8 +693,25 @@ export function PdfImportDialog({
           <Button variant="outline" disabled={applying} onClick={onClose}>
             {t('キャンセル', 'Cancel')}
           </Button>
+          {extraction && (
+            <Button
+              disabled={
+                !rendered || busy || applying || recognizing || !validReference
+              }
+              onClick={() => void apply(extraction)}
+            >
+              {applying
+                ? t('取り込み中…', 'Importing…')
+                : t(
+                    '原本と確認済みの内容を挿入',
+                    'Insert original and reviewed content',
+                  )}
+            </Button>
+          )}
           <Button
-            disabled={!rendered || busy || applying || !validReference}
+            disabled={
+              !rendered || busy || applying || recognizing || !validReference
+            }
             onClick={() => void apply()}
           >
             {applying

@@ -46,6 +46,7 @@ import type { ChartNode } from '@/src/document/model';
 import { FigureEditProperties } from './figure-edit-properties';
 import { BlockActions } from './block-actions';
 import { figureReferences } from '@/src/document/figure-edit';
+import { applyFigureExtraction } from '@/src/editor/extraction-commands';
 
 interface WorkspacePropertiesProps {
   slideTools?: ReactNode;
@@ -291,6 +292,23 @@ export function WorkspaceProperties({
                       resolveImageUrl={resolveImageUrl}
                       disabled={documentWriteLocked}
                       onApply={applyAttributes}
+                      onApplyExtraction={(next, insertText) => {
+                        if (
+                          documentWriteLocked ||
+                          !editor ||
+                          !applyFigureExtraction(
+                            editor,
+                            selectedSemantic.attrs.nodeId,
+                            next,
+                            insertText,
+                          )
+                        )
+                          throw new Error(
+                            locale === 'ja'
+                              ? '読み取り結果を適用できませんでした。'
+                              : 'Could not apply the extracted content.',
+                          );
+                      }}
                       onMetadataChange={(metadata) =>
                         updateMetadata(metadata as DocumentMetadata)
                       }

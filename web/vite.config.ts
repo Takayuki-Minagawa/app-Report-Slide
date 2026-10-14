@@ -4,6 +4,7 @@ import vinext, { type NextConfig } from 'vinext';
 import { defineConfig } from 'vite';
 import hostingConfig from './.openai/hosting.json' with { type: 'json' };
 import { pdfAssetsPlugin } from './build/pdf-assets-plugin';
+import { ocrAssetsPlugin } from './build/ocr-assets-plugin';
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   '00000000-0000-4000-8000-000000000000';
@@ -84,6 +85,7 @@ export default defineConfig(async () => {
       : undefined,
     plugins: [
       pdfAssetsPlugin(isGitHubPagesBuild ? pagesBasePath : ''),
+      ocrAssetsPlugin(isGitHubPagesBuild ? pagesBasePath : ''),
       vinext({ nextConfig }),
       sites(),
       cloudflare({

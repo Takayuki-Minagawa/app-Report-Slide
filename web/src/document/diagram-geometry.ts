@@ -18,6 +18,32 @@ export interface DiagramBounds extends DiagramPoint {
 const round = (value: number) => Math.round(value * 10000) / 10000;
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
+export function nextDiagramPaintOrder(diagram: Diagram): number {
+  return (
+    Math.max(
+      0,
+      ...diagram.shapes.map(
+        (item, index) => item.paintOrder ?? diagram.connections.length + index,
+      ),
+      ...diagram.connections.map((item, index) => item.paintOrder ?? index),
+      ...(diagram.svgFragments ?? []).map((item) => item.paintOrder),
+    ) + 1
+  );
+}
+/** Freeze implicit legacy order before adding parts changes the array lengths. */
+export function explicitDiagramPaintOrder(diagram: Diagram): Diagram {
+  return {
+    ...diagram,
+    connections: diagram.connections.map((item, index) => ({
+      ...item,
+      paintOrder: item.paintOrder ?? index,
+    })),
+    shapes: diagram.shapes.map((item, index) => ({
+      ...item,
+      paintOrder: item.paintOrder ?? diagram.connections.length + index,
+    })),
+  };
+}
 export function expandedDiagramSelection(
   diagram: Diagram,
   selected: readonly string[],
@@ -221,7 +247,19 @@ export function duplicateDiagramSelection(
   diagram: Diagram,
   selection: readonly string[],
 ): { diagram: Diagram; selected: string[] } {
+  diagram = explicitDiagramPaintOrder(diagram);
+  const originalOrder = [...diagram.connections, ...diagram.shapes]
+    .sort((a, b) => a.paintOrder! - b.paintOrder!)
+    .map((item) => item.id);
   const selected = expandedDiagramSelection(diagram, selection);
+  const front = Math.max(
+    0,
+    ...diagram.shapes.map(
+      (item, index) => item.paintOrder ?? diagram.connections.length + index,
+    ),
+    ...diagram.connections.map((item, index) => item.paintOrder ?? index),
+    ...(diagram.svgFragments ?? []).map((item) => item.paintOrder),
+  );
   const ids = new Map(
     diagram.shapes
       .filter((shape) => selected.includes(shape.id))
@@ -243,6 +281,7 @@ export function duplicateDiagramSelection(
         x: round(shape.x + dx),
         y: round(shape.y + dy),
         locked: false,
+        paintOrder: front + 1 + originalOrder.indexOf(shape.id),
         ...(shape.groupId ? { groupId: groups.get(shape.groupId) } : {}),
       };
     });
@@ -270,6 +309,7 @@ export function duplicateDiagramSelection(
         start: endpoint(edge.start),
         end: endpoint(edge.end),
         locked: false,
+        paintOrder: front + 1 + originalOrder.indexOf(edge.id),
       };
     });
   return {
@@ -282,6 +322,38 @@ export function duplicateDiagramSelection(
       ...shapes.map((shape) => shape.id),
       ...connections.map((edge) => edge.id),
     ],
+  };
+}
+
+/** Change z-order across editable parts and the retained source layers. */
+export function stackDiagramShapes(
+  diagram: Diagram,
+  selection: readonly string[],
+  direction: 'front' | 'back',
+): Diagram {
+  diagram = explicitDiagramPaintOrder(diagram);
+  const orders = [
+    ...diagram.shapes.map(
+      (item, index) => item.paintOrder ?? diagram.connections.length + index,
+    ),
+    ...diagram.connections.map((item, index) => item.paintOrder ?? index),
+    ...(diagram.svgFragments ?? []).map((item) => item.paintOrder),
+  ];
+  const chosen = diagram.shapes.filter((item) => selection.includes(item.id));
+  if (chosen.some((item) => item.locked)) return diagram;
+  const boundary =
+    direction === 'front'
+      ? Math.max(0, ...orders) + 1
+      : Math.min(0, ...orders) - chosen.length;
+  const others = diagram.shapes.filter((item) => !selection.includes(item.id));
+  const moved = chosen.map((shape, index) => ({
+    ...shape,
+    paintOrder: boundary + index,
+  }));
+  return {
+    ...diagram,
+    shapes:
+      direction === 'front' ? [...others, ...moved] : [...moved, ...others],
   };
 }
 

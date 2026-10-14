@@ -1,4 +1,5 @@
 import type { PDFPageProxy, RenderTask } from 'pdfjs-dist';
+import type { PageText, PositionedText } from './text-table';
 
 declare const __KUMI_PDF_ASSET_BASE__: string;
 
@@ -31,6 +32,7 @@ export interface PdfPageImage {
 export interface OpenPdf {
   pageCount: number;
   renderPage(page: number, dpi: number): Promise<PdfPageImage>;
+  extractPageText(page: number): Promise<PageText>;
   destroy(): Promise<void>;
 }
 
@@ -170,10 +172,116 @@ export async function openPdf(file: Blob, password?: string): Promise<OpenPdf> {
       if (canvas) canvas.width = canvas.height = 0;
     }
   };
+  const extract = async (pageNumber: number): Promise<PageText> => {
+    if (destroyed) throw abortError();
+    if (
+      !Number.isInteger(pageNumber) ||
+      pageNumber < 1 ||
+      pageNumber > document.numPages
+    )
+      throw new Error(`PDFページは1〜${document.numPages}で指定してください。`);
+    let page: PDFPageProxy | undefined;
+    try {
+      page = await document.getPage(pageNumber);
+      if (destroyed) throw abortError();
+      const viewport = page.getViewport({ scale: 1 });
+      const content = await page.getTextContent();
+      if (destroyed) throw abortError();
+      if (content.items.length > 20_000)
+        throw new Error(
+          'このページには文字が多すぎます。別のページを選択してください。',
+        );
+      const words: PositionedText[] = [];
+      const warnings: string[] = [];
+      let rotated = false;
+      let characters = 0;
+      for (const item of content.items) {
+        if (!('str' in item) || !item.str.trim()) continue;
+        characters += item.str.length;
+        if (characters > 200_000)
+          throw new Error('このPDFページの文字数が上限を超えています。');
+        const [a, b, c, d, e, f] = viewport.transform;
+        const [g, h, i, j, k, l] = item.transform as number[];
+        const tx = [
+          a * g + c * h,
+          b * g + d * h,
+          a * i + c * j,
+          b * i + d * j,
+          a * k + c * l + e,
+          b * k + d * l + f,
+        ];
+        const horizontal = Math.hypot(tx[0], tx[1]);
+        const fontHeight = Math.hypot(tx[2], tx[3]);
+        if (!horizontal || !fontHeight || !tx.every(Number.isFinite)) continue;
+        const style = content.styles[item.fontName];
+        const ascent = Number.isFinite(style?.ascent) ? style.ascent : 0.8;
+        const descent = Number.isFinite(style?.descent) ? style.descent : -0.2;
+        // getTextContent uses PDF user-space units; viewport.transform also
+        // incorporates a page's UserUnit. Scale advances just like positions.
+        const width = item.width * Math.hypot(a, b);
+        if (!(width > 0) || !Number.isFinite(width)) continue;
+        const right = { x: tx[0] / horizontal, y: tx[1] / horizontal };
+        const up = { x: tx[2] / fontHeight, y: tx[3] / fontHeight };
+        if (Math.abs(right.y) > 0.15 || style?.vertical || item.dir === 'ttb')
+          rotated = true;
+        const points = [0, width].flatMap((offset) =>
+          [descent, ascent].map((vertical) => ({
+            x: tx[4] + right.x * offset + up.x * fontHeight * vertical,
+            y: tx[5] + right.y * offset + up.y * fontHeight * vertical,
+          })),
+        );
+        const bbox = {
+          x0: Math.min(...points.map((point) => point.x)),
+          y0: Math.min(...points.map((point) => point.y)),
+          x1: Math.max(...points.map((point) => point.x)),
+          y1: Math.max(...points.map((point) => point.y)),
+        };
+        // Some PDFs store several columns in one run separated by repeated
+        // spaces. Retain the string, using proportional positions only here.
+        const matches = [...item.str.matchAll(/\S(?:.*?\S)?(?=\s{2,}|$)/g)];
+        if (matches.length > 1 && !rotated) {
+          for (const match of matches) {
+            const start = match.index ?? 0;
+            words.push({
+              text: match[0],
+              bbox: {
+                ...bbox,
+                x0: bbox.x0 + (start / item.str.length) * (bbox.x1 - bbox.x0),
+                x1:
+                  bbox.x0 +
+                  ((start + match[0].length) / item.str.length) *
+                    (bbox.x1 - bbox.x0),
+              },
+            });
+          }
+        } else words.push({ text: item.str, bbox });
+      }
+      if (rotated)
+        warnings.push(
+          '縦書き・回転した文字があります。読み順と表の列を確認してください。',
+        );
+      return {
+        width: viewport.width,
+        height: viewport.height,
+        words,
+        warnings,
+      };
+    } finally {
+      page?.cleanup();
+    }
+  };
   return {
     pageCount: document.numPages,
     renderPage(page, dpi) {
       const result = queue.then(() => render(page, dpi));
+      queue = result.then(
+        () => undefined,
+        () => undefined,
+      );
+      return result;
+    },
+    extractPageText(page) {
+      const result = queue.then(() => extract(page));
       queue = result.then(
         () => undefined,
         () => undefined,

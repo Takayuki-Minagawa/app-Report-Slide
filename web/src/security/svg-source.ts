@@ -17,6 +17,8 @@ export function sanitizeSvgSource(source: string): {
     throw new Error('SVGの構文を確認してください。');
   const clean = DOMPurify.sanitize(source, {
     USE_PROFILES: { svg: true, svgFilters: true },
+    // Internal use references are kept; the pass below removes external hrefs.
+    ADD_TAGS: ['use'],
     FORBID_TAGS: [
       'style',
       'foreignObject',

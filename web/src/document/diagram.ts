@@ -20,6 +20,14 @@ export const diagramShapeSchema = z
     fontSize: z.number().min(8).max(72),
     textColor: color.optional(),
     textLineHeight: z.number().min(1).max(2.5).optional(),
+    // Imported SVG positions and paint order remain explicit when parts are edited.
+    cornerRadius: z.number().min(0).max(1200).optional(),
+    cornerRadiusY: z.number().min(0).max(1200).optional(),
+    textAnchor: z.enum(['start', 'middle', 'end']).optional(),
+    textBaseline: z.enum(['central', 'alphabetic']).optional(),
+    fontFamily: z.string().max(300).optional(),
+    fontWeight: z.enum(['normal', 'bold']).optional(),
+    paintOrder: z.number().optional(),
     locked: z.boolean(),
     groupId: identifier.optional(),
   })
@@ -53,6 +61,7 @@ export const diagramConnectionSchema = z
     labelColor: color.optional(),
     labelFontSize: z.number().min(8).max(72).optional(),
     locked: z.boolean(),
+    paintOrder: z.number().optional(),
   })
   .strict();
 export const diagramSchema = z
@@ -62,9 +71,34 @@ export const diagramSchema = z
     height: z.number().min(180).max(1800),
     shapes: z.array(diagramShapeSchema).max(200),
     connections: z.array(diagramConnectionSchema).max(300),
+    svgFragments: z
+      .array(
+        z
+          .object({
+            source: z.string().max(1_000_000),
+            paintOrder: z.number(),
+            name: z.string().max(200),
+          })
+          .strict(),
+      )
+      .max(500)
+      .optional(),
+    svgDefinitions: z.string().max(1_000_000).optional(),
   })
   .strict()
   .superRefine((diagram, context) => {
+    if (
+      (diagram.svgDefinitions?.length ?? 0) +
+        (diagram.svgFragments ?? []).reduce(
+          (sum, item) => sum + item.source.length,
+          0,
+        ) >
+      900_000
+    )
+      context.addIssue({
+        code: 'custom',
+        message: '保持するSVG部品は合計900 KB以内にしてください',
+      });
     const all = [...diagram.shapes, ...diagram.connections];
     if (new Set(all.map((item) => item.id)).size !== all.length)
       context.addIssue({

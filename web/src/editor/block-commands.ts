@@ -40,7 +40,7 @@ export function insertionPage(
 
 export function insertDocumentBlock(
   editor: Editor,
-  value: JSONContent,
+  value: JSONContent | JSONContent[],
   target: BlockInsertionTarget,
 ): boolean {
   if (!editor.isEditable) return false;

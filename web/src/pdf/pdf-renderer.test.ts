@@ -40,6 +40,20 @@ function mockDocument() {
     getViewport: vi.fn(({ scale }: { scale: number }) => ({
       width: 612 * scale,
       height: 792 * scale,
+      transform: [scale, 0, 0, -scale, 0, 792 * scale],
+    })),
+    getTextContent: vi.fn(async () => ({
+      items: [
+        {
+          str: 'Measured value',
+          width: 80,
+          height: 12,
+          transform: [12, 0, 0, 12, 36, 720],
+          fontName: 'f1',
+          dir: 'ltr',
+        },
+      ],
+      styles: { f1: { ascent: 0.8, descent: -0.2, vertical: false } },
     })),
     render,
     cleanup: vi.fn(),
@@ -171,6 +185,42 @@ describe('PDF raster import', () => {
     pdf.numPages = 5001;
     await expect(openPdf(inputPdf())).rejects.toThrow('5,000ページ');
     expect(destroy).toHaveBeenCalledOnce();
+  });
+
+  it('extracts text coordinates in the rotated viewport coordinate system and cleans up pages', async () => {
+    const { page, pdf } = mockDocument();
+    const opened = await openPdf(inputPdf());
+    const text = await opened.extractPageText(1);
+    expect(text).toMatchObject({ width: 612, height: 792, warnings: [] });
+    expect(text.words).toEqual([
+      { text: 'Measured value', bbox: { x0: 36, y0: 62.4, x1: 116, y1: 74.4 } },
+    ]);
+    expect(page.cleanup).toHaveBeenCalledOnce();
+    await expect(opened.extractPageText(0)).rejects.toThrow('1〜2');
+    expect(pdf.getPage).toHaveBeenCalledOnce();
+    await opened.destroy();
+    await expect(opened.extractPageText(1)).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+  });
+
+  it('scales text advances along with origins and font height for PDF UserUnit', async () => {
+    const { page } = mockDocument();
+    page.getViewport.mockImplementation(({ scale }: { scale: number }) => ({
+      width: 612 * scale * 2,
+      height: 792 * scale * 2,
+      transform: [scale * 2, 0, 0, -scale * 2, 0, 792 * scale * 2],
+    }));
+    const opened = await openPdf(inputPdf());
+    const text = await opened.extractPageText(1);
+    expect(text).toMatchObject({ width: 1224, height: 1584 });
+    expect(text.words).toEqual([
+      {
+        text: 'Measured value',
+        bbox: { x0: 72, y0: 124.8, x1: 232, y1: 148.8 },
+      },
+    ]);
+    await opened.destroy();
   });
 
   it('serializes page renders, and closing cancels the active render and rejects queued work', async () => {

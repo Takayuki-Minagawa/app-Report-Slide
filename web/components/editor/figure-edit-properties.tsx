@@ -22,6 +22,13 @@ import {
 import { sanitizeSvgSource } from '@/src/security/svg-source';
 import { resolveSafeImageUrl } from '@/src/security/resource-url';
 import { DiagramEditorDialog } from './diagram-editor-dialog';
+import { SvgConversionDialog } from './svg-conversion-dialog';
+import {
+  convertSvgToDiagram,
+  type SvgConversion,
+} from '@/src/document/svg-to-diagram';
+import { OcrImageDialog } from './ocr-image-dialog';
+import { ExtractionEvidence } from './extraction-evidence';
 
 const emptySource = {
   referenceId: '',
@@ -41,6 +48,7 @@ export function FigureEditProperties({
   disabled,
   onApply,
   onMetadataChange,
+  onApplyExtraction,
 }: {
   node: FigureNode;
   metadata: DocumentMetadata;
@@ -48,6 +56,7 @@ export function FigureEditProperties({
   disabled: boolean;
   onApply: (nodeId: string, attrs: Record<string, unknown>) => void;
   onMetadataChange: (metadata: Record<string, unknown>) => void;
+  onApplyExtraction?: (next: FigureEdit, insertText: boolean) => void;
 }) {
   const referenceFormId = useId();
   const current = readFigureEdit(node.attrs.figureEdit) ?? {
@@ -55,6 +64,8 @@ export function FigureEditProperties({
   };
   const [edit, setEdit] = useState<FigureEdit>(current);
   const [message, setMessage] = useState('');
+  const [conversion, setConversion] = useState<SvgConversion | null>(null);
+  const [ocrOpen, setOcrOpen] = useState(false);
   const [imageSize, setImageSize] = useState(current.imageSize);
   const [reference, setReference] = useState<FigureReference>(
     () =>
@@ -160,11 +171,105 @@ export function FigureEditProperties({
             ? 'SVGソースを編集できる図です。ラベルと矢印は下の操作またはソースで変更できます。'
             : '画像として配置しています。画像内の文字は直接編集できません。SVG原本を指定するとソースを編集できます。'}
       </p>
+      <Button size="sm" variant="outline" onClick={() => setOcrOpen(true)}>
+        画像の文字をOCRで読み取る
+      </Button>
+      {ocrOpen && (
+        <OcrImageDialog
+          node={node}
+          resolveAssetUrl={resolveImageUrl}
+          onClose={() => setOcrOpen(false)}
+          onApply={(next, insertText) => {
+            setEdit(next);
+            if (onApplyExtraction) onApplyExtraction(next, insertText);
+            else onApply(node.attrs.nodeId, { figureEdit: next });
+            setOcrOpen(false);
+          }}
+        />
+      )}
+      {current.extraction && <ExtractionEvidence value={current.extraction} />}
+      {edit.svgSource && !edit.diagram && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            try {
+              setConversion(convertSvgToDiagram(edit.svgSource!));
+            } catch (error) {
+              setMessage(
+                error instanceof Error
+                  ? error.message
+                  : 'SVGを分解できませんでした。',
+              );
+            }
+          }}
+        >
+          SVGを部品に分解
+        </Button>
+      )}
+      {conversion && (
+        <SvgConversionDialog
+          conversion={conversion}
+          onClose={() => setConversion(null)}
+          onApply={() => {
+            const next: FigureEdit = {
+              ...edit,
+              diagram: conversion.diagram,
+              imageSize: {
+                width: conversion.diagram.width,
+                height: conversion.diagram.height,
+              },
+            };
+            setEdit(next);
+            setImageSize(next.imageSize);
+            onApply(node.attrs.nodeId, { figureEdit: next });
+            setConversion(null);
+            setMessage(
+              'SVG原本と保持した部品を残して分解しました。図形をドラッグして編集できます。',
+            );
+          }}
+        />
+      )}
+      {edit.diagram && edit.svgSource && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            const { diagram: _diagram, ...next } = edit;
+            try {
+              const original = sanitizeSvgSource(next.svgSource!);
+              next.imageSize = {
+                width: original.width,
+                height: original.height,
+              };
+              setEdit(next);
+              setImageSize(next.imageSize);
+              onApply(node.attrs.nodeId, { figureEdit: next });
+              setMessage(
+                'SVG原本の表示に戻しました。分解後の編集は文書の「元に戻す」で復帰できます。',
+              );
+            } catch (error) {
+              setMessage(
+                error instanceof Error
+                  ? error.message
+                  : 'SVG原本に戻せませんでした。',
+              );
+            }
+          }}
+        >
+          SVG原本に戻す
+        </Button>
+      )}
       {edit.diagram && (
         <DiagramEditorDialog
           diagram={edit.diagram}
           disabled={disabled}
           onApply={(diagram) => {
+            setEdit({
+              ...edit,
+              diagram,
+              imageSize: { width: diagram.width, height: diagram.height },
+            });
             onApply(node.attrs.nodeId, {
               figureEdit: {
                 ...edit,

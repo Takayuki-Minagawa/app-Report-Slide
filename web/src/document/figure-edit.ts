@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { pdfSourceSchema } from './pdf-source';
+import { extractionResultSchema } from './extraction';
 import { createNodeId, type DocumentMetadata, type FigureNode } from './model';
 import { diagramSchema } from './diagram';
 import { diagramSvg } from './diagram-svg';
@@ -46,6 +47,7 @@ export const figureEditSchema = z
   .object({
     version: z.literal(1),
     pdfSource: pdfSourceSchema.optional(),
+    extraction: extractionResultSchema.optional(),
     name: z.string().max(200).optional(),
     svgSource: z.string().min(1).max(1_000_000).optional(),
     diagram: diagramSchema.optional(),
