@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { Editor } from '@tiptap/react';
 import { useAppPreferences } from '@/components/app-preferences';
 import { Badge } from '@/components/ui/badge';
@@ -36,9 +36,11 @@ import {
 import { SemanticProperties } from './semantic-properties';
 import { ChartProperties } from './chart-properties';
 import { FootnoteProperties } from './footnote-properties';
+import { FigurePlacementProperties } from './figure-placement-properties';
 import type { ChartNode } from '@/src/document/model';
 
 interface WorkspacePropertiesProps {
+  slideTools?: ReactNode;
   overlay?: boolean;
   idPrefix?: string;
   document: DocumentData;
@@ -60,6 +62,7 @@ interface WorkspacePropertiesProps {
 }
 
 export function WorkspaceProperties({
+  slideTools,
   overlay = false,
   idPrefix = 'workspace',
   document,
@@ -121,26 +124,30 @@ export function WorkspaceProperties({
               <dd className="truncate" title={documentTitle(document)}>
                 {documentTitle(document)}
               </dd>
-              <dt>{copy.workspace.theme}</dt>
-              <dd>
-                <NativeSelect
-                  aria-label={copy.workspace.theme}
-                  size="sm"
-                  className="w-full"
-                  disabled={documentWriteLocked}
-                  value={resolveDocumentTheme(
-                    document.type,
-                    document.metadata.theme,
-                  )}
-                  onChange={(event) => updateTheme(event.target.value)}
-                >
-                  {themeOptions.map(([value, label]) => (
-                    <NativeSelectOption key={value} value={value}>
-                      {label}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-              </dd>
+              {(document.type === 'report' || !slideTools) && (
+                <>
+                  <dt>{copy.workspace.theme}</dt>
+                  <dd>
+                    <NativeSelect
+                      aria-label={copy.workspace.theme}
+                      size="sm"
+                      className="w-full"
+                      disabled={documentWriteLocked}
+                      value={resolveDocumentTheme(
+                        document.type,
+                        document.metadata.theme,
+                      )}
+                      onChange={(event) => updateTheme(event.target.value)}
+                    >
+                      {themeOptions.map(([value, label]) => (
+                        <NativeSelectOption key={value} value={value}>
+                          {label}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                  </dd>
+                </>
+              )}
             </dl>
             <div className="mt-3 space-y-2">
               {flagOptions.map(([key, title]) => (
@@ -212,6 +219,7 @@ export function WorkspaceProperties({
             )}
           </section>
 
+          {slideTools}
           {document.type === 'report' && (
             <>
               <Separator />
@@ -271,6 +279,15 @@ export function WorkspaceProperties({
                     onApply={applyAttributes}
                   />
                 )}
+                {document.type === 'slide' &&
+                  selectedSemantic?.type === 'figure' && (
+                    <FigurePlacementProperties
+                      key={`placement:${selectedSemantic.attrs.nodeId}:${JSON.stringify(selectedSemantic.attrs)}`}
+                      node={selectedSemantic}
+                      disabled={documentWriteLocked}
+                      onApply={applyAttributes}
+                    />
+                  )}
                 {selectedNode.type === 'footnote' && (
                   <FootnoteProperties
                     key={`${selectedNode.position}:${footnoteText}`}

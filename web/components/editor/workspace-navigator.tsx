@@ -65,6 +65,9 @@ interface WorkspaceNavigatorProps {
   focusNode: (nodeId: string) => void;
   importFiles: (files: readonly File[]) => Promise<void>;
   createDocument: (type: DocumentType) => void;
+  loadSample: (type: DocumentType) => void;
+  openRecovery: () => void;
+  children?: ReactNode;
 }
 
 export function WorkspaceNavigator({
@@ -76,8 +79,11 @@ export function WorkspaceNavigator({
   focusNode,
   importFiles,
   createDocument,
+  loadSample,
+  openRecovery,
+  children,
 }: WorkspaceNavigatorProps) {
-  const { copy } = useAppPreferences();
+  const { copy, locale } = useAppPreferences();
   const markdownInput = useRef<HTMLInputElement>(null);
   return (
     <aside
@@ -87,7 +93,7 @@ export function WorkspaceNavigator({
         ref={markdownInput}
         className="sr-only"
         type="file"
-        accept=".md,.markdown,.json,.zip,application/json,text/markdown,image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.svg"
+        accept=".html,.htm,text/html,.md,.markdown,.json,.zip,application/json,text/markdown,image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.svg"
         multiple
         disabled={documentWriteLocked}
         onChange={(event) => {
@@ -111,7 +117,13 @@ export function WorkspaceNavigator({
       </div>
       <Separator />
       <ScrollArea className="min-h-0 flex-1">
-        {projectPanel}
+        <details className="border-b p-3 text-xs">
+          <summary className="cursor-pointer font-medium">
+            {locale === 'ja' ? '章別プロジェクト' : 'Chapter project'}
+          </summary>
+          {projectPanel}
+        </details>
+        {children}
         <nav
           aria-label={copy.workspace.documentStructure}
           className="space-y-1 p-2"
@@ -129,6 +141,7 @@ export function WorkspaceNavigator({
                 <button
                   key={nodeId}
                   type="button"
+                  aria-current={active ? 'true' : undefined}
                   className={`navigator-item ${active ? 'navigator-item-active' : ''}`}
                   onClick={() => focusNode(nodeId)}
                 >
@@ -176,6 +189,37 @@ export function WorkspaceNavigator({
             <FilePlus2 /> {copy.workspace.newSlide}
           </Button>
         </div>
+        <details className="text-xs">
+          <summary className="cursor-pointer py-1 text-muted-foreground">
+            {locale === 'ja' ? 'サンプルを開く' : 'Open an example'}
+          </summary>
+          <div className="flex gap-2 pt-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={documentWriteLocked}
+              onClick={() => loadSample('report')}
+            >
+              {locale === 'ja' ? 'Reportサンプル' : 'Report example'}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={documentWriteLocked}
+              onClick={() => loadSample('slide')}
+            >
+              {locale === 'ja' ? 'Slideサンプル' : 'Slide example'}
+            </Button>
+          </div>
+        </details>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="w-full justify-start"
+          onClick={openRecovery}
+        >
+          {locale === 'ja' ? '未保存の作業を確認' : 'Review recovery copies'}
+        </Button>
       </div>
     </aside>
   );

@@ -319,11 +319,11 @@ export const messages: Record<AppLocale, UiMessages> = {
       propertiesPanel: 'PROPERTIES',
       showDocumentPanel: '文書パネルを開く',
       showPropertiesPanel: 'Propertiesを開く',
-      markdownFile: 'Markdownファイル',
+      markdownFile: 'HTML・Markdown・JSONファイル',
       documentStructure: '文書構成',
       noOutline: '構成要素はまだありません',
-      importHint: 'Markdown / Document JSON ＋ 画像',
-      openMarkdown: 'Markdownを開く',
+      importHint: 'HTML / Markdown / JSON / ZIP ＋ 画像',
+      openMarkdown: 'HTML・原稿を開く',
       newReport: 'Report',
       newSlide: 'Slide',
       visual: 'ビジュアル編集',
@@ -431,8 +431,8 @@ export const messages: Record<AppLocale, UiMessages> = {
       image: '画像',
       table: '表',
       code: 'コード',
-      exportHtml: 'HTMLスライドを出力',
-      exportReportHtml: 'Report HTMLを出力',
+      exportHtml: '編集できるHTMLを保存',
+      exportReportHtml: '編集できるReport HTMLを保存',
       exportWord: 'Word（.docx）を出力',
       exportPowerPoint: 'PowerPoint（.pptx）を出力',
       exportPdf: 'PDFを出力',
@@ -485,13 +485,15 @@ export const messages: Record<AppLocale, UiMessages> = {
     },
     status: {
       ready: '準備完了',
-      readyDescription: 'Document ModelとEditorを同期しています',
+      readyDescription:
+        '空の文書から作成できます。原稿やサンプルは文書パネルから開けます。',
       unableToSerialize: '文書を変換できません',
       editing: '編集中',
       editingDescription: '変更はブラウザ内に保持されています',
       markdownUnsupported:
         'この文書はDocument JSONで保存してください。Markdownでは表現できない構造を保持しています。',
-      selectOneSource: 'MarkdownまたはDocument JSONを1つだけ選択してください',
+      selectOneSource:
+        'HTML・Markdown・Document JSONから原稿を1つ選択してください',
       unsupportedAttachments: (files) =>
         `画像以外の添付ファイルは読み込めません: ${files}`,
       markdownTooLarge: 'Markdownファイルは5MB以下にしてください',
@@ -536,7 +538,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       editingMarkdownDescription:
         '適用または保存するまで下書きとして保持されます',
       exportingHtml: 'HTMLスライドを生成しています',
-      exportedHtml: 'HTMLスライドを出力しました',
+      exportedHtml: '編集できるHTMLのダウンロードを開始しました',
       exportingFile: (format) => `${format}ファイルを生成しています`,
       exportedFile: (format) => `${format}ファイルを出力しました`,
       unableToExportFile: (format) => `${format}ファイルを出力できませんでした`,
@@ -555,7 +557,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       htmlExternalImages:
         '外部URLの画像はリンクのままです。表示には通信が必要です。',
       htmlExportDescription:
-        'HTMLは閲覧・発表用です。編集用の原稿はMarkdownまたはJSONで別途保存してください。',
+        'HTMLに編集情報を含めました。同じHTMLを開いて再編集できます。端末への保存結果はブラウザーで確認してください。章構成の保存にはプロジェクトZIPを使用します。',
       recoveredDraft: '未保存の作業を復元しました',
       unableToRecover: '未保存の作業を復元できませんでした',
       recoveryUnavailable: '端末内の復旧用保存を利用できません',
@@ -598,7 +600,7 @@ export const messages: Record<AppLocale, UiMessages> = {
     recovery: {
       foundTitle: '未保存の作業が見つかりました',
       foundDescription:
-        'このブラウザに一時保存された作業があります。復元して続けるか、削除して新しい文書を開始できます。',
+        '候補を選んで復元・削除できます。閉じる操作や復元だけではコピーを削除しません。',
       savedAt: (title, time) => `「${title}」・${time} に一時保存`,
       restore: '復元する',
       discard: '削除する',
@@ -607,7 +609,7 @@ export const messages: Record<AppLocale, UiMessages> = {
     manual: {
       projectTitle: '6. 長いレポートを章に分ける',
       projectSteps: [
-        'Reportを開き、左側の「現在のReportをプロジェクト化」を選びます。「空の章を追加」または「原稿を章として追加」（原稿1件＋画像）で章を増やします。',
+        'Reportを開き、左側の「章別プロジェクト」を開き、「現在のReportをプロジェクト化」を選びます。「空の章を追加」または「原稿を章として追加」（原稿1件＋画像）で章を増やします。',
         '章名を選んで編集し、上へ／下へで順序を変えます。「全体出力に含める」を外すと原稿を残したまま除外します。削除には確認が必要です。',
         '章の先頭と本文の改ページを組み合わせます。全体プレビューは1ページずつ表示し、目次・参照のリンクから別ページへ移動できます。番号と参照は有効な章全体で計算します。',
         '「プロジェクトZIPを保存」で構成、全章、取り込んだ画像をまとめて保存します。再開時は「プロジェクトZIPを開く」を使います。Markdownで表せない章はZIP内でJSONとして保持します。',
@@ -616,7 +618,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       ],
       recoveryTitle: '端末内の復旧用保存',
       recoverySteps: [
-        '未保存の本文、章構成、未適用Markdown、取り込んだ画像は、このブラウザ内に一時保存されます。次回開いたときに復元するか選べます。',
+        '未保存の本文、章構成、未適用Markdown、取り込んだ画像は、このブラウザ内に一時保存されます。「未保存の作業を確認」から必要なときだけ復元できます。',
         '復旧用保存は端末内だけで、公開サイトやリポジトリへ送信されません。ブラウザのデータ削除や容量不足で失われる場合があるため、Markdown／JSON／プロジェクトZIPを原本として保存してください。',
       ],
       title: 'KUMI かんたんガイド',
@@ -654,10 +656,12 @@ export const messages: Record<AppLocale, UiMessages> = {
         'ヘッダーのMarkdownまたはJSONでファイルを保存します。Document JSONはMarkdownで表せない構造も保持できます。',
         'Slide文書では「HTML」で閲覧・発表用の単一HTMLファイルを出力できます。前へ／次へボタンや矢印キーで移動し、進捗バーで現在位置を確認できます。Fキーで全画面表示、Pキーまたは「印刷／PDF保存」で全スライドを印刷できます。',
         'HTMLスライドでは O で一覧、数字＋Enter で番号を指定して移動、B で暗転できます。N は発表者ノートを画面下に、S は現在と次のスライド・ノート・経過時間を別ウィンドウ（発表者ビュー）に表示します。ノートは印刷されません。',
-        '数式用フォントと取り込んだ画像はHTMLに含まれます。外部URLの画像には通信が必要です。HTML出力だけでは編集用原稿は保存されないため、MarkdownまたはJSONも保存してください。',
+        '数式用フォントと取り込んだ画像はHTMLに含まれます。外部URLの画像には通信が必要です。HTML内に編集情報も含まれるため、「HTML・原稿を開く」から再編集できます。章構成はプロジェクトZIPに保存してください。',
       ],
       preferencesTitle: '5. 表示を切り替える',
       preferencesSteps: [
+        '起動時は空の文書を表示します。過去の作業は「未保存の作業を確認」、サンプルは「サンプルを開く」から必要なときだけ表示します。閉じても復元候補は残ります。',
+        'SlideのPropertiesでデザインと文字サイズを選び、適用範囲とプレビューを確認して適用します。「全ページをチェック」で配置の問題を確認できます。',
         'ヘッダーの月／太陽ボタンでライト・ダークモードを切り替えます。文書の紙面プレビューは読みやすさのため白い紙面として保たれます。',
         '「EN」または「日本語」ボタンでアプリ操作画面を切り替えます。編集中の文書本文は自動翻訳されません。',
       ],
@@ -683,11 +687,11 @@ export const messages: Record<AppLocale, UiMessages> = {
       propertiesPanel: 'PROPERTIES',
       showDocumentPanel: 'Open document panel',
       showPropertiesPanel: 'Open Properties',
-      markdownFile: 'Markdown file',
+      markdownFile: 'HTML, Markdown or JSON file',
       documentStructure: 'Document outline',
       noOutline: 'There are no outline items yet',
-      importHint: 'Markdown / Document JSON + images',
-      openMarkdown: 'Open Markdown',
+      importHint: 'HTML / Markdown / JSON / ZIP + images',
+      openMarkdown: 'Open HTML or source',
       newReport: 'Report',
       newSlide: 'Slide',
       visual: 'Visual editor',
@@ -796,8 +800,8 @@ export const messages: Record<AppLocale, UiMessages> = {
       image: 'Image',
       table: 'Table',
       code: 'Code',
-      exportHtml: 'Export HTML slides',
-      exportReportHtml: 'Export Report HTML',
+      exportHtml: 'Save editable HTML',
+      exportReportHtml: 'Save editable Report HTML',
       exportWord: 'Export Word (.docx)',
       exportPowerPoint: 'Export PowerPoint (.pptx)',
       exportPdf: 'Export PDF',
@@ -851,13 +855,15 @@ export const messages: Record<AppLocale, UiMessages> = {
     },
     status: {
       ready: 'Ready',
-      readyDescription: 'Document Model and editor are synchronized',
+      readyDescription:
+        'Start with an empty document. Open sources or examples from the document panel.',
       unableToSerialize: 'Could not serialize the document',
       editing: 'Editing',
       editingDescription: 'Changes are kept in this browser',
       markdownUnsupported:
         'Save this document as Document JSON. It contains structures that Markdown cannot represent.',
-      selectOneSource: 'Select exactly one Markdown or Document JSON file',
+      selectOneSource:
+        'Select exactly one HTML, Markdown or Document JSON file',
       unsupportedAttachments: (files) =>
         `Only image attachments can be imported: ${files}`,
       markdownTooLarge: 'Markdown files must be 5 MB or smaller',
@@ -902,7 +908,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       editingMarkdownDescription:
         'The draft is kept until you apply or save it',
       exportingHtml: 'Generating HTML slides',
-      exportedHtml: 'Exported HTML slides',
+      exportedHtml: 'Editable HTML download started',
       exportingFile: (format) => `Generating ${format} file`,
       exportedFile: (format) => `Exported ${format} file`,
       unableToExportFile: (format) => `Could not export ${format} file`,
@@ -921,7 +927,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       htmlExternalImages:
         'External image URLs remain links and require a network connection.',
       htmlExportDescription:
-        'HTML is for viewing and presenting. Save Markdown or JSON separately to keep an editable source.',
+        'HTML includes editable data. Open the same file to edit again. Confirm the download in your browser. Use project ZIP to preserve chapter organization.',
       recoveredDraft: 'Restored unsaved work',
       unableToRecover: 'Could not restore unsaved work',
       recoveryUnavailable: 'Device-local recovery is unavailable',
@@ -965,7 +971,7 @@ export const messages: Record<AppLocale, UiMessages> = {
     recovery: {
       foundTitle: 'Unsaved work found',
       foundDescription:
-        'This browser has a temporary copy of unfinished work. Restore it to continue, or remove it and start with a new document.',
+        'Select a copy to restore or remove. Closing this dialog or restoring a copy does not delete it.',
       savedAt: (title, time) => `Temporary copy of “${title}” saved ${time}`,
       restore: 'Restore',
       discard: 'Remove',
@@ -983,7 +989,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       ],
       recoveryTitle: 'Device-local recovery copy',
       recoverySteps: [
-        'Unfinished content, chapter structure, unapplied Markdown, and imported images are temporarily saved in this browser. When you return, choose whether to restore the copy.',
+        'Unfinished content, chapter structure, unapplied Markdown, and imported images are temporarily saved in this browser. Use Review recovery copies to restore earlier work only when needed.',
         'The recovery copy stays on this device and is not sent to the published site or repository. Browser data cleanup or storage limits can remove it, so keep Markdown, JSON, or a project ZIP as the source of record.',
       ],
       title: 'KUMI quick guide',
@@ -1021,10 +1027,12 @@ export const messages: Record<AppLocale, UiMessages> = {
         'Save Markdown or JSON from the header. Document JSON preserves structures that Markdown cannot express.',
         'For Slide documents, use HTML to export a standalone file for viewing and presenting. Use Previous/Next or the arrow keys to navigate, and the progress bar to track your place. Press F for fullscreen where supported; press P or Print / Save PDF to print every slide.',
         'In HTML slides, press O for the overview, type a number and press Enter to go to that slide, and press B to black out the screen. N shows speaker notes below the slide; S opens the presenter view, a separate window with the current and next slides, notes, and elapsed time. Notes are not printed.',
-        'Math fonts and imported images are embedded. External image URLs require a network connection. HTML export does not save your editable source, so also save Markdown or JSON.',
+        'Math fonts and imported images are embedded. External image URLs require a network connection. HTML includes editable data; use Open HTML or source to resume editing. Save a project ZIP to preserve chapter organization.',
       ],
       preferencesTitle: '5. Change the display',
       preferencesSteps: [
+        'Start with an empty document. Use Review recovery copies or Open an example when needed; closing recovery keeps the copies.',
+        'In Slide Properties, choose design and typography, then preview and apply to the chosen pages. Use Check all pages to inspect layout issues.',
         'Use the moon/sun button in the header to switch between light and dark mode. The document canvas stays paper-white for readability.',
         'Use the EN or 日本語 button to change the application interface. It does not translate the document you are editing.',
       ],

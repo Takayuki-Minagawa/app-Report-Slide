@@ -26,6 +26,7 @@ export const documentThemes = {
   slide: [
     ['beamer-simple', 'Beamer Simple'],
     ['technical', 'Technical'],
+    ['paper-light', 'Paper Light'],
   ],
 } as const satisfies Record<
   DocumentType,

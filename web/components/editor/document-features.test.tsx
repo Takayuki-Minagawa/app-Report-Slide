@@ -158,7 +158,7 @@ describe('document feature workspace', () => {
     Object.defineProperty(file, 'text', {
       value: async () => JSON.stringify(document),
     });
-    fireEvent.change(screen.getByLabelText('Markdownファイル'), {
+    fireEvent.change(screen.getByLabelText('HTML・Markdown・JSONファイル'), {
       target: { files: [file] },
     });
     await waitFor(() =>

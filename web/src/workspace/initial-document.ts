@@ -1,7 +1,8 @@
-import type { DocumentData } from '@/src/document/model';
+import { createDefaultDocument, type DocumentData } from '@/src/document/model';
 import { parseMarkdown } from '@/src/markdown/parser';
+import { serializeDocument } from '@/src/markdown/serializer';
 
-export const initialMarkdown = `---
+export const sampleReportMarkdown = `---
 type: report
 title: 2層鉄骨造 時刻歴応答解析
 subtitle: 応答解析報告書
@@ -37,9 +38,42 @@ function deterministicIds(): () => string {
   return () => `sample-${++id}`;
 }
 
-export const initialDocument = parseMarkdown(initialMarkdown, {
+export const sampleReportDocument = parseMarkdown(sampleReportMarkdown, {
   idFactory: deterministicIds(),
 }).document;
+
+export const sampleSlideDocument = parseMarkdown(`---
+type: slide
+title: スライドのサンプル
+theme: technical
+---
+
+# スライドのサンプル
+
+文章・図・表を編集して、HTMLとして保存できます。
+
+---
+
+# 結果と説明
+
+| 条件 | 結果 |
+| --- | --- |
+| A | 12.5 mm |
+| B | 8.3 mm |
+
+数値の意味や適用条件をここに記載します。
+`).document;
+
+// Examples are opt-in; a newly opened tool never starts with someone else's report.
+export const initialDocument = createDefaultDocument(
+  'report',
+  deterministicIds(),
+);
+initialDocument.metadata = {};
+initialDocument.children = [
+  { type: 'paragraph', attrs: { nodeId: 'initial-empty' } },
+];
+export const initialMarkdown = serializeDocument(initialDocument);
 
 export function cloneDocument(document: DocumentData): DocumentData {
   return JSON.parse(JSON.stringify(document)) as DocumentData;

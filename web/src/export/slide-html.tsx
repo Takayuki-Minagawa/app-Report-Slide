@@ -15,6 +15,7 @@ import { offlineMathStyles } from './math-styles';
 import playerStyles from './slide-player.css?raw';
 import playerSource from './slide-player.js?raw';
 import { hashedInlineScript } from './standalone-html';
+import { editableHtmlId, editableHtmlPayload } from './editable-html';
 
 const playerMessages = {
   ja: {
@@ -232,6 +233,9 @@ export async function exportSlideHtml(
             </output>
             <output id="presenter-status" />
           </footer>
+        </template>
+        <template id={editableHtmlId} data-encoding="base64">
+          {editableHtmlPayload(document, resolveImageUrl)}
         </template>
         <template id="katex-license">
           <pre>{katexLicense}</pre>

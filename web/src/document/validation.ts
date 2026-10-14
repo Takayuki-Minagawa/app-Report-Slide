@@ -16,6 +16,7 @@ import {
   tableBorderSides,
 } from './table';
 import { isSlideImagePlacement } from './slide-layout';
+import { slideDesignIssues } from './slide-design';
 import { isTextRuler } from './text-ruler';
 
 const documentEnvelopeSchema = z
@@ -870,6 +871,9 @@ export function validateDocumentData(value: unknown): DocumentData {
   const issues: string[] = [];
   const metadata = result.data.metadata;
   issues.push(
+    ...slideDesignIssues(metadata.slide_design).map(
+      (issue) => `metadata.${issue}`,
+    ),
     ...pageSettingsIssues(metadata.page_settings).map(
       (issue) => `metadata.${issue}`,
     ),

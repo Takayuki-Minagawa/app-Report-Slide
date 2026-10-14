@@ -10,11 +10,17 @@ import { WorkspaceProperties } from './workspace-properties';
 import { ProjectPanel } from './project-panel';
 import { RecoveryDialog } from './recovery-dialog';
 import { SearchReplace } from './search-replace';
+import { HtmlImportDialog } from './html-import-dialog';
+import { SlideNavigation } from './slide-navigation';
+import { SlideDesignPanel } from './slide-design-panel';
+import { SlideCheckPanel } from './slide-check-panel';
+import { slideNavigationPages } from '@/src/document/slide-navigation';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 
 export function EditorWorkspace() {
   const workspace = useDocumentWorkspace();
-  const { copy } = useAppPreferences();
+  const { copy, locale } = useAppPreferences();
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [navigatorOpen, setNavigatorOpen] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -46,6 +52,16 @@ export function EditorWorkspace() {
   }, [visualView]);
   const controlsLocked =
     workspace.documentWriteLocked || workspace.projectActions.busy;
+  const focusTarget = (nodeId: string) => {
+    if (workspace.view !== 'visual') workspace.changeView('visual');
+    workspace.focusNode(nodeId);
+  };
+  const selectedPageIndex =
+    slideNavigationPages(workspace.previewDocument, locale).find((page) =>
+      page.elements.some(
+        (element) => element.nodeId === workspace.selectedNode?.nodeId,
+      ),
+    )?.index ?? currentPageIndex;
   const projectPanel = (overlay: boolean) => (
     <ProjectPanel
       idPrefix={overlay ? 'workspace-sheet' : 'workspace'}
@@ -69,11 +85,47 @@ export function EditorWorkspace() {
       }}
       importFiles={workspace.importFiles}
       createDocument={workspace.createDocument}
-    />
+      loadSample={workspace.loadSample}
+      openRecovery={() => {
+        setNavigatorOpen(false);
+        workspace.setRecoveryOpen(true);
+      }}
+    >
+      <SlideNavigation
+        document={workspace.previewDocument}
+        selectedNodeId={workspace.selectedNode?.nodeId}
+        currentPageIndex={selectedPageIndex}
+        onPageSelect={setCurrentPageIndex}
+        onFocus={(nodeId) => {
+          focusTarget(nodeId);
+          if (overlay) setNavigatorOpen(false);
+        }}
+      />
+    </WorkspaceNavigator>
   );
   const properties = (overlay = false) => (
     <WorkspaceProperties
       overlay={overlay}
+      slideTools={
+        workspace.document.type === 'slide' ? (
+          <>
+            <SlideDesignPanel
+              document={workspace.previewDocument}
+              currentPageIndex={selectedPageIndex}
+              disabled={controlsLocked}
+              onApply={workspace.updateMetadata}
+              resolveImageUrl={workspace.resolvePreviewImageUrl}
+            />
+            <SlideCheckPanel
+              document={workspace.previewDocument}
+              resolveImageUrl={workspace.resolvePreviewImageUrl}
+              onFocus={focusTarget}
+              onPageSelect={setCurrentPageIndex}
+              disabled={controlsLocked}
+            />
+          </>
+        ) : undefined
+      }
       idPrefix={overlay ? 'workspace-sheet' : 'workspace'}
       document={workspace.previewDocument}
       editor={workspace.editor}
@@ -101,6 +153,7 @@ export function EditorWorkspace() {
         project={Boolean(workspace.project)}
         editor={workspace.editor}
         dirty={workspace.dirty}
+        saveState={workspace.saveState}
         documentWriteLocked={workspace.documentWriteLocked}
         saveDocument={workspace.saveDocument}
         saveArchive={workspace.saveArchive}
@@ -169,10 +222,20 @@ export function EditorWorkspace() {
         </SheetContent>
       </Sheet>
       <RecoveryDialog
+        open={workspace.recoveryOpen}
+        onClose={() => workspace.setRecoveryOpen(false)}
+        candidates={workspace.recoveryCandidates}
+        onSelect={workspace.selectRecovery}
         recovery={workspace.recovery}
         restoring={workspace.recoveryRestoring}
         onRestore={() => void workspace.restoreRecovery()}
         onDiscard={() => void workspace.discardRecovery()}
+      />
+      <HtmlImportDialog
+        importResult={workspace.pendingHtmlImport}
+        locale={locale}
+        onConfirm={workspace.confirmHtmlImport}
+        onCancel={workspace.cancelHtmlImport}
       />
     </main>
   );

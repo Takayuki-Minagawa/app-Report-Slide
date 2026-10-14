@@ -4,7 +4,7 @@ KUMI is a browser application for editing and reviewing technical reports and sl
 
 ## 1. Start a document
 
-- Select **Open Markdown** in the lower-left panel to import Markdown or Document JSON. Select local image files at the same time when Markdown refers to them.
+- Select **Open HTML or source** in the lower-left panel to import Markdown or Document JSON. Select local image files at the same time when Markdown refers to them.
 - Use **Report** or **Slide** in the same panel to start a blank document.
 - Imported documents and images stay in your browser. They are not automatically uploaded to GitHub Pages or this repository.
 
@@ -15,7 +15,7 @@ KUMI is a browser application for editing and reviewing technical reports and sl
 - In the visual editor, press `Ctrl`/`Cmd`+`F` to open search and replace and `Esc` to close it. The character and word counts appear at the top right of the editor.
 - Select one or more top-level paragraphs or headings, then use the **Text ruler** above the editor to set the left and right positions and first-line indent. Drag a marker or focus it and use the arrow keys. Move the first-line marker before the left marker for a hanging indent; choose **Reset** to clear these settings.
 - Use the **Markdown** tab to edit source. Choose **Apply Markdown**, or save **Markdown/JSON** from the header when you finish. While a Markdown draft is unapplied, KUMI prevents a return to the visual editor to avoid conflicting changes.
-- Unfinished content, chapter structure, unapplied Markdown, and imported images are temporarily kept as a recovery copy in this browser. When you return, choose whether to restore or remove it. This is device-local help only, so keep Markdown, JSON, or a project ZIP as the source of record.
+- Unfinished content, chapter structure, unapplied Markdown, and imported images are temporarily kept as a recovery copy in this browser. The app starts empty; use **Review recovery copies** when you want to restore or remove earlier work. Closing the dialog keeps copies and new work continues to autosave separately. This is device-local help only, so keep Markdown, JSON, or a project ZIP as the source of record.
 - Select an element to configure its theme, table of contents, numbering, reference label, caption, and an image's width, alignment, or alternative text in **Properties**.
 
 ### Freely place images on a Slide
@@ -52,7 +52,7 @@ The slide frame scales to fit the screen. Overflowing content can be scrolled wi
 
 Math fonts and imported images, including local images added through **Place images**, are embedded in the HTML, so slide controls and printing or PDF saving work offline. External image URLs still need a network connection. If an image has not been imported, save your source as Markdown/JSON first, then import the source and images together before exporting again.
 
-HTML is for viewing and presenting; it cannot be re-imported into KUMI. Unapplied Markdown drafts are included in the export, but are not applied to the editable document or marked as saved. **Also save an editable ZIP, or Markdown/JSON with the images.**
+HTML includes editable data and imported images. Use **Open HTML or source** to review and restore it. Unapplied Markdown drafts are included without applying them or clearing the unsaved state. Confirm downloads in your browser. A project ZIP remains necessary to preserve chapter organization and excluded chapters.
 
 For a single Report or Slide, use **ZIP** in the header to save the editable document with imported images, then reopen it from the document panel. Report **HTML** can be printed or saved as PDF in a browser. Chapter projects use the separate **Save project ZIP** action. Use the header search button to find and replace text, and the **Insert chart** toolbar button to add an editable chart.
 

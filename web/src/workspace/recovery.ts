@@ -147,9 +147,9 @@ export async function readWorkspaceRecovery(): Promise<WorkspaceRecovery | null>
 /** Stores only a newer snapshot, so asynchronously copied images cannot roll back recovery. */
 export async function writeWorkspaceRecovery(
   recovery: WorkspaceRecovery,
-): Promise<void> {
+): Promise<boolean> {
   const database = await openDatabase();
-  if (!database) return;
+  if (!database) return false;
   try {
     const transaction = database.transaction(storeName, 'readwrite');
     const store = transaction.objectStore(storeName);
@@ -161,6 +161,7 @@ export async function writeWorkspaceRecovery(
     };
     request.onerror = () => transaction.abort();
     await transactionComplete(transaction);
+    return true;
   } finally {
     database.close();
   }
@@ -173,6 +174,57 @@ export async function clearWorkspaceRecovery(): Promise<void> {
     const transaction = database.transaction(storeName, 'readwrite');
     transaction.objectStore(storeName).delete(latestDraftKey);
     await transactionComplete(transaction);
+  } finally {
+    database.close();
+  }
+}
+
+/** Move the last session to its own key before enabling this session's autosave.
+ * Hiding a recovery candidate must neither delete it nor freeze new backups.
+ */
+export async function prepareWorkspaceRecoveries(): Promise<
+  WorkspaceRecovery[]
+> {
+  const database = await openDatabase();
+  if (!database) return [];
+  try {
+    const transaction = database.transaction(storeName, 'readwrite');
+    const complete = transactionComplete(transaction);
+    const store = transaction.objectStore(storeName);
+    const request = store.get(latestDraftKey);
+    request.onsuccess = () => {
+      const latest = parseWorkspaceRecovery(request.result);
+      if (latest) store.put(latest, `history:${latest.savedAt}`);
+      store.delete(latestDraftKey);
+    };
+    request.onerror = () => transaction.abort();
+    await complete;
+    const reading = database.transaction(storeName, 'readonly');
+    const readComplete = transactionComplete(reading);
+    const all = reading.objectStore(storeName).getAll();
+    const values = await new Promise<unknown[]>((resolve, reject) => {
+      all.onsuccess = () => resolve(all.result);
+      all.onerror = () => reject(all.error);
+    });
+    await readComplete;
+    return values
+      .map(parseWorkspaceRecovery)
+      .filter((value): value is WorkspaceRecovery => value !== null)
+      .sort((a, b) => b.savedAt - a.savedAt);
+  } finally {
+    database.close();
+  }
+}
+
+/** Explicit restore/discard affects only the selected previous session. */
+export async function removeWorkspaceRecovery(savedAt: number): Promise<void> {
+  const database = await openDatabase();
+  if (!database) return;
+  try {
+    const transaction = database.transaction(storeName, 'readwrite');
+    const complete = transactionComplete(transaction);
+    transaction.objectStore(storeName).delete(`history:${savedAt}`);
+    await complete;
   } finally {
     database.close();
   }

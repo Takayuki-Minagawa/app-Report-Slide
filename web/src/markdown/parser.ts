@@ -30,6 +30,7 @@ import {
   DocumentValidationError,
   validateDocumentData,
 } from '@/src/document/validation';
+import { restoreSlideDesignFromMarkdown } from '@/src/document/slide-design';
 import { isSafeResourceUrl } from '@/src/security/resource-url';
 
 import { createMarkdownIt, ignoredFootnoteDefinitions } from './dialect';
@@ -840,17 +841,19 @@ export function parseMarkdown(
   }
 
   return {
-    document: validateDocumentData({
-      schemaVersion: 2,
-      type: frontMatter.type,
-      metadata: {
-        theme:
-          frontMatter.metadata.theme ??
-          (frontMatter.type === 'report' ? 'latex' : 'beamer-simple'),
-        ...frontMatter.metadata,
-      },
-      children,
-    }),
+    document: restoreSlideDesignFromMarkdown(
+      validateDocumentData({
+        schemaVersion: 2,
+        type: frontMatter.type,
+        metadata: {
+          theme:
+            frontMatter.metadata.theme ??
+            (frontMatter.type === 'report' ? 'latex' : 'beamer-simple'),
+          ...frontMatter.metadata,
+        },
+        children,
+      }),
+    ),
     diagnostics,
   };
 }

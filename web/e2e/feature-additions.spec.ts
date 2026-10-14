@@ -31,7 +31,7 @@ test('画像込みZIP、検索置換、グラフ、Report HTMLを再開して印
       caption: '試験結果',
     },
   });
-  await page.getByLabel('Markdownファイル').setInputFiles([
+  await page.getByLabel('HTML・Markdown・JSONファイル').setInputFiles([
     {
       name: 'report.md',
       mimeType: 'text/markdown',
@@ -62,7 +62,7 @@ test('画像込みZIP、検索置換、グラフ、Report HTMLを再開して印
   const chunks: Buffer[] = [];
   for await (const chunk of (await zip.createReadStream())!)
     chunks.push(Buffer.from(chunk));
-  await page.getByLabel('Markdownファイル').setInputFiles({
+  await page.getByLabel('HTML・Markdown・JSONファイル').setInputFiles({
     name: 'reopen.zip',
     mimeType: 'application/zip',
     buffer: Buffer.concat(chunks),
@@ -75,7 +75,9 @@ test('画像込みZIP、検索置換、グラフ、Report HTMLを再開して印
   );
 
   const htmlPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Report HTMLを出力' }).click();
+  await page
+    .getByRole('button', { name: '編集できるReport HTMLを保存' })
+    .click();
   const htmlDownload = await htmlPromise;
   const path = testInfo.outputPath('report.html');
   await htmlDownload.saveAs(path);

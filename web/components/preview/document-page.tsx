@@ -1,3 +1,8 @@
+import {
+  getSlidePageId,
+  resolveSlideDesign,
+  slideDesignStyle,
+} from '@/src/document/slide-design';
 import { reportPageStyle } from '@/src/document/page-settings';
 import type { DocumentData, DocumentNode } from '@/src/document/model';
 import { resolveDocumentTheme } from '@/src/document/metadata';
@@ -34,11 +39,20 @@ export function DocumentPage({
 }: DocumentPageProps) {
   const slide = document.type === 'slide';
   const copy = messages[locale];
+  const design = slide ? resolveSlideDesign(document, index) : undefined;
   const page = (
     <article
       id={id}
       className={`${slide ? 'slide-preview' : 'report-preview report-layout'} ${className}`.trim()}
-      data-theme={resolveDocumentTheme(document.type, document.metadata.theme)}
+      data-theme={
+        design?.theme ??
+        resolveDocumentTheme(document.type, document.metadata.theme)
+      }
+      data-slide-design={design ? '1' : undefined}
+      data-layout={design?.layout}
+      data-density={design?.density}
+      data-page-id={slide ? getSlidePageId(document, index) : undefined}
+      style={design ? slideDesignStyle(design) : undefined}
       aria-label={
         slide ? copy.preview.slidePreview : copy.preview.reportPreview
       }
@@ -53,6 +67,7 @@ export function DocumentPage({
         showToc={index === 0}
         resolveImageUrl={resolveImageUrl}
         figureInteraction={figureInteraction}
+        slideLayout={design?.layout}
       />
       <footer>
         {slide && <span>{document.metadata.author ?? ''}</span>}

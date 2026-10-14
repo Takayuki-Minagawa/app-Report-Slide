@@ -20,10 +20,17 @@ for (const type of ['report', 'slide'] as const) {
     await expect(
       page.locator('[contenteditable="true"][aria-label="文書本文"]'),
     ).toBeVisible();
+    await page
+      .locator('summary')
+      .filter({ hasText: '章別プロジェクト' })
+      .click();
+    await expect(
+      page.locator('[contenteditable="true"][aria-label="文書本文"]'),
+    ).toBeVisible();
     const imageSource =
       '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="100"><rect width="240" height="100" fill="#2563eb"/><circle cx="120" cy="50" r="30" fill="#f59e0b"/></svg>';
     const source = `---\ntype: ${type}\ntitle: 出力検証\nnumber_sections: true\n---\n\n# 日本語の報告書\n\n**太字の本文**と数式 $E=mc^2$。\n\n| 項目 | 値 |\n| --- | --- |\n| 結果 | 42 |\n\n![検証用の図](chart.svg)\n{width=40%}\n\n::: ${type === 'report' ? 'pagebreak' : 'slidebreak'}\n:::\n\n# 2ページ目\n\n末尾の本文も出力します。${type === 'slide' ? '\n\n::: notes\n秘密の発表者ノート\n:::' : ''}`;
-    await page.getByLabel('Markdownファイル').setInputFiles([
+    await page.getByLabel('HTML・Markdown・JSONファイル').setInputFiles([
       {
         name: 'document.md',
         mimeType: 'text/markdown',
@@ -97,7 +104,11 @@ test('combined chapter project exports Word and PDF while excluding disabled cha
   await expect(
     page.locator('[contenteditable="true"][aria-label="文書本文"]'),
   ).toBeVisible();
-  await page.getByLabel('Markdownファイル').setInputFiles({
+  await page.locator('summary').filter({ hasText: '章別プロジェクト' }).click();
+  await expect(
+    page.locator('[contenteditable="true"][aria-label="文書本文"]'),
+  ).toBeVisible();
+  await page.getByLabel('HTML・Markdown・JSONファイル').setInputFiles({
     name: 'first.md',
     mimeType: 'text/markdown',
     buffer: Buffer.from('---\ntitle: 全体報告書\n---\n\n# First chapter'),
@@ -144,7 +155,11 @@ test('long reports paginate and oversized slides fail without a partial PDF', as
   await expect(
     page.locator('[contenteditable="true"][aria-label="文書本文"]'),
   ).toBeVisible();
-  await page.getByLabel('Markdownファイル').setInputFiles({
+  await page.locator('summary').filter({ hasText: '章別プロジェクト' }).click();
+  await expect(
+    page.locator('[contenteditable="true"][aria-label="文書本文"]'),
+  ).toBeVisible();
+  await page.getByLabel('HTML・Markdown・JSONファイル').setInputFiles({
     name: 'long-report.md',
     mimeType: 'text/markdown',
     buffer: Buffer.from(
@@ -163,7 +178,7 @@ test('long reports paginate and oversized slides fail without a partial PDF', as
   ).toBeVisible();
   const pdf = (await bytes(await promise)).toString('latin1');
   expect((pdf.match(/\/Type \/Page\b/g) ?? []).length).toBeGreaterThan(1);
-  await page.getByLabel('Markdownファイル').setInputFiles({
+  await page.getByLabel('HTML・Markdown・JSONファイル').setInputFiles({
     name: 'long-slide.md',
     mimeType: 'text/markdown',
     buffer: Buffer.from(

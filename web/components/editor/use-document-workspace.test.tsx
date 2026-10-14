@@ -38,6 +38,47 @@ beforeEach(() => window.localStorage.clear());
 afterEach(() => vi.unstubAllGlobals());
 
 describe('asynchronous document import', () => {
+  it('previews external HTML without replacing the document until confirmed', async () => {
+    const { result } = await workspace();
+    const before = result.current.document;
+    await act(async () => {
+      await result.current.importFiles([
+        sourceFile('source.html', '<h1>Imported HTML</h1><p>12.5 mm</p>'),
+      ]);
+    });
+    expect(result.current.document).toEqual(before);
+    expect(result.current.pendingHtmlImport?.htmlImport?.kind).toBe(
+      'converted',
+    );
+    act(() => result.current.confirmHtmlImport());
+    expect(result.current.document.metadata.title).toBe('Imported HTML');
+    expect(result.current.pendingHtmlImport).toBeNull();
+  });
+
+  it('does not apply an HTML preview after a newer document change', async () => {
+    const { result } = await workspace();
+    await act(async () => {
+      await result.current.importFiles([
+        sourceFile('source.html', '<h1>Stale HTML</h1>'),
+      ]);
+    });
+    act(() => result.current.createDocument('slide'));
+    act(() => result.current.confirmHtmlImport());
+    expect(result.current.document.type).toBe('slide');
+    expect(result.current.document.metadata.title).not.toBe('Stale HTML');
+    expect(result.current.pendingHtmlImport).toBeNull();
+  });
+
+  it('removes optional design metadata when undo restores the unset state', async () => {
+    const { result } = await workspace();
+    act(() =>
+      result.current.updateMetadata({
+        slide_design: { version: 1, pages: [] },
+      }),
+    );
+    act(() => result.current.updateMetadata({ slide_design: undefined }));
+    expect(result.current.document.metadata).not.toHaveProperty('slide_design');
+  });
   it('confirms before replacing a dirty single document', async () => {
     const confirm = vi.fn(() => false);
     vi.stubGlobal('confirm', confirm);

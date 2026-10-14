@@ -65,6 +65,8 @@ test('端末内の復旧用保存から未保存の単独文書を復元でき�
     if (dialog.type() === 'beforeunload') void dialog.accept();
   });
   await page.reload();
+  await expect(page.getByRole('dialog')).not.toBeVisible();
+  await page.getByRole('button', { name: '未保存の作業を確認' }).click();
 
   const recoveryDialog = page
     .getByRole('dialog')
@@ -95,6 +97,8 @@ test('未適用Markdown下書きを端末内の復旧用保存から復元でき
     if (dialog.type() === 'beforeunload') void dialog.accept();
   });
   await page.reload();
+  await expect(page.getByRole('dialog')).not.toBeVisible();
+  await page.getByRole('button', { name: '未保存の作業を確認' }).click();
 
   const recoveryDialog = page
     .getByRole('dialog')
@@ -125,4 +129,86 @@ test('狭幅時もヘッダーから文書一覧とPropertiesを開ける', asyn
   await expect(
     propertiesSheet.getByRole('combobox', { name: 'テーマ' }),
   ).toBeVisible();
+});
+
+test('復元候補を閉じても保持し、新しい作業を別に一時保存する', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await waitForEditor(page);
+  const editor = page.locator(
+    '[contenteditable="true"][aria-label="文書本文"]',
+  );
+  await expect(editor).toHaveText('');
+  await editor.fill('以前の未保存作業');
+  await expect.poll(() => hasRecoveryCopy(page)).toBe(true);
+  page.on('dialog', (dialog) => {
+    void dialog.accept();
+  });
+  await page.reload();
+  await waitForEditor(page);
+  await expect(editor).toHaveText('');
+  await expect(page.getByRole('dialog')).not.toBeVisible();
+  await page.getByRole('button', { name: '未保存の作業を確認' }).click();
+  await expect(page.getByRole('dialog')).toContainText(
+    '未保存の作業が見つかりました',
+  );
+  await page.getByRole('button', { name: '閉じる（候補を保持）' }).click();
+  await expect(page.getByRole('dialog')).not.toBeVisible();
+  await editor.fill('新しい未保存作業');
+  await expect.poll(() => hasRecoveryCopy(page)).toBe(true);
+  const copies = await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => {
+      const request = indexedDB.open('kumi-workspace-recovery', 1);
+      request.onsuccess = () => resolve(request.result);
+    });
+    try {
+      return await new Promise<string[]>((resolve) => {
+        const request = db.transaction('drafts').objectStore('drafts').getAll();
+        request.onsuccess = () =>
+          resolve(request.result.map((value) => JSON.stringify(value)));
+      });
+    } finally {
+      db.close();
+    }
+  });
+  expect(copies.some((value) => value.includes('以前の未保存作業'))).toBe(true);
+  expect(copies.some((value) => value.includes('新しい未保存作業'))).toBe(true);
+  await page.reload();
+  await waitForEditor(page);
+  await expect(page.getByRole('dialog')).not.toBeVisible();
+  await page.getByRole('button', { name: '未保存の作業を確認' }).click();
+  await expect(
+    page.getByRole('combobox', { name: '復元候補' }).locator('option'),
+  ).toHaveCount(2);
+  await page.getByRole('button', { name: '復元する', exact: true }).click();
+  await expect(editor).toHaveText('新しい未保存作業');
+  // A successful restore must not delete its durable source before autosave.
+  await page.getByRole('button', { name: '未保存の作業を確認' }).click();
+  await expect(
+    page.getByRole('combobox', { name: '復元候補' }).locator('option'),
+  ).toHaveCount(2);
+  const retainedHistory = await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => {
+      const request = indexedDB.open('kumi-workspace-recovery', 1);
+      request.onsuccess = () => resolve(request.result);
+    });
+    try {
+      return await new Promise<number>((resolve) => {
+        const request = db
+          .transaction('drafts')
+          .objectStore('drafts')
+          .getAllKeys();
+        request.onsuccess = () =>
+          resolve(
+            request.result.filter(
+              (key) => typeof key === 'string' && key.startsWith('history:'),
+            ).length,
+          );
+      });
+    } finally {
+      db.close();
+    }
+  });
+  expect(retainedHistory).toBe(2);
 });

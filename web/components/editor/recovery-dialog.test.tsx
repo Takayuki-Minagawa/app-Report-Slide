@@ -5,12 +5,36 @@ import { initialDocument } from '@/src/workspace/initial-document';
 import { RecoveryDialog } from './recovery-dialog';
 
 describe('RecoveryDialog', () => {
+  it('does not show a stored candidate until explicitly opened', () => {
+    const onDiscard = vi.fn();
+    render(
+      <AppPreferencesProvider>
+        <RecoveryDialog
+          recovery={{
+            schemaVersion: 1,
+            savedAt: 100,
+            document: initialDocument,
+            markdownDraft: '',
+            markdownDirty: false,
+            view: 'visual',
+            assets: [],
+          }}
+          restoring={false}
+          onRestore={vi.fn()}
+          onDiscard={onDiscard}
+        />
+      </AppPreferencesProvider>,
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(onDiscard).not.toHaveBeenCalled();
+  });
   it('lets the user restore or remove device-local unfinished work', async () => {
     const onRestore = vi.fn();
     const onDiscard = vi.fn();
     render(
       <AppPreferencesProvider>
         <RecoveryDialog
+          open
           recovery={{
             schemaVersion: 1,
             savedAt: Date.UTC(2026, 8, 3, 10, 0),

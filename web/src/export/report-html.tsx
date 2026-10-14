@@ -15,6 +15,7 @@ import type { AssetUrls } from '@/src/workspace/files';
 import { embedSlideImages } from './embedded-images';
 import { offlineMathStyles } from './math-styles';
 import { hashedInlineScript } from './standalone-html';
+import { editableHtmlId, editableHtmlPayload } from './editable-html';
 
 const reportScript = `const pages = [...document.querySelectorAll('.report-sheet')];
 const warning = document.getElementById('overflow-warning');
@@ -108,6 +109,9 @@ button{font:inherit;cursor:pointer}.report-tools{position:sticky;top:0;z-index:2
             />
           ))}
         </main>
+        <template id={editableHtmlId} data-encoding="base64">
+          {editableHtmlPayload(document, resolveImageUrl)}
+        </template>
         <template id="katex-license">
           <pre>{katexLicense}</pre>
         </template>

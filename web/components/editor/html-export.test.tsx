@@ -56,7 +56,7 @@ describe('workspace HTML export', () => {
     expect(result.current.dirty).toBe(true);
     expect(result.current.htmlExporting).toBe(false);
     expect(result.current.displayedStatus.title).toBe(
-      'HTMLスライドを出力しました',
+      '編集できるHTMLのダウンロードを開始しました',
     );
   });
 
@@ -201,7 +201,9 @@ describe('workspace HTML export', () => {
       expect.any(Map),
       'en',
     );
-    expect(result.current.displayedStatus.title).toBe('Exported HTML slides');
+    expect(result.current.displayedStatus.title).toBe(
+      'Editable HTML download started',
+    );
     expect(result.current.displayedStatus.description).toContain(
       'External image URLs',
     );

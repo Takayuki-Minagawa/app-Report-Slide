@@ -31,6 +31,7 @@ interface WorkspaceHeaderProps {
   document: DocumentData;
   editor: Editor | null;
   dirty: boolean;
+  saveState: string;
   documentWriteLocked: boolean;
   saveDocument: (format: DocumentFileFormat) => void;
   saveArchive: () => Promise<void>;
@@ -49,6 +50,7 @@ export function WorkspaceHeader({
   document,
   editor,
   dirty,
+  saveState,
   documentWriteLocked,
   saveDocument,
   saveArchive,
@@ -111,6 +113,12 @@ export function WorkspaceHeader({
         >
           {project ? copy.project.projectBadge : document.type.toUpperCase()}
         </Badge>
+        <output
+          aria-label={locale === 'ja' ? '保存状態' : 'Save status'}
+          className="hidden text-[10px] text-muted-foreground xl:block"
+        >
+          {saveState}
+        </output>
       </div>
 
       <div className="workspace-header-actions flex min-w-72 justify-end gap-1.5">
@@ -218,7 +226,7 @@ export function WorkspaceHeader({
         </Button>
         <Button
           size="sm"
-          variant="outline"
+          variant="default"
           aria-label={
             htmlExporting ? copy.workspace.exportingHtml : exportHtmlLabel
           }
@@ -256,7 +264,11 @@ export function WorkspaceHeader({
         >
           <FileDown data-icon="inline-start" /> PDF
         </Button>
-        <Button size="sm" onClick={() => saveDocument('markdown')}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => saveDocument('markdown')}
+        >
           <Save data-icon="inline-start" />{' '}
           {project ? copy.project.saveChapterMarkdown : 'Markdown'}
         </Button>

@@ -14,7 +14,7 @@ test('脚注・注記・発表者ノートを編集し、HTMLスライドの一�
   const body = page.locator('[contenteditable="true"][aria-label="文書本文"]');
   await expect(body).toBeVisible();
 
-  await page.getByLabel('Markdownファイル').setInputFiles([
+  await page.getByLabel('HTML・Markdown・JSONファイル').setInputFiles([
     {
       name: 'talk.md',
       mimeType: 'text/markdown',
@@ -112,7 +112,7 @@ test('脚注・注記・発表者ノートを編集し、HTMLスライドの一�
 
   const downloadPromise = page.waitForEvent('download');
   await page
-    .getByRole('button', { name: 'HTMLスライドを出力', exact: true })
+    .getByRole('button', { name: '編集できるHTMLを保存', exact: true })
     .click();
   const exportedPath = testInfo.outputPath('talk.html');
   await (await downloadPromise).saveAs(exportedPath);

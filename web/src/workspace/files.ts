@@ -5,6 +5,11 @@ import { parseMarkdown } from '@/src/markdown/parser';
 import { serializeDocument } from '@/src/markdown/serializer';
 import type { MarkdownDiagnostic } from '@/src/markdown/diagnostics';
 import { WorkspaceStatusError, statusMessage } from './status';
+import {
+  importHtml,
+  maximumHtmlBytes,
+  type HtmlImportSummary,
+} from './html-import';
 
 /** Runtime-only object URLs must never be serialized into the document. */
 export type AssetUrls = ReadonlyMap<string, string>;
@@ -44,12 +49,14 @@ let insertedAssetSerial = 0;
 
 export type DocumentFileFormat = 'markdown' | 'json';
 
-function sourceFormat(file: File): DocumentFileFormat | undefined {
+function sourceFormat(file: File): DocumentFileFormat | 'html' | undefined {
+  if (/\.html?$/i.test(file.name)) return 'html';
   if (/\.json$/i.test(file.name)) return 'json';
   if (/\.(?:md|markdown)$/i.test(file.name)) return 'markdown';
   const mime = file.type.split(';', 1)[0].trim().toLowerCase();
   if (mime === 'application/json') return 'json';
   if (mime === 'text/markdown') return 'markdown';
+  if (mime === 'text/html') return 'html';
   return undefined;
 }
 
@@ -138,6 +145,7 @@ function localImageSources(document: DocumentData): string[] {
 export function createLocalAssetUrls(
   document: DocumentData,
   files: readonly File[],
+  resolvedSources: ReadonlySet<string> = new Set(),
 ): { urls: AssetUrls; unresolved: string[] } {
   const urls = new Map<string, string>();
   const unresolved: string[] = [];
@@ -145,6 +153,7 @@ export function createLocalAssetUrls(
 
   try {
     for (const source of localImageSources(document)) {
+      if (resolvedSources.has(source)) continue;
       const normalizedSource = normalizedAssetPath(source);
       const exactMatches = files.filter((file) => {
         const candidate = normalizedAssetPath(
@@ -197,6 +206,7 @@ export interface ImportedDocument {
   assets: AssetUrls;
   assetBytes: number;
   unresolved: string[];
+  htmlImport?: HtmlImportSummary;
 }
 
 /** The caller owns the returned assets and must release them if it discards the result. */
@@ -231,12 +241,50 @@ export async function readWorkspaceFiles(
         unsupported.map((candidate) => candidate.name).join(', '),
       ),
     );
-  if (file.size > 5 * 1024 * 1024)
+  const format = sourceFormat(file);
+  if (format === 'html' && file.size > maximumHtmlBytes)
+    throw new Error('HTMLが150 MiBを超えています。');
+  if (format !== 'html' && file.size > 5 * 1024 * 1024)
     throw new WorkspaceStatusError(statusMessage('markdownTooLarge'));
 
   const source = await file.text();
+  if (format === 'html') {
+    const result = importHtml(source, file.name);
+    try {
+      const local = createLocalAssetUrls(
+        result.document,
+        imageFiles,
+        new Set(result.assets.keys()),
+      );
+      const assets = new Map([...result.assets, ...local.urls]);
+      const assetBytes = assetByteTotal(assets);
+      if (hasOversizedAsset(assets) || assetBytes > maximumTotalAssetBytes) {
+        revokeAssetUrls(local.urls);
+        throw new WorkspaceStatusError(
+          statusMessage(
+            hasOversizedAsset(assets) ? 'imageTooLarge' : 'imagesTooLarge',
+          ),
+        );
+      }
+      if (local.unresolved.length)
+        result.htmlImport.warnings.push(
+          `画像 ${local.unresolved.length} 件を解決できませんでした: ${local.unresolved.join(', ')}`,
+        );
+      return {
+        ...result,
+        assets,
+        assetBytes,
+        unresolved: local.unresolved,
+        diagnostics: [],
+        sourceName: file.name,
+      };
+    } catch (error) {
+      revokeAssetUrls(result.assets);
+      throw error;
+    }
+  }
   const result =
-    sourceFormat(file) === 'json'
+    format === 'json'
       ? { document: migrateDocumentData(JSON.parse(source)), diagnostics: [] }
       : parseMarkdown(source);
   const { urls: assets, unresolved } = createLocalAssetUrls(

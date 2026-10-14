@@ -210,6 +210,10 @@ test('Markdownの不正入力を拒否して現在文書を維持する', async 
   await expect(page).toHaveTitle(/KUMI/);
   await expect(page.getByText('REPORT', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'ビジュアル編集へ切り替え' }).click();
+  await page.getByText('サンプルを開く', { exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Reportサンプル', exact: true })
+    .click();
   await expect(page.locator('.kumi-editor-content')).toContainText('解析概要');
   await waitForEditor(page);
 
@@ -243,10 +247,10 @@ test('数式と表を挿入してDocumentを編集できる', async ({ page }) =
   await waitForEditor(page);
 
   await page.getByRole('button', { name: 'インライン数式' }).click();
-  await expect(page.locator('[data-type="inline-math"]')).toHaveCount(2);
+  await expect(page.locator('[data-type="inline-math"]')).toHaveCount(1);
 
   await page.getByRole('button', { name: '表を挿入' }).click();
-  await expect(page.locator('.kumi-editor-content table')).toHaveCount(2);
+  await expect(page.locator('.kumi-editor-content table')).toHaveCount(1);
   await expect(page.getByLabel('未保存')).toBeVisible();
 });
 
@@ -280,7 +284,10 @@ test('表の列境界をドラッグし、選択した列を均等化して保�
 }) => {
   await page.goto('/');
   await waitForEditor(page);
-  await page.getByRole('button', { name: '表を挿入' }).click();
+  await page.getByText('サンプルを開く', { exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Reportサンプル', exact: true })
+    .click();
 
   const table = page.locator('.kumi-editor-content table').last();
   const firstHeader = table.locator('th').first();
@@ -393,7 +400,7 @@ test('Markdownと同時選択した相対画像をEditorとPreviewで表示す�
   await page.goto('/');
   await waitForEditor(page);
 
-  await page.getByLabel('Markdownファイル').setInputFiles([
+  await page.getByLabel('HTML・Markdown・JSONファイル').setInputFiles([
     {
       name: 'local-report.md',
       mimeType: 'text/markdown',

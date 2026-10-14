@@ -1,4 +1,5 @@
 import { parseDocument } from 'yaml';
+import { slideDesignIssues } from '@/src/document/slide-design';
 import { pageSettingsIssues } from '@/src/document/page-settings';
 import {
   booleanMetadataKeys,
@@ -210,6 +211,7 @@ export function parseFrontMatter(
   const { type: _discardedType, ...metadata } = metadataRecord;
   const invalidEntry = [
     ...pageSettingsIssues(metadata.page_settings),
+    ...slideDesignIssues(metadata.slide_design),
     ...[...stringMetadataKeys]
       .filter(
         (key) =>

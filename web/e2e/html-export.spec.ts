@@ -16,10 +16,10 @@ test('HTMLスライドを保存し、オフラインで数式・画像・スラ�
     page.locator('[contenteditable="true"][aria-label="文書本文"]'),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: 'HTMLスライドを出力', exact: true }),
+    page.getByRole('button', { name: '編集できるHTMLを保存', exact: true }),
   ).toHaveCount(0);
 
-  await page.getByLabel('Markdownファイル').setInputFiles([
+  await page.getByLabel('HTML・Markdown・JSONファイル').setInputFiles([
     {
       name: 'presentation.md',
       mimeType: 'text/markdown',
@@ -36,7 +36,7 @@ test('HTMLスライドを保存し、オフラインで数式・画像・スラ�
     },
   ]);
   const exportButton = page.getByRole('button', {
-    name: 'HTMLスライドを出力',
+    name: '編集できるHTMLを保存',
     exact: true,
   });
   await expect(exportButton).toBeVisible();
@@ -51,7 +51,9 @@ test('HTMLスライドを保存し、オフラインで数式・画像・スラ�
   expect(html).toContain('data:font/woff2;base64,');
   expect(html).not.toContain('blob:');
   await expect(
-    page.getByText('HTMLスライドを出力しました', { exact: true }).first(),
+    page
+      .getByText('編集できるHTMLのダウンロードを開始しました', { exact: true })
+      .first(),
   ).toBeVisible();
 
   const offline = await browser.newContext({ offline: true });
@@ -164,7 +166,7 @@ test('英語のHTML出力にMarkdown下書きを含め、編集用原稿の未�
   await page.getByRole('textbox', { name: 'Markdown draft' }).fill(draft);
   const downloadPromise = page.waitForEvent('download');
   await page
-    .getByRole('button', { name: 'Export HTML slides', exact: true })
+    .getByRole('button', { name: 'Save editable HTML', exact: true })
     .click();
   const download = await downloadPromise;
   const exportedPath = testInfo.outputPath('draft.html');

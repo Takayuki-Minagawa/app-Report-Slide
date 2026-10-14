@@ -10,6 +10,10 @@ test.beforeEach(async ({ page }) => {
   await expect(
     page.locator('[contenteditable="true"][aria-label="文書本文"]'),
   ).toBeVisible();
+  await page.locator('summary').filter({ hasText: '章別プロジェクト' }).click();
+  await expect(
+    page.locator('[contenteditable="true"][aria-label="文書本文"]'),
+  ).toBeVisible();
 });
 test.afterEach(async ({ page }) => {
   expect(pageErrors.get(page) ?? []).toEqual([]);
@@ -51,7 +55,7 @@ test('章別レポートを画像・除外設定ごとZIP保存し再開でき�
   page,
 }) => {
   await page
-    .getByLabel('Markdownファイル')
+    .getByLabel('HTML・Markdown・JSONファイル')
     .setInputFiles([
       source('Alpha', '[@fig:beta]\n\n![Alpha image](same.svg)\n{#fig:alpha}'),
       image('blue'),
@@ -272,5 +276,5 @@ test('下書きを守り、確認付きで章を削除できる', async ({ page 
   await expect(
     page.getByRole('button', { name: '章を削除', exact: true }),
   ).toBeDisabled();
-  await expect(page.locator('.kumi-editor-content h1')).toHaveText('解析概要');
+  await expect(page.locator('.kumi-editor-content')).toHaveText('');
 });

@@ -34,6 +34,8 @@ import {
   cloneDocument,
   initialDocument,
   initialMarkdown,
+  sampleReportDocument,
+  sampleSlideDocument,
 } from '@/src/workspace/initial-document';
 import {
   assetByteTotal,
@@ -44,6 +46,7 @@ import {
   downloadFile,
   type AssetUrls,
   type DocumentFileFormat,
+  type ImportedDocument,
 } from '@/src/workspace/files';
 import {
   statusMessage,
@@ -61,7 +64,8 @@ import {
   captureRecoveryAssets,
   clearWorkspaceRecovery,
   nextRecoveryTimestamp,
-  readWorkspaceRecovery,
+  prepareWorkspaceRecoveries,
+  removeWorkspaceRecovery,
   restoreRecoveryAssets,
   writeWorkspaceRecovery,
   type WorkspaceRecovery,
@@ -185,10 +189,19 @@ export function useDocumentWorkspace() {
   const [markdownDirty, setMarkdownDirty] = useState(false);
   const [assetStore] = useState(() => new ImageAssetStore());
   const [assets, setAssets] = useState<AssetUrls>(() => assetStore.assets);
-  const [pendingRecovery, setPendingRecovery] =
-    useState<WorkspaceRecovery | null>(null);
+  const [recoveryCandidates, setRecoveryCandidates] = useState<
+    WorkspaceRecovery[]
+  >([]);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const pendingRecovery = recoveryCandidates[0] ?? null;
   const [recoveryReady, setRecoveryReady] = useState(false);
   const [recoveryRestoring, setRecoveryRestoring] = useState(false);
+  const [recoverySavedSignature, setRecoverySavedSignature] = useState<
+    string | null
+  >(null);
+  const [lastHtmlExportSignature, setLastHtmlExportSignature] = useState<
+    string | null
+  >(null);
   const recoveryQueue = useRef<Promise<void>>(Promise.resolve());
   const recoveryRevision = useRef(0);
   const recoveryFailureReported = useRef(false);
@@ -199,6 +212,19 @@ export function useDocumentWorkspace() {
   >(null);
   const activeBinaryExport = useRef<number | null>(null);
   const importRevision = useRef(0);
+  const [pendingHtmlImport, setPendingHtmlImport] =
+    useState<ImportedDocument | null>(null);
+  const pendingHtmlRef = useRef<{
+    result: ImportedDocument;
+    revision: number;
+  } | null>(null);
+  useEffect(
+    () => () => {
+      if (pendingHtmlRef.current)
+        revokeAssetUrls(pendingHtmlRef.current.result.assets);
+    },
+    [],
+  );
   const invalidatePendingImport = useCallback(() => {
     importRevision.current++;
   }, []);
@@ -474,21 +500,26 @@ export function useDocumentWorkspace() {
 
   useEffect(() => {
     let active = true;
-    void readWorkspaceRecovery()
-      .then((recovery) => {
-        if (!active) return;
-        if (recovery) setPendingRecovery(recovery);
-        else setRecoveryReady(true);
-      })
-      .catch(() => {
-        if (!active) return;
-        reportRecoveryFailure();
-        setRecoveryReady(true);
-      });
+    void enqueueRecoveryTask(async () => {
+      const candidates = await prepareWorkspaceRecoveries();
+      if (!active) return;
+      setRecoveryCandidates(candidates);
+      setRecoveryReady(true);
+    }).catch(() => {
+      if (!active) return;
+      reportRecoveryFailure();
+      setRecoveryReady(true);
+    });
     return () => {
       active = false;
     };
-  }, [reportRecoveryFailure]);
+  }, [enqueueRecoveryTask, reportRecoveryFailure]);
+
+  const workspaceSignature = useMemo(
+    () =>
+      JSON.stringify([document, markdownDraft, markdownDirty, projectSession]),
+    [document, markdownDraft, markdownDirty, projectSession],
+  );
 
   const saveRecovery = useCallback(async () => {
     const revision = ++recoveryRevision.current;
@@ -526,7 +557,9 @@ export function useDocumentWorkspace() {
     try {
       await enqueueRecoveryTask(async () => {
         if (revision !== recoveryRevision.current) return;
-        await writeWorkspaceRecovery(recovery);
+        const saved = await writeWorkspaceRecovery(recovery);
+        if (revision === recoveryRevision.current)
+          setRecoverySavedSignature(saved ? workspaceSignature : null);
       });
     } catch {
       reportRecoveryFailure();
@@ -540,38 +573,53 @@ export function useDocumentWorkspace() {
     markdownDraft,
     projectSession,
     reportRecoveryFailure,
+    workspaceSignature,
     view,
   ]);
 
   useEffect(() => {
-    if (!recoveryReady || pendingRecovery || !hasUnsavedChanges) return;
+    if (!recoveryReady || !hasUnsavedChanges) return;
     const timeout = window.setTimeout(() => {
       void saveRecovery();
     }, 800);
     return () => window.clearTimeout(timeout);
-  }, [hasUnsavedChanges, pendingRecovery, recoveryReady, saveRecovery]);
+  }, [hasUnsavedChanges, recoveryReady, saveRecovery]);
 
   useEffect(() => {
-    if (!recoveryReady || pendingRecovery || !hasUnsavedChanges) return;
+    if (!recoveryReady || !hasUnsavedChanges) return;
     const saveWhenHidden = () => {
       if (window.document.visibilityState === 'hidden') void saveRecovery();
     };
     window.document.addEventListener('visibilitychange', saveWhenHidden);
     return () =>
       window.document.removeEventListener('visibilitychange', saveWhenHidden);
-  }, [hasUnsavedChanges, pendingRecovery, recoveryReady, saveRecovery]);
+  }, [hasUnsavedChanges, recoveryReady, saveRecovery]);
 
   const discardRecovery = async () => {
     if (!pendingRecovery || recoveryRestoring) return;
     setRecoveryRestoring(true);
-    await clearRecovery();
-    setPendingRecovery(null);
-    setRecoveryReady(true);
-    setRecoveryRestoring(false);
+    try {
+      await enqueueRecoveryTask(() =>
+        removeWorkspaceRecovery(pendingRecovery.savedAt),
+      );
+      setRecoveryCandidates((current) =>
+        current.filter((item) => item.savedAt !== pendingRecovery.savedAt),
+      );
+    } catch {
+      reportRecoveryFailure();
+    } finally {
+      setRecoveryRestoring(false);
+    }
   };
 
   const restoreRecovery = async () => {
-    if (!pendingRecovery || !editor || recoveryRestoring) return;
+    if (
+      !pendingRecovery ||
+      !editor ||
+      recoveryRestoring ||
+      !confirmReplacement()
+    )
+      return;
     setRecoveryRestoring(true);
     let restoredAssets: AssetUrls | undefined;
     try {
@@ -615,7 +663,9 @@ export function useDocumentWorkspace() {
       );
       clearSelection();
       setStatus({ kind: 'success', title: statusMessage('recoveredDraft') });
-      setPendingRecovery(null);
+      // Keep the durable source until explicit deletion. The restored document's
+      // next autosave is debounced and may fail or never run before the tab closes.
+      setRecoveryOpen(false);
       setRecoveryReady(true);
     } catch (error) {
       if (restoredAssets) revokeAssetUrls(restoredAssets);
@@ -703,6 +753,14 @@ export function useDocumentWorkspace() {
         pendingAssets = result.assets;
         // A later import or edit wins, even if this file finishes reading last.
         if (request !== importRevision.current) return;
+        if (result.htmlImport) {
+          if (pendingHtmlRef.current)
+            revokeAssetUrls(pendingHtmlRef.current.result.assets);
+          pendingHtmlRef.current = { result, revision: request };
+          setPendingHtmlImport(result);
+          pendingAssets = undefined;
+          return;
+        }
         const description: StatusMessage[] = result.diagnostics.map(
           diagnosticStatusMessage,
         );
@@ -734,6 +792,63 @@ export function useDocumentWorkspace() {
     },
     [clearRecovery, documentWriteLocked, loadDocument, confirmReplacement],
   );
+
+  const cancelHtmlImport = () => {
+    if (pendingHtmlRef.current)
+      revokeAssetUrls(pendingHtmlRef.current.result.assets);
+    pendingHtmlRef.current = null;
+    setPendingHtmlImport(null);
+  };
+
+  const confirmHtmlImport = () => {
+    const pending = pendingHtmlRef.current;
+    if (!pending) return;
+    if (pending.revision !== importRevision.current) {
+      cancelHtmlImport();
+      setStatus({
+        kind: 'error',
+        title:
+          locale === 'ja'
+            ? '確認中に文書が変更されました。HTMLを開き直してください。'
+            : 'The document changed during preview. Open the HTML again.',
+      });
+      return;
+    }
+    if (!confirmReplacement()) return;
+    try {
+      const result = pending.result;
+      loadDocument(
+        result.document,
+        statusMessage('loaded', result.sourceName),
+        {
+          assets: result.assets,
+          description: [
+            ...(result.htmlImport?.warnings ?? []),
+            ...result.diagnostics.map(diagnosticStatusMessage),
+            ...(result.unresolved.length
+              ? [
+                  statusMessage(
+                    'unresolvedImages',
+                    result.unresolved.join(', '),
+                  ),
+                ]
+              : []),
+          ],
+        },
+      );
+      pendingHtmlRef.current = null;
+      setPendingHtmlImport(null);
+      setProjectSession(null);
+      setView('visual');
+      void clearRecovery();
+    } catch (error) {
+      setStatus({
+        kind: 'error',
+        title: statusMessage('unableToLoadTitle'),
+        description: describeWorkspaceError(error, 'unableToLoad'),
+      });
+    }
+  };
 
   const updateMarkdown = (source: string) => {
     invalidatePendingImport();
@@ -773,6 +888,20 @@ export function useDocumentWorkspace() {
     loadDocument(
       createDefaultDocument(type),
       statusMessage(type === 'report' ? 'createdReport' : 'createdSlide'),
+      { assets: new Map() },
+    );
+    setProjectSession(null);
+    void clearRecovery();
+    setView('visual');
+  };
+
+  const loadSample = (type: DocumentType) => {
+    if (documentWriteLocked || !confirmReplacement()) return;
+    loadDocument(
+      cloneDocument(
+        type === 'report' ? sampleReportDocument : sampleSlideDocument,
+      ),
+      locale === 'ja' ? 'サンプルを開きました' : 'Example opened',
       { assets: new Map() },
     );
     setProjectSession(null);
@@ -937,6 +1066,7 @@ export function useDocumentWorkspace() {
             ).exportReportHtml(source, assets, locale);
       if (revision !== importRevision.current) return;
       downloadFile(source, 'html', result.html, 'text/html;charset=utf-8');
+      setLastHtmlExportSignature(workspaceSignature);
       setStatus({
         kind: 'success',
         title: statusMessage('exportedHtml'),
@@ -948,7 +1078,7 @@ export function useDocumentWorkspace() {
             : []),
         ],
       });
-      // Viewing output is not an editable-source save: preserve drafts, Undo and dirty flags.
+      // A browser download cannot confirm disk persistence; keep drafts, Undo and recovery copies.
     } catch (error) {
       if (revision === importRevision.current)
         setStatus({
@@ -1032,6 +1162,15 @@ export function useDocumentWorkspace() {
         description: [
           ...snapshot.diagnostics.map(diagnosticStatusMessage),
           statusMessage('binaryExportDescription'),
+          ...(format === 'office' &&
+          source.type === 'slide' &&
+          source.metadata.slide_design
+            ? [
+                locale === 'ja'
+                  ? 'スライドの新しい配置・役割別文字設定はHTMLとPDFに対応しています。PPTXは独自の組版で出力するため、見た目を確認してください。'
+                  : 'The new slide layouts and role typography apply to HTML and PDF. PPTX uses its own layout; review the appearance.',
+              ]
+            : []),
           ...result.warnings,
         ],
       });
@@ -1068,7 +1207,11 @@ export function useDocumentWorkspace() {
     invalidatePendingImport();
     setDocument((current) => ({
       ...current,
-      metadata: { ...current.metadata, ...updates },
+      metadata: Object.fromEntries(
+        Object.entries({ ...current.metadata, ...updates }).filter(
+          ([, value]) => value !== undefined,
+        ),
+      ),
     }));
     setDocumentDirty(true);
   };
@@ -1090,7 +1233,31 @@ export function useDocumentWorkspace() {
     projectSession,
     projectActions,
     recovery: pendingRecovery,
+    recoveryCandidates,
+    recoveryOpen,
+    setRecoveryOpen,
+    selectRecovery: (savedAt: number) =>
+      setRecoveryCandidates((current) =>
+        [...current].sort(
+          (a, b) =>
+            Number(b.savedAt === savedAt) - Number(a.savedAt === savedAt),
+        ),
+      ),
     recoveryRestoring,
+    saveState:
+      lastHtmlExportSignature === workspaceSignature
+        ? locale === 'ja'
+          ? 'HTMLのダウンロード開始済み'
+          : 'HTML download started'
+        : hasUnsavedChanges
+          ? recoverySavedSignature === workspaceSignature
+            ? locale === 'ja'
+              ? 'ブラウザー内に一時保存済み'
+              : 'Temporarily saved in browser'
+            : copy.workspace.unsaved
+          : locale === 'ja'
+            ? '編集待ち'
+            : 'Ready to edit',
     restoreRecovery,
     discardRecovery,
     previewDocument,
@@ -1114,10 +1281,14 @@ export function useDocumentWorkspace() {
     resolveImageUrl,
     resolvePreviewImageUrl,
     importFiles,
+    pendingHtmlImport,
+    confirmHtmlImport,
+    cancelHtmlImport,
     insertSlideImage,
     updateMarkdown,
     applyMarkdown,
     createDocument,
+    loadSample,
     changeView,
     discardMarkdown,
     saveDocument,
@@ -1129,6 +1300,7 @@ export function useDocumentWorkspace() {
     binaryExporting,
     updatePageSettings,
     updateTheme,
+    updateMetadata,
     updateDocumentFlag,
   };
 }

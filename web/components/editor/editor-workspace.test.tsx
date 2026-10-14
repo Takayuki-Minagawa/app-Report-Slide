@@ -13,6 +13,32 @@ function renderWorkspace() {
 }
 
 describe('EditorWorkspace', () => {
+  it('starts empty and opens examples and recovery only on request', async () => {
+    const { container } = renderWorkspace();
+    await screen.findByText('REPORT');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(container.querySelector('.kumi-editor-content')?.textContent).toBe(
+      '',
+    );
+    expect(container).not.toHaveTextContent('2層鉄骨造');
+    fireEvent.click(screen.getByText('サンプルを開く'));
+    fireEvent.click(screen.getByRole('button', { name: 'Reportサンプル' }));
+    await waitFor(() =>
+      expect(container.querySelector('.kumi-editor-content')).toHaveTextContent(
+        '解析概要',
+      ),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '未保存の作業を確認' }));
+    expect(await screen.findByRole('dialog')).toHaveTextContent(
+      '復元できる作業はありません',
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: '閉じる（候補を保持）' }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    );
+  });
   it('opens the hidden side panels from header controls', async () => {
     renderWorkspace();
     expect(await screen.findByText('REPORT')).toBeInTheDocument();
@@ -217,7 +243,7 @@ describe('EditorWorkspace', () => {
       'Markdownの変更を先に処理してください',
     );
     for (const button of screen.getAllByRole('button', {
-      name: 'Markdownを開く',
+      name: 'HTML・原稿を開く',
     })) {
       expect(button).toBeDisabled();
     }

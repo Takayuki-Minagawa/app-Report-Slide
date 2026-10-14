@@ -13,6 +13,10 @@ import {
 } from 'react';
 import katex from 'katex';
 import { ChartGraphic } from './chart-graphic';
+import {
+  groupSlideDesignNodes,
+  type SlideDesign,
+} from '@/src/document/slide-design';
 
 import { messages, type AppLocale } from '@/src/i18n/messages';
 import { formatSemanticReference } from '@/src/i18n/diagnostics';
@@ -139,6 +143,7 @@ interface DocumentRendererProps {
   figureInteraction?: FigureInteraction;
   /** Render only the presenter notes of these nodes instead of the audience content. */
   speakerNotes?: boolean;
+  slideLayout?: SlideDesign['layout'];
 }
 
 function MathContent({ display, latex }: { display: boolean; latex: string }) {
@@ -407,6 +412,7 @@ function SlidePlacedFigure({
   return (
     <figure
       className="preview-figure slide-positioned-figure"
+      data-node-id={node.attrs.nodeId}
       data-selected={selected || undefined}
       data-align={node.attrs.align}
       style={{
@@ -526,6 +532,7 @@ function FigureBlock({
   if (!src || failed) {
     return (
       <figure
+        data-node-id={node.attrs.nodeId}
         className={
           layoutStarter ? 'preview-figure slide-flow-figure' : 'preview-figure'
         }
@@ -545,6 +552,7 @@ function FigureBlock({
 
   return (
     <figure
+      data-node-id={node.attrs.nodeId}
       className={
         layoutStarter ? 'preview-figure slide-flow-figure' : 'preview-figure'
       }
@@ -577,7 +585,7 @@ function TableCellContent({
   return (
     <>
       {cell.content.map((paragraph) => (
-        <p key={paragraph.attrs.nodeId}>
+        <p key={paragraph.attrs.nodeId} data-node-id={paragraph.attrs.nodeId}>
           {renderInline(paragraph.content, resolveImageUrl)}
         </p>
       ))}
@@ -623,7 +631,11 @@ function BlockNode({
         | 'h5'
         | 'h6';
       return (
-        <Tag id={anchorId(key)} style={textRulerStyle(node.attrs.textRuler)}>
+        <Tag
+          id={anchorId(key)}
+          data-node-id={key}
+          style={textRulerStyle(node.attrs.textRuler)}
+        >
           {target?.number && (
             <span className="section-number">{target.number} </span>
           )}
@@ -633,13 +645,13 @@ function BlockNode({
     }
     case 'paragraph':
       return (
-        <p style={textRulerStyle(node.attrs.textRuler)}>
+        <p data-node-id={key} style={textRulerStyle(node.attrs.textRuler)}>
           {renderInline(node.content, resolveImageUrl)}
         </p>
       );
     case 'bulletList':
       return (
-        <ul>
+        <ul data-node-id={key}>
           {node.content.map((item) => (
             <BlockNode
               key={item.attrs.nodeId}
@@ -651,7 +663,7 @@ function BlockNode({
       );
     case 'orderedList':
       return (
-        <ol start={node.attrs.start}>
+        <ol data-node-id={key} start={node.attrs.start}>
           {node.content.map((item) => (
             <BlockNode
               key={item.attrs.nodeId}
@@ -663,7 +675,7 @@ function BlockNode({
       );
     case 'listItem':
       return (
-        <li>
+        <li data-node-id={key}>
           {node.content.map((child) => (
             <BlockNode
               key={child.attrs.nodeId}
@@ -678,7 +690,7 @@ function BlockNode({
         ? node.attrs.callout
         : undefined;
       return (
-        <blockquote data-callout={callout}>
+        <blockquote data-node-id={key} data-callout={callout}>
           {callout && <p className="callout-title">{copy.callout[callout]}</p>}
           {node.content.map((child) => (
             <BlockNode
@@ -692,7 +704,10 @@ function BlockNode({
     }
     case 'codeBlock':
       return (
-        <pre data-language={node.attrs.language ?? undefined}>
+        <pre
+          data-node-id={key}
+          data-language={node.attrs.language ?? undefined}
+        >
           <code>{node.content?.map((text) => text.text).join('') ?? ''}</code>
         </pre>
       );
@@ -704,13 +719,17 @@ function BlockNode({
       );
     case 'chart':
       return (
-        <div id={anchorId(key)}>
+        <div id={anchorId(key)} data-node-id={key}>
           <ChartGraphic node={node} />
         </div>
       );
     case 'blockMath':
       return (
-        <div id={anchorId(key)} className="numbered-equation">
+        <div
+          id={anchorId(key)}
+          data-node-id={key}
+          className="numbered-equation"
+        >
           <div className="equation-body">
             <MathContent display latex={node.attrs.latex} />
             {target?.number && (
@@ -727,7 +746,7 @@ function BlockNode({
     case 'speakerNotes':
       return null;
     case 'horizontalRule':
-      return <hr />;
+      return <hr data-node-id={key} />;
     case 'table': {
       const columnWidths = tableColumnWidths(node);
       const measuredWidth =
@@ -741,7 +760,11 @@ function BlockNode({
           : { minWidth: `${measuredWidth + 80 * missingWidthCount}px` }
         : undefined;
       return (
-        <div className="preview-table-wrap" id={anchorId(key)}>
+        <div
+          className="preview-table-wrap"
+          id={anchorId(key)}
+          data-node-id={key}
+        >
           <table
             className={columnWidths ? 'preview-table-sized' : undefined}
             style={tableWidthStyle}
@@ -803,6 +826,7 @@ export function DocumentRenderer({
   showToc = true,
   figureInteraction,
   speakerNotes = false,
+  slideLayout,
 }: DocumentRendererProps) {
   const copy = messages[locale];
   const computed = useMemo(
@@ -825,6 +849,21 @@ export function DocumentRenderer({
       )
     : pageNodes;
   const footnotes = speakerNotes ? [] : collectFootnotes(pageNodes);
+  const layoutGroups =
+    document.type === 'slide' && !speakerNotes && slideLayout
+      ? groupSlideDesignNodes(
+          blocks.filter((node) => node.type !== 'speakerNotes'),
+          slideLayout,
+        )
+      : null;
+  const renderBlocks = (content: DocumentNode[]) =>
+    content.map((node) => (
+      <BlockNode
+        key={node.attrs.nodeId}
+        node={node}
+        resolveImageUrl={resolveImageUrl}
+      />
+    ));
   return (
     <LocaleContext.Provider value={locale}>
       <AnalysisContext.Provider value={computed}>
@@ -857,13 +896,20 @@ export function DocumentRenderer({
                       </ol>
                     </nav>
                   )}
-                {blocks.map((node) => (
-                  <BlockNode
-                    key={node.attrs.nodeId}
-                    node={node}
-                    resolveImageUrl={resolveImageUrl}
-                  />
-                ))}
+                {layoutGroups ? (
+                  <>
+                    {layoutGroups.title && renderBlocks([layoutGroups.title])}
+                    <div className="slide-design-columns">
+                      {layoutGroups.columns.map((column, index) => (
+                        <div key={index} className="slide-design-column">
+                          {renderBlocks(column)}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  renderBlocks(blocks)
+                )}
                 {footnotes.length > 0 && (
                   <ol
                     className="document-footnotes"
