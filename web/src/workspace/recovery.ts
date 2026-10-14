@@ -155,14 +155,17 @@ export async function writeWorkspaceRecovery(
     const transaction = database.transaction(storeName, 'readwrite');
     const store = transaction.objectStore(storeName);
     const request = store.get(latestDraftKey);
+    let saved = false;
     request.onsuccess = () => {
       const current = parseWorkspaceRecovery(request.result);
-      if (!current || current.savedAt <= recovery.savedAt)
+      if (!current || current.savedAt <= recovery.savedAt) {
         store.put(recovery, latestDraftKey);
+        saved = true;
+      }
     };
     request.onerror = () => transaction.abort();
     await transactionComplete(transaction);
-    return true;
+    return saved;
   } finally {
     database.close();
   }

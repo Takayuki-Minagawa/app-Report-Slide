@@ -1,4 +1,10 @@
-import { expect, test, type Download, type Page } from '@playwright/test';
+import {
+  expect,
+  test,
+  type Download,
+  type Locator,
+  type Page,
+} from '@playwright/test';
 import type { DocumentData } from '../src/document/model';
 
 test.setTimeout(90_000);
@@ -15,6 +21,124 @@ async function exportJson(page: Page): Promise<DocumentData> {
   await page.getByRole('button', { name: 'JSON', exact: true }).click();
   return JSON.parse(await downloadText(await pending)) as DocumentData;
 }
+
+async function expectSourceSize(source: Locator, size: number) {
+  await expect(source).toBeVisible();
+  // Slide typography uses a 920 px reference canvas, including scaled exports.
+  await expect
+    .poll(() =>
+      source.evaluate((element) => {
+        const slide = element.closest('.slide-preview')!;
+        return (
+          (Number.parseFloat(getComputedStyle(element).fontSize) * 920) /
+          Number.parseFloat(getComputedStyle(slide).width)
+        );
+      }),
+    )
+    .toBeCloseTo(size, 2);
+}
+
+test('出典の文字サイズをスライドのプレビューと保存HTMLで維持し、Reportは変更しない', async ({
+  page,
+}) => {
+  page.on('dialog', (dialog) => void dialog.accept());
+  await page.setViewportSize({ width: 1600, height: 1050 });
+  await page.goto('/');
+  await expect(
+    page.locator('[contenteditable="true"][aria-label="文書本文"]'),
+  ).toBeVisible();
+  const document: DocumentData = {
+    schemaVersion: 2,
+    type: 'slide',
+    metadata: { title: '出典の文字サイズ', theme: 'paper-light' },
+    children: [
+      {
+        type: 'figure',
+        attrs: {
+          nodeId: 'source-size-figure',
+          src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6t9sAAAAASUVORK5CYII=',
+          alt: '出典付きの図',
+          title: null,
+          width: 10,
+          align: 'center',
+          figureEdit: {
+            version: 1,
+            source: {
+              referenceId: '',
+              origin: 'original',
+              pdfPage: '',
+              printedPage: '',
+              figureNumber: '',
+              note: '出典サイズの検証',
+            },
+          },
+        },
+      },
+    ],
+  };
+  await page.getByLabel('HTML・Markdown・JSONファイル').setInputFiles({
+    name: 'source-size.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(document)),
+  });
+  await page.getByRole('button', { name: '完成プレビューへ切り替え' }).click();
+  const source = page.locator('.preview-pages .figure-source > small');
+  const panel = page.getByRole('region', {
+    name: 'スライドデザイン',
+    exact: true,
+  });
+  for (const size of [12, 16]) {
+    if (size === 16) {
+      await panel
+        .getByText('役割・配色・余白のスタイル', { exact: true })
+        .click();
+      await panel.getByText('出典の見た目', { exact: true }).click();
+      await panel.getByLabel('出典の個別設定を使う', { exact: true }).check();
+      await panel.getByLabel('出典のsize', { exact: true }).fill(String(size));
+      await panel.getByRole('button', { name: '変更をプレビュー' }).click();
+      await page
+        .getByRole('dialog', { name: 'デザインの変更を確認' })
+        .getByRole('button', { name: 'このデザインを適用' })
+        .click();
+    }
+    await expectSourceSize(source, size);
+    const pending = page.waitForEvent('download');
+    await page
+      .getByRole('button', { name: '編集できるHTMLを保存', exact: true })
+      .click();
+    const exported = await page.context().newPage();
+    try {
+      await exported.setContent(await downloadText(await pending));
+      await expectSourceSize(exported.locator('.figure-source > small'), size);
+    } finally {
+      await exported.close();
+    }
+  }
+
+  await page.getByLabel('HTML・Markdown・JSONファイル').setInputFiles({
+    name: 'source-size-report.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(
+      JSON.stringify({
+        ...document,
+        type: 'report',
+        metadata: { title: 'Report' },
+      }),
+    ),
+  });
+  const reportSource = page.locator(
+    '.preview-pages .report-preview .figure-source > small',
+  );
+  await expect(reportSource).toBeVisible();
+  const reportSizes = await reportSource.evaluate((element) => ({
+    source: Number.parseFloat(getComputedStyle(element).fontSize),
+    caption: Number.parseFloat(
+      getComputedStyle(element.parentElement!).fontSize,
+    ),
+  }));
+  // Report page sizing can scale both values; preserve its existing 80% ratio.
+  expect(reportSizes.source).toBeCloseTo(reportSizes.caption * 0.8, 2);
+});
 
 test('デザインを対象ページで確認して適用・取消し、HTMLから再編集できる', async ({
   page,

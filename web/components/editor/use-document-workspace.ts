@@ -79,9 +79,12 @@ import {
   statusDescriptionText,
   combinedStatusDescription,
   describeWorkspaceError,
+  describeExportError,
+  isExportModuleLoadError,
   WorkspaceStatusError,
   type StatusMessage,
   type StatusDescription,
+  type StatusMessageKey,
   type WorkspaceStatus,
 } from '@/src/workspace/status';
 import {
@@ -654,9 +657,13 @@ export function useDocumentWorkspace() {
       recoveryAssets = await captureRecoveryAssets(assets);
     } catch {
       reportRecoveryFailure();
-      return;
+      return false;
     }
-    if (revision !== recoveryRevision.current) return;
+    if (revision !== recoveryRevision.current) return false;
+    const capturedPaths = new Set(recoveryAssets.map((asset) => asset.path));
+    const assetsComplete = [...assets].every(
+      ([path, url]) => !url.startsWith('blob:') || capturedPaths.has(path),
+    );
 
     const recovery: WorkspaceRecovery = {
       schemaVersion: 1,
@@ -675,16 +682,21 @@ export function useDocumentWorkspace() {
         : {}),
       assets: recoveryAssets,
     };
+    let saved = false;
     try {
       await enqueueRecoveryTask(async () => {
         if (revision !== recoveryRevision.current) return;
-        const saved = await writeWorkspaceRecovery(recovery);
+        saved = await writeWorkspaceRecovery(recovery);
         if (revision === recoveryRevision.current)
-          setRecoverySavedSignature(saved ? workspaceSignature : null);
+          setRecoverySavedSignature(
+            saved && assetsComplete ? workspaceSignature : null,
+          );
       });
     } catch {
       reportRecoveryFailure();
     }
+    // A partial copy can still retain text, but must not promise complete recovery.
+    return saved && assetsComplete && revision === recoveryRevision.current;
   }, [
     assets,
     document,
@@ -697,6 +709,23 @@ export function useDocumentWorkspace() {
     workspaceSignature,
     view,
   ]);
+
+  const describeExportFailure = async (
+    error: unknown,
+    fallback: StatusMessageKey,
+  ): Promise<StatusDescription> => {
+    let recoverySaved = false;
+    if (isExportModuleLoadError(error)) {
+      // Confirm a fresh durable snapshot, including assets, before suggesting recovery.
+      // A previously saved signature may survive clearing or replacing a recovery copy.
+      try {
+        recoverySaved = await saveRecovery();
+      } catch {
+        // Keep the original export error visible when recovery cannot be confirmed.
+      }
+    }
+    return describeExportError(error, fallback, recoverySaved);
+  };
 
   useEffect(() => {
     if (!recoveryReady || !hasUnsavedChanges) return;
@@ -1315,12 +1344,18 @@ export function useDocumentWorkspace() {
           statusMessage('savedArchive'),
         );
     } catch (error) {
-      if (revision === importRevision.current)
-        setStatus({
-          kind: 'error',
-          title: statusMessage('unableToSaveArchive'),
-          description: describeWorkspaceError(error, 'unableToSaveJson'),
-        });
+      if (revision === importRevision.current) {
+        const description = await describeExportFailure(
+          error,
+          'unableToSaveJson',
+        );
+        if (revision === importRevision.current)
+          setStatus({
+            kind: 'error',
+            title: statusMessage('unableToSaveArchive'),
+            description,
+          });
+      }
     }
   };
 
@@ -1362,12 +1397,18 @@ export function useDocumentWorkspace() {
       });
       // A browser download cannot confirm disk persistence; keep drafts, Undo and recovery copies.
     } catch (error) {
-      if (revision === importRevision.current)
-        setStatus({
-          kind: 'error',
-          title: statusMessage('unableToExportHtml'),
-          description: describeWorkspaceError(error, 'unableToExportHtml'),
-        });
+      if (revision === importRevision.current) {
+        const description = await describeExportFailure(
+          error,
+          'unableToExportHtml',
+        );
+        if (revision === importRevision.current)
+          setStatus({
+            kind: 'error',
+            title: statusMessage('unableToExportHtml'),
+            description,
+          });
+      }
     } finally {
       if (activeHtmlExport.current === revision) {
         activeHtmlExport.current = null;
@@ -1453,12 +1494,18 @@ export function useDocumentWorkspace() {
         ],
       });
     } catch (error) {
-      if (revision === importRevision.current)
-        setStatus({
-          kind: 'error',
-          title: statusMessage('unableToExportFile', label),
-          description: describeWorkspaceError(error, 'invalidDocumentData'),
-        });
+      if (revision === importRevision.current) {
+        const description = await describeExportFailure(
+          error,
+          'invalidDocumentData',
+        );
+        if (revision === importRevision.current)
+          setStatus({
+            kind: 'error',
+            title: statusMessage('unableToExportFile', label),
+            description,
+          });
+      }
     } finally {
       if (activeBinaryExport.current === revision) {
         activeBinaryExport.current = null;

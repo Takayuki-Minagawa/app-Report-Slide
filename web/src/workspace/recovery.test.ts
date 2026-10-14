@@ -5,6 +5,8 @@ import {
   nextRecoveryTimestamp,
   parseWorkspaceRecovery,
   restoreRecoveryAssets,
+  writeWorkspaceRecovery,
+  type WorkspaceRecovery,
 } from './recovery';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -32,6 +34,56 @@ describe('workspace recovery data', () => {
 
     expect(second).toBeGreaterThan(first);
   });
+
+  it.each([false, true])(
+    'confirms only the snapshot actually written when a newer copy exists (%s)',
+    async (newerCopyExists) => {
+      const snapshot: WorkspaceRecovery = {
+        schemaVersion: 1,
+        savedAt: 100,
+        document: initialDocument,
+        markdownDraft: '# Draft',
+        markdownDirty: true,
+        view: 'markdown',
+        assets: [],
+      };
+      const request = {
+        result: newerCopyExists ? { ...snapshot, savedAt: 200 } : undefined,
+        onsuccess: null as (() => void) | null,
+      };
+      const put = vi.fn();
+      const transaction = {
+        oncomplete: null as (() => void) | null,
+        objectStore: () => ({
+          put,
+          get: () => {
+            queueMicrotask(() => {
+              request.onsuccess?.();
+              transaction.oncomplete?.();
+            });
+            return request;
+          },
+        }),
+      };
+      const close = vi.fn();
+      const opened = {
+        result: { transaction: () => transaction, close },
+        onsuccess: null as (() => void) | null,
+      };
+      vi.stubGlobal('indexedDB', {
+        open: () => {
+          queueMicrotask(() => opened.onsuccess?.());
+          return opened;
+        },
+      });
+      await expect(writeWorkspaceRecovery(snapshot)).resolves.toBe(
+        !newerCopyExists,
+      );
+      if (newerCopyExists) expect(put).not.toHaveBeenCalled();
+      else expect(put).toHaveBeenCalledWith(snapshot, 'latest');
+      expect(close).toHaveBeenCalledOnce();
+    },
+  );
 
   it('copies each local object URL once and ignores non-local URLs', async () => {
     const blob = new Blob(['image'], { type: 'image/png' });

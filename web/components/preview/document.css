@@ -700,6 +700,11 @@
   font-size: var(--slide-caption-size);
 }
 
+/* The configured source/caption size is already the intended readable size. */
+.slide-preview[data-slide-design] .document-renderer .figure-source > small {
+  font-size: inherit;
+}
+
 .slide-preview[data-slide-design]
   .preview-figure:not(.slide-positioned-figure) {
   margin-block: var(--slide-gap);

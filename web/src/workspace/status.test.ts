@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { messages } from '@/src/i18n/messages';
 import { MarkdownImportError } from '@/src/markdown/diagnostics';
 import { MarkdownSerializationError } from '@/src/markdown/serializer';
-import { describeWorkspaceError, statusDescriptionText } from './status';
+import {
+  describeWorkspaceError,
+  describeExportError,
+  isExportModuleLoadError,
+  statusDescriptionText,
+} from './status';
 
 describe('workspace error descriptions', () => {
   it('preserves a parse diagnostic without incorrectly recommending JSON export', () => {
@@ -45,5 +50,48 @@ describe('workspace error descriptions', () => {
     expect(statusDescriptionText(description, messages.en, 'en')).toBe(
       'Download unavailable',
     );
+  });
+
+  it.each([
+    'Failed to fetch dynamically imported module: https://example.com/export-old.js',
+    'error loading dynamically imported module: https://example.com/export-old.js',
+    'Importing a module script failed.',
+    'Loading chunk 123 failed.',
+    'Unable to preload CSS for https://example.com/export-old.css',
+  ])('recognizes export module loading failures: %s', (message) => {
+    const error = new TypeError(message);
+    expect(isExportModuleLoadError(error)).toBe(true);
+    for (const locale of ['ja', 'en'] as const) {
+      const copy = messages[locale];
+      const confirmed = statusDescriptionText(
+        describeExportError(error, 'unableToExportHtml', true),
+        copy,
+        locale,
+      );
+      expect(confirmed).toContain(copy.status.exportModuleUnavailable);
+      expect(confirmed).toContain(copy.status.exportRecoverySaved);
+      expect(confirmed).not.toContain('export-old');
+      const unconfirmed = statusDescriptionText(
+        describeExportError(error, 'unableToExportHtml', false),
+        copy,
+        locale,
+      );
+      expect(unconfirmed).toContain(copy.status.exportRecoveryUnconfirmed);
+      expect(unconfirmed).not.toContain(copy.status.exportRecoverySaved);
+    }
+  });
+
+  it('does not suggest recovery for unrelated network or conversion errors', () => {
+    for (const message of ['Failed to fetch', 'Unreadable image']) {
+      const error = new Error(message);
+      expect(isExportModuleLoadError(error)).toBe(false);
+      expect(
+        statusDescriptionText(
+          describeExportError(error, 'unableToExportHtml', true),
+          messages.en,
+          'en',
+        ),
+      ).toBe(message);
+    }
   });
 });

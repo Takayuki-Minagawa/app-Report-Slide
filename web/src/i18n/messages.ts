@@ -223,6 +223,9 @@ export interface UiMessages {
     exportingHtml: string;
     exportedHtml: string;
     unableToExportHtml: string;
+    exportModuleUnavailable: string;
+    exportRecoverySaved: string;
+    exportRecoveryUnconfirmed: string;
     htmlSlidesOnly: string;
     htmlMissingImages: (sources: string) => string;
     htmlImageReadFailed: (source: string) => string;
@@ -548,7 +551,13 @@ export const messages: Record<AppLocale, UiMessages> = {
         '文書が変更されたため出力を中止しました。もう一度出力してください。',
       htmlExportCancelled:
         'HTML出力を中止しました。現在の文書でもう一度出力してください。',
-      unableToExportHtml: 'HTMLスライドを出力できませんでした',
+      unableToExportHtml: 'HTMLを出力できませんでした',
+      exportModuleUnavailable:
+        'サイトの更新または通信エラーにより、保存機能を読み込めませんでした。',
+      exportRecoverySaved:
+        '現在の作業をこのブラウザー内に一時保存しました。このタブは開いたまま、同じサイトを新しいタブで開き、「未保存の作業を確認」から復元して保存を再試行してください。新しいファイルを確認するまで元のタブを閉じないでください。',
+      exportRecoveryUnconfirmed:
+        '現在の作業の一時保存を確認できません。このタブを閉じず、通信を確認して再試行してください。再読み込みする前にJSONと元の画像・PDFを手元に保存し、未適用のMarkdownはコピーしてください。',
       htmlSlidesOnly: 'HTML出力はSlide文書で利用できます',
       htmlMissingImages: (sources) =>
         `画像が未取り込みです: ${sources}。原稿をMarkdownまたはJSONで保存し、原稿と画像を同時に読み込んでから出力してください。`,
@@ -919,7 +928,13 @@ export const messages: Record<AppLocale, UiMessages> = {
         'Export cancelled because the document changed. Export again.',
       htmlExportCancelled:
         'HTML export was cancelled. Export the current document again.',
-      unableToExportHtml: 'Could not export HTML slides',
+      unableToExportHtml: 'Could not export HTML',
+      exportModuleUnavailable:
+        'The export feature could not load because the site may have been updated or the connection failed.',
+      exportRecoverySaved:
+        'Your current work was temporarily saved in this browser. Keep this tab open, open the same site in a new tab, choose Review recovery copies, restore your work, and retry saving. Keep the original tab open until you have checked the new files.',
+      exportRecoveryUnconfirmed:
+        'A recovery copy of your current work could not be confirmed. Keep this tab open, check the connection, and retry. Before reloading, save JSON and keep the original images and PDFs; copy any unapplied Markdown.',
       htmlSlidesOnly: 'HTML export is available for Slide documents',
       htmlMissingImages: (sources) =>
         `Images have not been imported: ${sources}. Save your source as Markdown or JSON, then import it together with the images before exporting.`,

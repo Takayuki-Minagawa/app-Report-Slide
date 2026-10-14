@@ -138,3 +138,29 @@ export function describeWorkspaceError(
     return [error.message, statusMessage('invalidDocumentData')];
   return error instanceof Error ? error.message : statusMessage(fallback);
 }
+
+export function isExportModuleLoadError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === 'ChunkLoadError' ||
+      /failed to fetch dynamically imported module|error loading dynamically imported module|importing a module script failed|loading chunk .+ failed|unable to preload css/i.test(
+        error.message,
+      ))
+  );
+}
+
+/** Only offer recovery in another tab after the current snapshot was persisted. */
+export function describeExportError(
+  error: unknown,
+  fallback: StatusMessageKey,
+  recoverySaved: boolean,
+): StatusDescription {
+  if (!isExportModuleLoadError(error))
+    return describeWorkspaceError(error, fallback);
+  return [
+    statusMessage('exportModuleUnavailable'),
+    statusMessage(
+      recoverySaved ? 'exportRecoverySaved' : 'exportRecoveryUnconfirmed',
+    ),
+  ];
+}
