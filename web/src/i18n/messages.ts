@@ -499,7 +499,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       markdownTooLarge: 'Markdownファイルは5MB以下にしてください',
       imageTooLarge: '画像ファイルは1件20MB以下にしてください',
       imagesTooLarge: '画像とPDF原本の合計は50MB以下にしてください',
-      imageInserted: '画像をスライドへ配置しました',
+      imageInserted: '画像を挿入しました',
       unableToInsertImage: '画像を挿入できませんでした',
       unresolvedImages: (sources) =>
         `ローカル画像を解決できません: ${sources}（Markdownと画像を同時に選択してください）`,
@@ -870,7 +870,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       imageTooLarge: 'Each image must be 20 MB or smaller',
       imagesTooLarge:
         'The combined image and original PDF size must be 50 MB or smaller',
-      imageInserted: 'Placed the image on the slide',
+      imageInserted: 'Inserted the image',
       unableToInsertImage: 'Could not insert the image',
       unresolvedImages: (sources) =>
         `Could not resolve local images: ${sources}. Select the Markdown file and images together.`,
