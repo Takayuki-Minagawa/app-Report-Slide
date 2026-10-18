@@ -19,6 +19,7 @@ import readerStyles from './reader.css?raw';
 import { ReaderDetails, ReaderDialog } from './reader-content';
 import { hashedInlineScript } from './standalone-html';
 import { editableHtmlId, editableHtmlPayload } from './editable-html';
+import { layoutInspectionSource } from './layout-inspection';
 
 const playerMessages = {
   ja: {
@@ -93,7 +94,7 @@ export async function exportSlideHtml(
   const pages = splitDocumentPages(document);
   const copy = playerMessages[locale];
   const { script, policy } = await hashedInlineScript(
-    playerSource + '\n' + readerSource,
+    layoutInspectionSource + '\n' + playerSource + '\n' + readerSource,
   );
   const styles =
     playerStyles +

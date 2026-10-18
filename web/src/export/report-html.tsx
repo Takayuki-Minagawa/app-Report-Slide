@@ -20,14 +20,21 @@ import { editableHtmlId, editableHtmlPayload } from './editable-html';
 import readerSource from './reader.js?raw';
 import readerStyles from './reader.css?raw';
 import { ReaderDetails, ReaderDialog } from './reader-content';
+import { layoutInspectionSource } from './layout-inspection';
 
 const reportScript = `const pages = [...document.querySelectorAll('.report-sheet')];
 const warning = document.getElementById('overflow-warning');
+const warningMessage = warning?.textContent || '';
 const updateWarning = () => {
-  const overflowing = pages.some(page => page.getBoundingClientRect().height > parseFloat(getComputedStyle(page).minHeight) + 2);
-  if (warning) warning.hidden = !overflowing;
+  const result = window.kumiInspectDocumentLayout();
+  const overflowing = result.pages.filter(page => page.issues.some(issue => issue.code !== 'unmeasured')).map(page => page.page);
+  if (warning) {
+    warning.hidden = overflowing.length === 0;
+    warning.textContent = warningMessage + (overflowing.length ? ' (' + overflowing.join(', ') + ')' : '');
+  }
 };
 window.addEventListener('load', updateWarning);
+document.addEventListener('load', updateWarning, true);
 document.fonts?.ready.then(updateWarning);
 if ('ResizeObserver' in window) {
   const observer = new ResizeObserver(updateWarning);
@@ -40,12 +47,12 @@ const reportMessages = {
   ja: {
     print: '印刷／PDF保存',
     overflow:
-      '内容が用紙の高さを超えています。印刷プレビューで自動改ページを確認してください。',
+      '内容のはみ出し、またはスクロール内の隠れた内容があります。該当ページを印刷プレビューで確認してください。',
   },
   en: {
     print: 'Print / Save PDF',
     overflow:
-      'Content exceeds a sheet. Check automatic pagination in print preview.',
+      'Content exceeds a sheet or is hidden in a scroll area. Check these pages in print preview.',
   },
 };
 
@@ -65,7 +72,7 @@ export async function exportReportHtml(
   const settings = resolvePageSettings(document.metadata);
   const [width, height] = pageDimensions(settings);
   const { script, policy } = await hashedInlineScript(
-    reportScript + '\n' + readerSource,
+    layoutInspectionSource + '\n' + reportScript + '\n' + readerSource,
   );
   const copy = reportMessages[locale];
   const style =

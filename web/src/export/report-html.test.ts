@@ -1,4 +1,4 @@
-import { webcrypto } from 'node:crypto';
+import { createHash, webcrypto } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseMarkdown } from '@/src/markdown/parser';
 import { exportReportHtml } from './report-html';
@@ -7,6 +7,21 @@ beforeEach(() => vi.stubGlobal('crypto', webcrypto));
 afterEach(() => vi.unstubAllGlobals());
 
 describe('standalone Report HTML', () => {
+  it('includes the shared page inspector under the exact standalone script hash', async () => {
+    const source = parseMarkdown('---\ntype: report\n---\n\n# Page').document;
+    const { html } = await exportReportHtml(source, new Map(), 'en');
+    const parsed = new DOMParser().parseFromString(html, 'text/html');
+    const script = parsed.querySelector('script')?.textContent ?? '';
+    expect(script).toContain('window.kumiInspectDocumentLayout =');
+    expect(script).toContain('window.kumiInspectDocumentLayout()');
+    const digest = createHash('sha256').update(script).digest('base64');
+    expect(
+      parsed
+        .querySelector('meta[http-equiv="Content-Security-Policy"]')
+        ?.getAttribute('content'),
+    ).toContain(`'sha256-${digest}'`);
+  });
+
   it('keeps paragraph ruler positions in exported reports', async () => {
     const source = parseMarkdown(
       '---\ntype: report\n---\n\nIndented report text\n{text_ruler=10,5,15}',
