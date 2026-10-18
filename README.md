@@ -122,6 +122,18 @@ Reportと章別プロジェクトでもヘッダーの **HTML** から完成HTML
 
 単一Report／Slideのヘッダーの **ZIP** は本文・設定・取り込んだ画像・PDF原本全体を1ファイルに保存します。再開時は文書パネルからそのZIPを開きます。章別プロジェクトのZIPとは別形式で、章構成を保存する場合は従来の **プロジェクトZIPを保存** を使用してください。
 
+## ローカルでの一括出力
+
+JSONまたはMarkdownの原稿から、編集データ入りHTML・Document JSON・Markdown・単一文書ZIPをまとめて保存できます。Webアプリと共通の出力処理を使用し、ReportとSlideの両方に対応します。
+
+```bash
+cd local_renderer
+npm ci
+node render.mjs --input /path/to/report.kumi.json --output-dir /path/to/output
+```
+
+用紙のはみ出しも検査する場合は、`npx playwright install chromium` で検査用ブラウザーを一度導入し、実行時に `--check-layout` を追加してください。ページ番号付きの検査結果をJSONで保存します。詳細、既存の個別出力引数、終了コードと対応範囲は [ローカル一括出力ガイド](./local_renderer/README.md) を参照してください。
+
 ## 開発
 
 Node.js 22.13.0以上が必要です。推奨バージョンは `web/.node-version` と `web/.nvmrc` に固定しています。
