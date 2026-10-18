@@ -54,8 +54,8 @@ export async function readAsset(root, source, maxBytes) {
 }
 
 async function canonicalOutput(path) {
-  let parent = dirname(path),
-    tail = [basename(path)];
+  let parent = dirname(path);
+  const tail = [basename(path)];
   for (;;) {
     try {
       return join(await realpath(parent), ...tail);

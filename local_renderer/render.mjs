@@ -95,11 +95,12 @@ async function run() {
     options.name ??
     basename(inputPath).replace(/(?:\.kumi)?\.(?:json|markdown|md)$/i, '');
   if (
-    !stem ||
-    // oxlint-disable-next-line no-control-regex -- File basenames must reject control characters.
-    /[\\/:*?"<>|\x00-\x1f]/.test(stem) ||
-    /^\.+$/.test(stem) ||
-    /[. ]$/.test(stem)
+    options['output-dir'] &&
+    (!stem ||
+      // oxlint-disable-next-line no-control-regex -- Generated file basenames must reject control characters.
+      /[\\/:*?"<>|\x00-\x1f]/.test(stem) ||
+      /^\.+$/.test(stem) ||
+      /[. ]$/.test(stem))
   )
     throw new Error('--name must be a plain, nonempty file basename');
   const outputDir = options['output-dir'] && resolve(options['output-dir']);

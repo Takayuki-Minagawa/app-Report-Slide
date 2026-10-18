@@ -245,3 +245,29 @@ test('copies one physical asset for fragment, query and normalized path aliases'
   assert.equal(repeated.code, 0, repeated.stderr);
   assert.equal(repeated.result.copied_assets.length, 1);
 });
+
+test(
+  'legacy output accepts a valid POSIX input basename without using it for output names',
+  { skip: process.platform === 'win32' },
+  async (t) => {
+    const { root, input } = await withFixture(t);
+    const namedInput = join(root, 'report:1.json');
+    await writeFile(namedInput, await readFile(input));
+    const result = await run([
+      '--input',
+      namedInput,
+      '--output',
+      join(root, 'report.html'),
+    ]);
+    assert.equal(result.code, 0, result.stderr);
+    const batch = await run([
+      '--input',
+      namedInput,
+      '--output-dir',
+      join(root, 'out'),
+      '--name',
+      'report',
+    ]);
+    assert.equal(batch.code, 0, batch.stderr);
+  },
+);
