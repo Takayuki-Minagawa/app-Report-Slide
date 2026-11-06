@@ -123,6 +123,24 @@ describe('PDF export', () => {
     ).toBe(true);
   });
 
+  it('captures generated cover and contents pages before the numbered report body', async () => {
+    const source = parseMarkdown('# Body\n\nReport text').document;
+    Object.assign(source.metadata, {
+      title: 'Cover title',
+      toc: true,
+      report_settings: { cover: true, toc_page: true },
+    });
+    const { blob } = await exportDocumentPdf(source, new Map(), 'ja');
+    expect(await pdfText(blob)).toContain('/Count 3');
+    expect(captures).toHaveLength(3);
+    expect(captures[0].markup).toContain('data-report-page-kind="cover"');
+    expect(captures[0].markup).toContain('Cover title');
+    expect(captures[0].markup).not.toContain('<footer>');
+    expect(captures[1].markup).toContain('data-report-page-kind="contents"');
+    expect(captures[1].markup).toContain('document-toc');
+    expect(captures[2].markup).toContain('<footer><span>1</span></footer>');
+  });
+
   it('uses slide proportions and preserves the slide theme', async () => {
     const source = parseMarkdown(
       '---\ntype: slide\ntheme: technical\n---\n\n# Slide\n\n::: slidebreak\n:::\n\n# Second',

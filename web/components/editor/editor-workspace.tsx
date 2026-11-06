@@ -234,6 +234,12 @@ export function EditorWorkspace() {
       }
       idPrefix={overlay ? 'workspace-sheet' : 'workspace'}
       document={workspace.localPreviewDocument}
+      paragraphDocument={workspace.previewDocument}
+      paragraphContextPrefix={
+        workspace.projectSession
+          ? `${workspace.projectSession.activeChapterId}:`
+          : undefined
+      }
       editor={workspace.editor}
       documentWriteLocked={controlsLocked}
       analysis={workspace.localAnalysis}
@@ -321,6 +327,11 @@ export function EditorWorkspace() {
         <WorkspaceEditor
           document={workspace.localPreviewDocument}
           previewDocument={workspace.previewDocument}
+          paragraphContextPrefix={
+            workspace.projectSession
+              ? `${workspace.projectSession.activeChapterId}:`
+              : undefined
+          }
           project={Boolean(workspace.project)}
           resolvePreviewImageUrl={workspace.resolvePreviewImageUrl}
           editor={workspace.editor}

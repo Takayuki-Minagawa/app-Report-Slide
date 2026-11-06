@@ -5,7 +5,11 @@ import { AppPreferencesProvider } from '@/components/app-preferences';
 import * as files from '@/src/workspace/files';
 import * as archive from '@/src/project/archive';
 import { parseMarkdown } from '@/src/markdown/parser';
-import { createReportProject } from '@/src/project/model';
+import {
+  createReportProject,
+  validateReportProject,
+} from '@/src/project/model';
+import { migrateDocumentData } from '@/src/document/validation';
 import { splitDocumentPages } from '@/src/document/semantics';
 import { resolveSlideDesign } from '@/src/document/slide-design';
 import { useDocumentWorkspace } from './use-document-workspace';
@@ -48,6 +52,69 @@ afterEach(() => {
 });
 
 describe('chapter workspace lifecycle', () => {
+  it('saves chapter JSON, combined JSON and project ZIP after applying structure with empty or cleared cover fields', async () => {
+    const { result } = await workspace();
+    const savedJson: unknown[] = [];
+    vi.mocked(files.downloadDocument).mockImplementation((document, format) => {
+      expect(format).toBe('json');
+      // Exercise the validation/serialization performed by the real JSON download.
+      savedJson.push(JSON.parse(JSON.stringify(migrateDocumentData(document))));
+    });
+    const reportSettings = {
+      cover: true,
+      heading_numbering: 'chapter' as const,
+      caption_numbering: 'chapter' as const,
+      affiliation: '',
+    };
+    const clearedFields = {
+      title: undefined,
+      subtitle: undefined,
+      author: undefined,
+      date: undefined,
+    };
+    for (const previouslyFilled of [false, true]) {
+      if (previouslyFilled)
+        act(() =>
+          result.current.updateMetadata({
+            title: 'Report title',
+            subtitle: 'Subtitle',
+            author: 'Author',
+            date: '2026-11-06',
+          }),
+        );
+      act(() =>
+        result.current.updateMetadata({
+          ...clearedFields,
+          report_settings: reportSettings,
+          toc: false,
+          number_sections: true,
+        }),
+      );
+      const metadata = result.current.project!.metadata;
+      for (const key of Object.keys(clearedFields))
+        expect(Object.hasOwn(metadata, key)).toBe(false);
+      expect(metadata.toc).toBe(false);
+      expect(metadata.report_settings).toEqual(reportSettings);
+      expect(() =>
+        validateReportProject(result.current.project!),
+      ).not.toThrow();
+      const count = savedJson.length;
+      act(() => result.current.saveDocument('json'));
+      expect(result.current.displayedStatus.kind).toBe('success');
+      act(() => result.current.projectActions.exportProject('json'));
+      expect(result.current.displayedStatus.kind).toBe('success');
+      expect(savedJson).toHaveLength(count + 2);
+      await act(async () => result.current.projectActions.saveProject());
+      expect(result.current.displayedStatus.kind).toBe('success');
+      expect(result.current.dirty).toBe(false);
+    }
+    expect(files.downloadFile).toHaveBeenCalledTimes(2);
+    for (const document of savedJson)
+      expect(migrateDocumentData(document).metadata.report_settings).toEqual(
+        reportSettings,
+      );
+  });
+
   it('creates and switches four slide chapters without revoking project images and exports either scope', async () => {
     const revoke = vi.fn();
     vi.stubGlobal(

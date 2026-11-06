@@ -58,7 +58,7 @@
   border-bottom: 1px solid #bdc8d1;
   margin-bottom: 28px;
 }
-.document-toc ol {
+.document-renderer .document-toc ol {
   list-style: none;
   padding: 0;
   margin: 0;
@@ -1009,4 +1009,65 @@
   line-height: var(--role-note-leading, inherit);
   margin-block-start: var(--role-note-before, revert-layer);
   margin-block-end: var(--role-note-after, revert-layer);
+}
+
+/* Generated Report front matter shares the physical sheet settings with the body. */
+.report-cover {
+  display: flex;
+  min-height: calc(
+    var(--report-height) - var(--report-top) - var(--report-bottom)
+  );
+  flex-direction: column;
+  justify-content: center;
+  gap: 4em;
+  padding-block: 2em;
+  overflow-wrap: anywhere;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.report-cover-heading h1 {
+  margin: 0;
+  font-size: 2.3em;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.report-cover-subtitle {
+  margin: 1.25em 0 0;
+  font-size: 1.3em;
+}
+
+.report-cover-fields {
+  display: grid;
+  align-self: center;
+  gap: 0.65em;
+  max-width: 100%;
+  margin: 0;
+  text-align: left;
+}
+
+.report-cover-fields > div {
+  display: grid;
+  grid-template-columns: minmax(5em, auto) minmax(0, 1fr);
+  gap: 1.5em;
+}
+
+.report-cover-fields dt {
+  color: #596b7b;
+}
+
+.report-cover-fields dd {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.report-contents-page .document-toc + .document-toc {
+  margin-top: 2em;
+}
+
+.document-contents-empty {
+  font-size: 0.9em;
+  color: #596b7b;
+  text-indent: 0;
 }

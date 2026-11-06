@@ -133,6 +133,79 @@ describe('standalone page layout inspection', () => {
     ]);
   });
 
+  it('reports an oversized first-line indent even when the paragraph itself fits the page', () => {
+    const page = report(
+      1000,
+      '<p data-node-id="narrow-body" style="text-indent:32px;padding-left:5px;padding-right:5px">本文</p>',
+    );
+    const paragraph = page.querySelector('p')!;
+    measure(paragraph, { width: 30, height: 40, left: 100, top: 50 });
+    const originalStyle = paragraph.getAttribute('style');
+    const result = window.kumiInspectDocumentLayout();
+    expect(result.status).toBe('overflow');
+    expect(result.pages[0].issues).toEqual([
+      {
+        code: 'paragraph-indent',
+        element: 'p',
+        nodeId: 'narrow-body',
+        measuredPx: 32,
+        limitPx: 20,
+        reason: expect.stringContaining('First-line indent'),
+      },
+    ]);
+    expect(paragraph.getAttribute('style')).toBe(originalStyle);
+  });
+
+  it.each([
+    { indent: '120%', width: 100, padding: 10, overflow: true, measured: 96 },
+    { indent: '102%', width: 100, padding: 0, overflow: false, measured: 102 },
+    { indent: '103%', width: 100, padding: 0, overflow: true, measured: 103 },
+    { indent: '82px', width: 100, padding: 10, overflow: false, measured: 82 },
+    { indent: '83px', width: 100, padding: 10, overflow: true, measured: 83 },
+    {
+      indent: '-120%',
+      width: 100,
+      padding: 10,
+      overflow: false,
+      measured: -96,
+    },
+    { indent: '0px', width: 100, padding: 10, overflow: false, measured: 0 },
+  ])(
+    'checks $indent against the content width with the existing tolerance',
+    ({ indent, width, padding, overflow, measured }) => {
+      const page = report(
+        1000,
+        `<p style="text-indent:${indent};padding:0 ${padding}px">本文</p>`,
+      );
+      measure(page.querySelector('p')!, { width, height: 20 });
+      const result = window.kumiInspectDocumentLayout();
+      expect(result.status).toBe(overflow ? 'overflow' : 'pass');
+      if (overflow)
+        expect(result.pages[0].issues[0]).toMatchObject({
+          code: 'paragraph-indent',
+          measuredPx: measured,
+          limitPx: width - 2 * padding,
+        });
+    },
+  );
+
+  it('leaves hidden Report paragraphs and Slide paragraphs out of the indent check', () => {
+    const page = report(
+      1000,
+      '<p style="visibility:hidden;text-indent:100px">本文</p>',
+    );
+    measure(page.querySelector('p')!, { width: 20, height: 20 });
+    const slide = document.createElement('article');
+    slide.className = 'slide-preview';
+    slide.dataset.page = '2';
+    slide.style.height = '500px';
+    slide.innerHTML = '<p style="text-indent:100px">スライド本文</p>';
+    document.body.appendChild(slide);
+    measure(slide, { width: 900, height: 500 });
+    measure(slide.querySelector('p')!, { width: 20, height: 20 });
+    expect(window.kumiInspectDocumentLayout().status).toBe('pass');
+  });
+
   it('ignores KaTeX accessibility clipping while still checking visible math', () => {
     const page = report(
       1000,

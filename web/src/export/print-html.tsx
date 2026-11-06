@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server.browser';
 import { DocumentPage } from '@/components/preview/document-page';
 import documentStyles from '@/components/preview/document.css?raw';
 import { documentTitle, type DocumentData } from '@/src/document/model';
-import { analyzeDocument, splitDocumentPages } from '@/src/document/semantics';
+import { analyzeDocument } from '@/src/document/semantics';
+import { splitRenderedPages } from '@/src/document/report-pages';
 import {
   pageDimensions,
   resolvePageSettings,
@@ -30,7 +31,7 @@ export async function exportPrintHtml(
   locale: AppLocale,
 ): Promise<PrintSnapshot> {
   const document = migrateDocumentData(source);
-  const pages = splitDocumentPages(document);
+  const pages = splitRenderedPages(document);
   const slide = document.type === 'slide';
   const [width, height] = slide
     ? [320, 180]

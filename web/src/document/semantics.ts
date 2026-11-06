@@ -5,6 +5,7 @@ import {
   type FootnoteNode,
 } from './model';
 import { walkDocumentTree, type DocumentTreeNode } from './traversal';
+import { resolveReportSettings } from './report-settings';
 
 export const labelPattern = /^[A-Za-z][A-Za-z0-9:._-]{0,127}$/;
 export const semanticTypes = new Set([
@@ -31,6 +32,7 @@ export interface SemanticTarget {
   title: string;
   referenceText: string;
   level?: number;
+  headingKind?: 'section' | 'chapter' | 'appendix';
 }
 
 export interface DocumentAnalysis {
@@ -38,6 +40,18 @@ export interface DocumentAnalysis {
   labels: Map<string, SemanticTarget>;
   outline: SemanticTarget[];
   diagnostics: string[];
+}
+
+/** A, ..., Z, AA, ... without a fixed limit on appendix chapters. */
+function appendixNumber(value: number): string {
+  let letters = '';
+  for (
+    let remaining = value;
+    remaining > 0;
+    remaining = Math.floor((remaining - 1) / 26)
+  )
+    letters = String.fromCharCode(65 + ((remaining - 1) % 26)) + letters;
+  return letters;
 }
 
 /** Numbers are derived, never persisted. Duplicate labels are deliberately unresolved. */
@@ -52,6 +66,16 @@ export function analyzeDocument(document: DocumentData): DocumentAnalysis {
   const references = new Set<string>();
   const sections = [0, 0, 0, 0, 0, 0];
   const counters = { figure: 0, table: 0, blockMath: 0 };
+  const settings = resolveReportSettings(document.metadata);
+  const chapterHeadings =
+    document.type === 'report' && settings.heading_numbering === 'chapter';
+  const chapterCaptions =
+    document.type === 'report' && settings.caption_numbering === 'chapter';
+  const chapterSections = [0, 0, 0, 0, 0];
+  let chapter = 0;
+  let appendix = 0;
+  let appendixMode = false;
+  let currentChapter = '0';
   for (const node of walkDocumentTree(document.children)) {
     if (node.type === 'reference') references.add(node.attrs.target);
     if (isSemanticNode(node)) {
@@ -60,22 +84,67 @@ export function analyzeDocument(document: DocumentData): DocumentAnalysis {
       let title = caption || label || '';
       let prefix = '';
       let level: number | undefined;
+      let headingKind: SemanticTarget['headingKind'];
       if (node.type === 'heading') {
         level = node.attrs.level;
         title = inlineText(node.content);
+        if (chapterHeadings && level === 1 && node.attrs.appendix === true)
+          appendixMode = true;
+        // Chapter boundaries are structural: turning off displayed section
+        // numbers does not merge caption counters across otherwise eligible H1s.
+        // Explicit numbered=false headings do not consume a chapter or reset it.
+        if (
+          (chapterHeadings || chapterCaptions) &&
+          level === 1 &&
+          numbered !== false
+        ) {
+          currentChapter =
+            chapterHeadings && appendixMode
+              ? appendixNumber(++appendix)
+              : String(++chapter);
+          chapterSections.fill(0);
+          if (chapterCaptions) {
+            counters.figure = 0;
+            counters.table = 0;
+            counters.blockMath = 0;
+          }
+        }
+        headingKind =
+          chapterHeadings && level === 1
+            ? appendixMode
+              ? 'appendix'
+              : 'chapter'
+            : 'section';
         if (
           numbered === true ||
           (numbered !== false && document.metadata.number_sections === true)
         ) {
-          // Fill skipped ancestors, so an initial H2 becomes 1.1, not 0.1.
-          for (let index = 0; index < level - 1; index++) {
-            if (sections[index] === 0) sections[index] = 1;
+          if (chapterHeadings) {
+            if (level === 1) number = currentChapter;
+            else {
+              for (let index = 0; index < level - 2; index++) {
+                if (chapterSections[index] === 0) chapterSections[index] = 1;
+              }
+              chapterSections[level - 2]++;
+              chapterSections.fill(0, level - 1);
+              number = `${currentChapter}.${chapterSections.slice(0, level - 1).join('.')}`;
+            }
+          } else {
+            // Preserve legacy section numbering, including skipped ancestors.
+            for (let index = 0; index < level - 1; index++) {
+              if (sections[index] === 0) sections[index] = 1;
+            }
+            sections[level - 1]++;
+            sections.fill(0, level);
+            number = sections.slice(0, level).join('.');
           }
-          sections[level - 1]++;
-          sections.fill(0, level);
-          number = sections.slice(0, level).join('.');
         }
-        prefix = '節';
+        prefix =
+          headingKind === 'chapter'
+            ? '章'
+            : headingKind === 'appendix'
+              ? '付録'
+              : '節';
       } else if (
         node.type === 'figure' ||
         node.type === 'table' ||
@@ -87,7 +156,10 @@ export function analyzeDocument(document: DocumentData): DocumentAnalysis {
           numbered === true ||
           (numbered !== false && Boolean(label || caption))
         ) {
-          number = String(++counters[node.type]);
+          const sequence = ++counters[node.type];
+          number = chapterCaptions
+            ? `${currentChapter}.${sequence}`
+            : String(sequence);
         }
       }
       const target: SemanticTarget = {
@@ -97,8 +169,11 @@ export function analyzeDocument(document: DocumentData): DocumentAnalysis {
         number,
         title,
         level,
+        ...(headingKind ? { headingKind } : {}),
         referenceText: number
-          ? `${prefix} ${number}`
+          ? headingKind === 'chapter'
+            ? `第${number}章`
+            : `${prefix} ${number}`
           : title || `${prefix}（番号なし）`,
       };
       result.targets.set(nodeId, target);
@@ -120,6 +195,25 @@ export function analyzeDocument(document: DocumentData): DocumentAnalysis {
       );
   }
   return result;
+}
+
+/** The report TOC can hide headings without changing their numbers or links. */
+export function reportOutline(
+  document: DocumentData,
+  analysis: DocumentAnalysis = analyzeDocument(document),
+): SemanticTarget[] {
+  if (document.type !== 'report') return analysis.outline;
+  const depth = resolveReportSettings(document.metadata).toc_depth;
+  const excluded = new Set(
+    [...walkDocumentTree(document.children)].flatMap((node) =>
+      node.type === 'heading' && node.attrs.toc === false
+        ? [node.attrs.nodeId]
+        : [],
+    ),
+  );
+  return analysis.outline.filter(
+    (entry) => (entry.level ?? 1) <= depth && !excluded.has(entry.nodeId),
+  );
 }
 
 /** Explicit breaks retain empty pages, including leading/trailing/consecutive breaks. */

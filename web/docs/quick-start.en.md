@@ -18,6 +18,24 @@ KUMI is a browser application for editing and reviewing technical reports and sl
 - Unfinished content, chapter structure, unapplied Markdown, and imported images are temporarily kept as a recovery copy in this browser. The app starts empty; use **Review recovery copies** when you want to restore or remove earlier work. Closing the dialog keeps copies and new work continues to autosave separately. This is device-local help only, so keep Markdown, JSON, or a project ZIP as the source of record.
 - Select an element to configure its theme, table of contents, numbering, reference label, caption, and an image's width, alignment, or alternative text in **Properties**.
 
+### Set Report paragraph indentation
+
+1. Open **Properties → Page settings → Body format preset** and choose **Japanese report** for a 1 em first-line indent, including after headings, with 0 pt paragraph spacing.
+2. Choose **No indent after headings** to align the first paragraph after a heading with the left edge, or **No indent, spaced paragraphs** for no indent and 12 pt paragraph spacing. Check the sample, then choose **Apply page settings**. Presets keep your paper, margins, font size, and individual paragraph overrides.
+3. Place the cursor in a body paragraph and choose whether its first line follows the document, indents by 1 em, or has no indent. For example, use no indent for a paragraph that continues an equation with “where …”. Select several body paragraphs to change them together.
+4. Save Markdown or JSON, or a project ZIP for a chapter project. Markdown uses `{first_line_indent=inherit}`, `{first_line_indent=1}`, and `{first_line_indent=0}` on a separate line immediately after the paragraph.
+
+These settings apply to top-level Report body paragraphs. Headings, table cells, lists, and quotes do not inherit the body indent. An em follows the body font size and stays independent of paper width. Existing first-line ruler settings stay in effect until you choose a paragraph setting; choosing one keeps the ruler's left and right margins. Leading spaces you typed remain part of the text, so check that they do not add a second indent. The [formatting sample](../examples/example-report-formatting.md) includes headings, normal paragraphs, an equation continuation, a table, and a page break.
+
+### Add a Report cover, chapter numbers and contents
+
+1. Open **Properties → Report structure**, enable **Include cover page**, and enter the title, author, date, and any other cover fields. Empty fields are omitted.
+2. Enable **Show heading numbers** and select **Heading number format**. Choose chapters to use H1 headings as chapter boundaries. Figure, table and equation numbers can run continuously or restart by chapter.
+3. Enable the table of contents and choose its depth. Optionally include lists of figures and tables and place them on a separate page. Choose **Apply report structure**.
+4. Select a heading to exclude it from the contents without removing it from the body. For the first appendix H1, enable appendix numbering in its properties and apply the attributes. With chapter numbering selected, that H1 and later chapters become Appendix A, B, and so on.
+
+The cover and separate contents page are generated for preview and export without adding source blocks. They have no displayed page number; body numbering starts at 1. Contents entries are links, without printed page numbers. See the [report structure guide (Japanese)](./report-structure.ja.md) and [structure sample](../examples/example-report-structure.md).
+
 ### Freely place images on a Slide
 
 1. Open **Place images** in a Slide and choose **Insert image** to select a PNG, JPEG, WebP, GIF, or SVG (up to 20 MB each and 50 MB in total). The image starts in the center of the current slide. Click an existing document-flow figure to move it into free placement.
@@ -83,4 +101,4 @@ GitHub Pages publishes the app and its bundled sample. Imported documents and im
 
 Use **Word** in the header for Report `.docx` files, **PPTX** for Slide `.pptx` files, and **PDF** for either type. Chapter projects combine all enabled chapters. Unapplied Markdown drafts are included without changing your source or save state.
 
-Office equations become LaTeX text; Word charts become data tables. PDF pages are images, so text cannot be selected or searched. Check page splits in long Reports. Import external images as local files alongside the source. Also save ZIP or Markdown/JSON to resume editing.
+Office equations become LaTeX text; Word charts become data tables. The header's **PDF** export creates page images, so text cannot be selected or searched. For searchable PDFs, use the output comparison and print dialog, then the browser's Print / Save PDF action. Check page splits and page numbers in long Reports. Import external images as local files alongside the source. Also save ZIP or Markdown/JSON to resume editing.

@@ -23,3 +23,5 @@ export {
 } from '../web/src/workspace/document-archive';
 export { revokeAssetUrls } from '../web/src/workspace/files';
 export { projectLimits } from '../web/src/project/archive';
+
+export { splitRenderedPages } from '../web/src/document/report-pages';

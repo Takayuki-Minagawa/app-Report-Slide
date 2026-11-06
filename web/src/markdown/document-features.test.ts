@@ -116,6 +116,21 @@ describe('document feature dialect', () => {
     expect(analysis.labels.get('table:response')?.number).toBe('1');
   });
 
+  it('ships a report structure sample with chapter and appendix references', () => {
+    const source = readFileSync('examples/example-report-structure.md', 'utf8');
+    const document = parseMarkdown(source).document;
+    for (const candidate of [
+      document,
+      parseMarkdown(serializeDocument(document)).document,
+    ]) {
+      const analysis = analyzeDocument(candidate);
+      expect(analysis.diagnostics).toEqual([]);
+      expect(analysis.labels.get('tab:conditions')?.number).toBe('1.1');
+      expect(analysis.labels.get('eq:model')?.number).toBe('2.1');
+      expect(analysis.labels.get('tab:symbols')?.number).toBe('A.1');
+    }
+  });
+
   it.each(['(詳細)', '(https://example.com)', '()'])(
     'preserves references followed by parentheses: %s',
     (text) => {

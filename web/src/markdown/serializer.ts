@@ -272,6 +272,7 @@ function canUsePipeTable(table: TableNode): boolean {
           cell.attrs.fill != null ||
           cell.content.length !== 1 ||
           cell.content[0].attrs.textRuler != null ||
+          cell.content[0].attrs.firstLineIndent != null ||
           cell.content[0].attrs.blockLayout != null ||
           cell.content[0].content?.some(
             (inline) => inline.type === 'hardBreak',

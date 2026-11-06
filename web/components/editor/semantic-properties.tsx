@@ -21,14 +21,16 @@ export function SemanticProperties({
   onApply,
   references = [],
   onMetadataChange,
+  report = false,
 }: {
+  report?: boolean;
   references?: FigureReference[];
   onMetadataChange?: (metadata: Record<string, unknown>) => void;
   node: SemanticNode;
   disabled: boolean;
   onApply: (nodeId: string, attrs: Record<string, unknown>) => void;
 }) {
-  const { copy } = useAppPreferences();
+  const { copy, locale } = useAppPreferences();
   const { semantic } = copy;
   const id = useId();
   const [sourceReferenceId, setSourceReferenceId] = useState(
@@ -38,6 +40,12 @@ export function SemanticProperties({
   const [caption, setCaption] = useState(node.attrs.caption ?? '');
   const [numbered, setNumbered] = useState(
     node.attrs.numbered == null ? 'auto' : String(node.attrs.numbered),
+  );
+  const [inToc, setInToc] = useState(
+    node.type === 'heading' ? node.attrs.toc !== false : true,
+  );
+  const [appendix, setAppendix] = useState(
+    node.type === 'heading' && node.attrs.appendix === true,
   );
   const [width, setWidth] = useState(
     String(node.type === 'figure' ? node.attrs.width : 100),
@@ -148,6 +156,39 @@ export function SemanticProperties({
           </label>
         </>
       )}
+      {report && node.type === 'heading' && (
+        <div className="space-y-2 text-xs">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={inToc}
+              onChange={(event) => setInToc(event.target.checked)}
+            />
+            {locale === 'ja'
+              ? 'この見出しを目次に含める'
+              : 'Include this heading in contents'}
+          </label>
+          {node.attrs.level === 1 && (
+            <>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={appendix}
+                  onChange={(event) => setAppendix(event.target.checked)}
+                />
+                {locale === 'ja'
+                  ? 'この章から付録として採番'
+                  : 'Start appendices at this chapter'}
+              </label>
+              <p className="text-muted-foreground">
+                {locale === 'ja'
+                  ? '番号書式を「章番号」にすると、このH1以降を付録A、B…にします。'
+                  : 'In chapter numbering mode, this H1 and subsequent chapters become Appendices A, B….'}
+              </p>
+            </>
+          )}
+        </div>
+      )}
       {node.type === 'table' && (
         <SharedReferenceFields
           references={references}
@@ -169,6 +210,9 @@ export function SemanticProperties({
               ? { sourceReferenceId: sourceReferenceId || null }
               : {}),
             numbered: numbered === 'auto' ? null : numbered === 'true',
+            ...(report && node.type === 'heading'
+              ? { toc: inToc, ...(node.attrs.level === 1 ? { appendix } : {}) }
+              : {}),
             ...(node.type !== 'heading' ? { caption: caption || null } : {}),
             ...(node.type === 'figure'
               ? { width: Number(width), align, alt }

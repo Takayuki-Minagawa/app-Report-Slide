@@ -26,6 +26,7 @@ const settings: PageSettings = {
   font_size: 12,
   line_height: 1.5,
   first_line_indent: 1,
+  after_heading_indent: 'none',
   paragraph_spacing: 6,
 };
 
@@ -59,6 +60,10 @@ describe('report page settings persistence', () => {
     expect(metadata).not.toHaveProperty('page_settings');
     expect(pageDimensions(resolvePageSettings(metadata))).toEqual([210, 148]);
     expect(resolvePageSettings({ paper: 'Custom' }).paper).toBe('A4');
+    expect(defaultPageSettings).not.toHaveProperty('after_heading_indent');
+    expect(
+      resolvePageSettings({ page_settings: { ...defaultPageSettings } }),
+    ).toEqual(defaultPageSettings);
   });
 
   it.each([
@@ -66,6 +71,8 @@ describe('report page settings persistence', () => {
     { line_height: 4 },
     { font_size: '12' },
     { first_line_indent: -1 },
+    { after_heading_indent: 'invalid' },
+    { after_heading_indent: null },
     { margin_top: 71 },
     { paper: 'unknown' },
     { orientation: 'up' },

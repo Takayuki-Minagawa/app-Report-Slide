@@ -12,10 +12,10 @@ import { localizeDiagnosticMessage } from '@/src/i18n/diagnostics';
 import type { DocumentData } from '@/src/document/model';
 import {
   analyzeDocument,
-  splitDocumentPages,
   type DocumentAnalysis,
 } from '@/src/document/semantics';
 import { DocumentPage } from './document-page';
+import { splitRenderedPages } from '@/src/document/report-pages';
 
 export function PreviewSurface({
   document,
@@ -34,7 +34,7 @@ export function PreviewSurface({
     () => providedAnalysis ?? analyzeDocument(document),
     [document, providedAnalysis],
   );
-  const pages = useMemo(() => splitDocumentPages(document), [document]);
+  const pages = useMemo(() => splitRenderedPages(document), [document]);
   const [pageIndex, setPageIndex] = useState(0);
   const [anchorRequest, setAnchorRequest] = useState<{ id: string } | null>(
     null,

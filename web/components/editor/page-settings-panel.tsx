@@ -34,9 +34,27 @@ export function PageSettingsPanel({
     ),
   );
   const [error, setError] = useState(false);
-  const pending = Object.entries(settings).some(
-    ([key, value]) => draft[key] !== String(value),
-  );
+  const pending =
+    Object.entries(settings).some(
+      ([key, value]) => draft[key] !== String(value),
+    ) ||
+    (draft.after_heading_indent ?? 'same') !==
+      (settings.after_heading_indent ?? 'same');
+  const indent = Number(draft.first_line_indent);
+  const spacing = Number(draft.paragraph_spacing);
+  const afterHeading = draft.after_heading_indent ?? 'same';
+  const preset =
+    indent === 1 && spacing === 0
+      ? afterHeading === 'none'
+        ? 'heading'
+        : 'japanese'
+      : indent === 0 && spacing === 12
+        ? 'spaced'
+        : 'custom';
+  const sampleIndent =
+    Number.isFinite(indent) && indent >= 0 && indent <= 8 ? indent : 0;
+  const sampleSpacing =
+    Number.isFinite(spacing) && spacing >= 0 && spacing <= 36 ? spacing : 0;
   return (
     <section aria-label={copy.title} className="space-y-3">
       <h2 className="text-sm font-semibold">{copy.title}</h2>
@@ -59,6 +77,73 @@ export function PageSettingsPanel({
         }}
       >
         <fieldset disabled={disabled} className="space-y-3">
+          <section
+            className="space-y-3 rounded-md border p-3"
+            aria-label={copy.bodyFormat}
+          >
+            <h3 className="text-sm font-semibold">{copy.bodyFormat}</h3>
+            <label className="grid gap-1 text-sm">
+              {copy.preset}
+              <NativeSelect
+                aria-label={copy.preset}
+                value={preset}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (value === 'custom') return;
+                  setDraft({
+                    ...draft,
+                    first_line_indent: value === 'spaced' ? '0' : '1',
+                    paragraph_spacing: value === 'spaced' ? '12' : '0',
+                    after_heading_indent: value === 'heading' ? 'none' : 'same',
+                  });
+                }}
+              >
+                {Object.entries(copy.presets).map(([value, label]) => (
+                  <NativeSelectOption key={value} value={value}>
+                    {label}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </label>
+            <label className="grid gap-1 text-sm">
+              {copy.afterHeading}
+              <NativeSelect
+                aria-label={copy.afterHeading}
+                value={afterHeading}
+                onChange={(event) =>
+                  setDraft({
+                    ...draft,
+                    after_heading_indent: event.target.value,
+                  })
+                }
+              >
+                <NativeSelectOption value="same">
+                  {copy.sameIndent}
+                </NativeSelectOption>
+                <NativeSelectOption value="none">
+                  {copy.noIndent}
+                </NativeSelectOption>
+              </NativeSelect>
+            </label>
+            <div
+              className="rounded border bg-background p-3 text-xs leading-relaxed"
+              aria-label={copy.sample}
+            >
+              <strong className="mb-2 block">{copy.sampleHeading}</strong>
+              <p
+                style={{
+                  textIndent: `${afterHeading === 'none' ? 0 : sampleIndent}em`,
+                  marginBottom: `${sampleSpacing}pt`,
+                }}
+              >
+                {copy.sampleFirst}
+              </p>
+              <p style={{ textIndent: `${sampleIndent}em` }}>
+                {copy.sampleNext}
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground">{copy.presetHelp}</p>
+          </section>
           <label className="grid gap-1 text-sm">
             {copy.paper}
             <NativeSelect

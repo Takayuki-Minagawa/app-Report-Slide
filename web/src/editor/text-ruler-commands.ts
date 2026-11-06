@@ -1,4 +1,5 @@
 import type { Editor } from '@tiptap/core';
+import type { DocumentType } from '@/src/document/model';
 
 import { isTextRuler, type TextRuler } from '@/src/document/text-ruler';
 
@@ -56,6 +57,8 @@ export function applyTextRuler(
   editor: Editor,
   ruler: TextRuler | null,
   nodeIds?: string[],
+  preserveFirstLine = false,
+  documentType?: DocumentType,
 ): boolean {
   if (editor.isDestroyed || (ruler !== null && !isTextRuler(ruler))) {
     return false;
@@ -70,10 +73,30 @@ export function applyTextRuler(
   const transaction = editor.state.tr;
   transaction.doc.forEach((node, position) => {
     if (!isTextBlock(node.type.name) || !ids.has(node.attrs.nodeId)) return;
-    if (sameRuler(node.attrs.textRuler, ruler)) return;
+    const clearFirstLine =
+      !preserveFirstLine &&
+      node.type.name === 'paragraph' &&
+      node.attrs.firstLineIndent != null;
+    // A first side-margin adjustment must not freeze the inherited em indent
+    // into the ruler's percentage coordinates. Existing rulers remain legacy.
+    const retainDocumentIndent =
+      documentType === 'report' &&
+      preserveFirstLine &&
+      ruler !== null &&
+      node.type.name === 'paragraph' &&
+      node.attrs.firstLineIndent == null &&
+      node.attrs.textRuler == null;
+    if (
+      sameRuler(node.attrs.textRuler, ruler) &&
+      !clearFirstLine &&
+      !retainDocumentIndent
+    )
+      return;
     transaction.setNodeMarkup(position, undefined, {
       ...node.attrs,
       textRuler: ruler === null ? null : { ...ruler },
+      ...(clearFirstLine ? { firstLineIndent: null } : {}),
+      ...(retainDocumentIndent ? { firstLineIndent: { mode: 'inherit' } } : {}),
     });
   });
   if (!transaction.docChanged) return false;

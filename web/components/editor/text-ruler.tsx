@@ -10,7 +10,12 @@ import {
 import type { Editor } from '@tiptap/react';
 
 import { useAppPreferences } from '@/components/app-preferences';
-import type { DocumentData } from '@/src/document/model';
+import type { DocumentData, ParagraphNode } from '@/src/document/model';
+import { resolveParagraphIndent } from '@/src/document/paragraph-format';
+import {
+  editorAfterHeadingIds,
+  editorDocumentNodes,
+} from '@/src/editor/paragraph-format';
 import {
   pageDimensions,
   resolvePageSettings,
@@ -79,10 +84,12 @@ export function TextRulerBar({
   editor,
   document,
   disabled = false,
+  chapterPrefix,
 }: {
   editor: Editor | null;
   document: DocumentData;
   disabled?: boolean;
+  chapterPrefix?: string;
 }) {
   const { copy } = useAppPreferences();
   const [revision, setRevision] = useState(0);
@@ -104,12 +111,35 @@ export function TextRulerBar({
   void revision;
   const blocks = editor ? selectedTextBlocks(editor) : [];
   const active = blocks.length > 0 && !disabled;
-  const ruler =
-    draft ??
-    (isTextRuler(blocks[0]?.ruler)
-      ? blocks[0].ruler
-      : defaultRuler(document, blocks[0]?.type ?? 'paragraph'));
   const settings = resolvePageSettings(document.metadata);
+  let effectiveRuler = isTextRuler(blocks[0]?.ruler)
+    ? blocks[0].ruler
+    : defaultRuler(document, blocks[0]?.type ?? 'paragraph');
+  if (editor && document.type === 'report' && blocks[0]?.type === 'paragraph') {
+    const paragraph = editor.state.doc
+      .nodeAt(blocks[0].position)!
+      .toJSON() as ParagraphNode;
+    const afterHeading = editorAfterHeadingIds(
+      editorDocumentNodes(editor.state.doc),
+      document,
+      chapterPrefix,
+    );
+    const indent = resolveParagraphIndent(paragraph, settings, {
+      topLevel: true,
+      afterHeading: afterHeading.has(blocks[0].nodeId),
+    });
+    if (indent.em !== null) {
+      const [width] = pageDimensions(settings);
+      const textWidth = width - settings.margin_left - settings.margin_right;
+      effectiveRuler = {
+        ...effectiveRuler,
+        firstLine:
+          effectiveRuler.left +
+          ((indent.em * settings.font_size * 25.4) / 72 / textWidth) * 100,
+      };
+    }
+  }
+  const ruler = draft ?? effectiveRuler;
   const [pageWidth] = pageDimensions(settings);
   const insetStyle: CSSProperties =
     document.type === 'report'
@@ -154,7 +184,14 @@ export function TextRulerBar({
     );
     dragRef.current = null;
     setDraft(null);
-    if (editor) applyTextRuler(editor, value, drag.nodeIds);
+    if (editor)
+      applyTextRuler(
+        editor,
+        value,
+        drag.nodeIds,
+        drag.marker !== 'firstLine',
+        document.type,
+      );
   };
   const cancel = () => {
     dragRef.current = null;
@@ -187,6 +224,8 @@ export function TextRulerBar({
           editor,
           next,
           blocks.map((block) => block.nodeId),
+          kind !== 'firstLine',
+          document.type,
         );
       }}
       tabIndex={active ? 0 : -1}
@@ -220,6 +259,8 @@ export function TextRulerBar({
           editor,
           next,
           blocks.map((block) => block.nodeId),
+          kind !== 'firstLine',
+          document.type,
         );
       }}
     />

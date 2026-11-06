@@ -34,6 +34,7 @@ export const pageSettingsSchema = z
     margin_right: range('margin_right'),
     font_size: range('font_size'),
     first_line_indent: range('first_line_indent'),
+    after_heading_indent: z.enum(['same', 'none']).optional(),
     line_height: range('line_height'),
     paragraph_spacing: range('paragraph_spacing'),
   })

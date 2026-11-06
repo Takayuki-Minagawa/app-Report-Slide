@@ -15,7 +15,7 @@ import {
   validateDocumentData,
 } from '@/src/document/validation';
 import { resolveDocumentTheme } from '@/src/document/metadata';
-import { splitDocumentPages } from '@/src/document/semantics';
+import { splitRenderedPages } from '@/src/document/report-pages';
 import { walkDocumentTree } from '@/src/document/traversal';
 import { referencedAssets } from '@/src/document/assets';
 import { validatePdfBytes } from '@/src/document/pdf-source';
@@ -274,7 +274,7 @@ function summarize(
   kind: HtmlImportSummary['kind'],
   warnings: string[],
 ): HtmlImportSummary {
-  const pageCount = splitDocumentPages(document).length;
+  const pageCount = splitRenderedPages(document).length;
   const nodeCount = [...walkDocumentTree(document.children)].length;
   if (pageCount > maximumPages || nodeCount > maximumNodes)
     throw new Error(

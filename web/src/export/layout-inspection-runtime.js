@@ -107,6 +107,34 @@
         if (bounds.width === 0 && bounds.height === 0) continue;
         const elementStyle = getComputedStyle(element);
         if (elementStyle.visibility === 'hidden') continue;
+        if (report && element.tagName === 'P' && element.clientWidth > 0) {
+          // clientWidth includes padding but excludes borders. A positive
+          // first-line indent can consume all text width without expanding
+          // the paragraph's own bounds or creating a clipped scroll region.
+          const contentWidth = Math.max(
+            0,
+            element.clientWidth -
+              (Number.parseFloat(elementStyle.paddingLeft) || 0) -
+              (Number.parseFloat(elementStyle.paddingRight) || 0),
+          );
+          const indent = /^(-?(?:\d+(?:\.\d*)?|\.\d+))(px|%)$/.exec(
+            elementStyle.textIndent.trim(),
+          );
+          if (indent) {
+            const indentPx =
+              Number(indent[1]) * (indent[2] === '%' ? contentWidth / 100 : 1);
+            if (indentPx > contentWidth + tolerancePx) {
+              issues.push({
+                code: 'paragraph-indent',
+                ...describe(element),
+                measuredPx: rounded(indentPx),
+                limitPx: rounded(contentWidth),
+                reason:
+                  'First-line indent exceeds the paragraph text width. Reduce the margins or font size.',
+              });
+            }
+          }
+        }
         const overflowX = elementStyle.overflowX || elementStyle.overflow;
         const overflowY = elementStyle.overflowY || elementStyle.overflow;
         if (

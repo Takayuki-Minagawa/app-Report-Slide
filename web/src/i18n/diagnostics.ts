@@ -108,6 +108,25 @@ export function formatSemanticReference(
   target: SemanticTarget,
   locale: AppLocale,
 ): string {
+  if (
+    target.type === 'heading' &&
+    target.headingKind &&
+    target.headingKind !== 'section'
+  ) {
+    if (target.number) return formatHeadingNumber(target, locale);
+    const label =
+      target.headingKind === 'chapter'
+        ? locale === 'en'
+          ? 'chapter'
+          : '章'
+        : locale === 'en'
+          ? 'appendix'
+          : '付録';
+    return (
+      target.title ||
+      (locale === 'en' ? `Unnumbered ${label}` : `${label}（番号なし）`)
+    );
+  }
   const prefix =
     locale === 'en'
       ? {
@@ -130,4 +149,19 @@ export function formatSemanticReference(
       ? `Unnumbered ${prefix.toLowerCase()}`
       : `${prefix}（番号なし）`)
   );
+}
+
+/** Number prefix for heading text/TOC entries; ordinary sections keep bare numbers. */
+export function formatHeadingNumber(
+  target: SemanticTarget,
+  locale: AppLocale,
+): string {
+  if (!target.number) return '';
+  if (target.headingKind === 'chapter')
+    return locale === 'ja'
+      ? `第${target.number}章`
+      : `Chapter ${target.number}`;
+  if (target.headingKind === 'appendix')
+    return `${locale === 'ja' ? '付録' : 'Appendix'} ${target.number}`;
+  return target.number;
 }
