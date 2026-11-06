@@ -49,6 +49,56 @@ describe('semantic document analysis', () => {
     ).toEqual(['0.1', '1.1', '1.2', '2.1', '2.1']);
   });
 
+  it.each([
+    ['chapter', ['0.1', '1'], '1.1'],
+    ['continuous', ['1.1', '2'], '1'],
+  ] as const)(
+    'aligns section headings with %s captions when H2 precedes the first H1',
+    (captionNumbering, headingNumbers, figureNumber) => {
+      const document = parseMarkdown(
+        '## Intro\n\n# Main\n{appendix=true}\n\n![Result](result.svg)\n{#fig:result}',
+      ).document;
+      document.metadata.number_sections = true;
+      document.metadata.report_settings = {
+        heading_numbering: 'section',
+        caption_numbering: captionNumbering,
+      };
+      const analysis = analyzeDocument(document);
+      expect(analysis.outline.map((entry) => entry.number)).toEqual(
+        headingNumbers,
+      );
+      expect(analysis.outline.map((entry) => entry.headingKind)).toEqual([
+        'section',
+        'section',
+      ]);
+      expect(analysis.labels.get('fig:result')?.number).toBe(figureNumber);
+    },
+  );
+
+  it.each([
+    ['chapter', '2', '2.1'],
+    ['continuous', '1', '1'],
+  ] as const)(
+    'aligns an explicitly numbered H1 with %s captions after a hidden H1',
+    (captionNumbering, headingNumber, figureNumber) => {
+      const document = parseMarkdown(
+        '# Hidden\n\n# Main\n{numbered=true}\n\n![Result](result.svg)\n{#fig:result}',
+      ).document;
+      document.metadata.number_sections = false;
+      document.metadata.report_settings = {
+        heading_numbering: 'section',
+        caption_numbering: captionNumbering,
+      };
+      const analysis = analyzeDocument(document);
+      expect(analysis.outline.map((entry) => entry.number)).toEqual([
+        undefined,
+        headingNumber,
+      ]);
+      expect(analysis.outline[1].headingKind).toBe('section');
+      expect(analysis.labels.get('fig:result')?.number).toBe(figureNumber);
+    },
+  );
+
   it('keeps continuous captions across chapters and only applies appendix mode to H1', () => {
     const document = parseMarkdown(
       '## Before\n{#before appendix=true}\n\n# First\n\n![One](one.svg)\n{#fig:one}\n\n# Appendix divider\n{appendix=true numbered=false}\n\n# Appendix\n{#app}\n\n![Two](two.svg)\n{#fig:two}',

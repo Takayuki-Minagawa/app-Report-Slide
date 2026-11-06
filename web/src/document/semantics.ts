@@ -119,7 +119,9 @@ export function analyzeDocument(document: DocumentData): DocumentAnalysis {
           numbered === true ||
           (numbered !== false && document.metadata.number_sections === true)
         ) {
-          if (chapterHeadings) {
+          // Chapter captions and displayed headings must share the structural
+          // H1 counter, even when headings use the plain section-number format.
+          if (chapterHeadings || chapterCaptions) {
             if (level === 1) number = currentChapter;
             else {
               for (let index = 0; index < level - 2; index++) {
