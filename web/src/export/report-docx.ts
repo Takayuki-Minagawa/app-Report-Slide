@@ -692,6 +692,9 @@ export async function exportReportDocx(
 
   const contents: Paragraph[] = [];
   function contentsList(title: string, targets: SemanticTarget[]) {
+    // Match HTML: inline contents are omitted when empty; a dedicated page
+    // retains its explanatory notice rather than becoming an unexplained blank.
+    if (!targets.length && !report.toc_page) return;
     contents.push(
       new Paragraph({
         text: title,

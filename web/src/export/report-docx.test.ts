@@ -565,6 +565,37 @@ describe('Word Report export', () => {
     ).toHaveLength(1);
   });
 
+  it.each(['', 'Body text'])(
+    'omits empty inline contents after a cover without creating extra pages: %s',
+    async (body) => {
+      const document = source(body);
+      Object.assign(document.metadata, {
+        title: 'Cover',
+        toc: true,
+        report_settings: {
+          cover: true,
+          toc_page: false,
+          list_figures: true,
+          list_tables: true,
+        },
+      });
+      const zip = await unpack(
+        (await exportReportDocx(document, new Map(), 'en')).blob,
+      );
+      const xml = zip.xml();
+      const text = xml.documentElement.textContent;
+      expect(text).toContain('Cover');
+      for (const label of [
+        'Table of contents',
+        'List of figures',
+        'List of tables',
+      ])
+        expect(text).not.toContain(label);
+      expect(elements(xml, 'w:sectPr')).toHaveLength(body ? 2 : 1);
+      expect(elements(xml, 'w:footerReference')).toHaveLength(body ? 1 : 0);
+    },
+  );
+
   it('retains merged rows and columns, table text, alignment, widths and cell borders', async () => {
     const cell = (id: string, text: string, attrs = {}) => ({
       type: 'tableCell' as const,
