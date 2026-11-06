@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseMarkdown } from '@/src/markdown/parser';
 import {
   assembleReportProject,
@@ -9,7 +9,65 @@ import {
 import { AppPreferencesProvider } from '@/components/app-preferences';
 import { PreviewSurface } from './preview-surface';
 
+vi.mock('./physical-report-preview', () => ({
+  PhysicalReportPreview: () => <div>Physical report preview</div>,
+}));
+
 describe('semantic preview', () => {
+  it('uses physical preview only when report page numbers are enabled', () => {
+    const source = parseMarkdown(
+      '---\ntype: report\nreport_settings:\n  toc_page_numbers: true\n---\n\n# Report',
+    ).document;
+    const { container, rerender } = render(
+      <AppPreferencesProvider>
+        <PreviewSurface document={source} paginated />
+      </AppPreferencesProvider>,
+    );
+    expect(screen.getByText('Physical report preview')).toBeInTheDocument();
+    expect(screen.queryByText(/明示的改ページ/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('combobox', { name: '表示ページ' }),
+    ).not.toBeInTheDocument();
+    expect(container.querySelector('.report-preview')).not.toBeInTheDocument();
+    rerender(
+      <AppPreferencesProvider>
+        <PreviewSurface
+          document={{
+            ...source,
+            metadata: {
+              ...source.metadata,
+              report_settings: { toc_page_numbers: false },
+            },
+          }}
+          paginated
+        />
+      </AppPreferencesProvider>,
+    );
+    expect(
+      screen.queryByText('Physical report preview'),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/明示的改ページ/)).toBeInTheDocument();
+    expect(
+      screen.getByRole('combobox', { name: '表示ページ' }),
+    ).toBeInTheDocument();
+    expect(container.querySelector('.report-preview')).toBeInTheDocument();
+  });
+
+  it('retains slide preview even when report settings request page numbers', () => {
+    const source = parseMarkdown(
+      '---\ntype: slide\nreport_settings:\n  toc_page_numbers: true\n---\n\n# Slide',
+    ).document;
+    render(
+      <AppPreferencesProvider>
+        <PreviewSurface document={source} />
+      </AppPreferencesProvider>,
+    );
+    expect(
+      screen.queryByText('Physical report preview'),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText('スライドプレビュー')).toBeInTheDocument();
+  });
+
   it('navigates to distinct chapters even when their source nodes share IDs', () => {
     const project = createReportProject(
       parseMarkdown('# First\n{#sec:first}\n\n[@sec:second]').document,

@@ -42,12 +42,16 @@ export async function fixture(data = document()) {
   await writeFile(input, JSON.stringify(data));
   return { root, input, output: join(root, 'out') };
 }
-export async function run(args) {
+export async function run(args, { env = process.env } = {}) {
   try {
     const { stdout, stderr } = await execute(
       process.execPath,
       [cliPath, ...args],
-      { maxBuffer: 5 * 1024 * 1024, timeout: 60_000 },
+      {
+        maxBuffer: 5 * 1024 * 1024,
+        timeout: 60_000,
+        env,
+      },
     );
     return { code: 0, stdout, stderr, result: JSON.parse(stdout) };
   } catch (error) {

@@ -11,7 +11,7 @@ cd local_renderer
 npm ci --ignore-scripts --no-audit --no-fund
 ```
 
-ページ検査を使う場合は、最初に Chromium もインストールします。
+ページ検査、またはReportの **目次に実際のページ番号を表示**（`report_settings.toc_page_numbers: true`）を使う場合は、最初に Chromium もインストールします。両方とも無効ならブラウザーは不要です。SlideではこのReport用設定を無視します。
 
 ```sh
 npm run install:browser
@@ -27,14 +27,14 @@ node render.mjs --input /path/to/report.kumi.json --output-dir /path/to/output -
 
 `--input` はネイティブ文書 JSON（v1/v2）または KUMI Markdown（`.md` / `.markdown`）です。入力名から `.kumi.json`、`.json`、`.md` 等を除いた名前で次を保存します。`--name report` で出力名を指定できます。
 
-| ファイル                     | 内容                                                            |
-| ---------------------------- | --------------------------------------------------------------- |
-| `report.html`                | ネイティブ CSS・数式フォント・画像・編集データを埋め込んだ HTML |
-| `report.kumi.json`           | 検証・移行した文書 JSON                                         |
-| `report.md`                  | KUMI の標準シリアライザーによる Markdown                        |
-| `report.kumi.zip`            | ネイティブ単体文書アーカイブ。画像・PDF原本を含む               |
-| `report.layout.json`         | `--check-layout` 指定時のページ別検査結果                       |
-| 原稿に記載した相対パスの素材 | JSON / Markdown の再読込に必要な画像・PDF原本のコピー           |
+| ファイル                     | 内容                                                                        |
+| ---------------------------- | --------------------------------------------------------------------------- |
+| `report.html`                | ネイティブ CSS・数式フォント・画像・編集データを埋め込んだ HTML             |
+| `report.kumi.json`           | 検証・移行した文書 JSON                                                     |
+| `report.md`                  | KUMI の標準シリアライザーによる Markdown                                    |
+| `report.kumi.zip`            | ネイティブ単体文書アーカイブ。画像・PDF原本を含む                           |
+| `report.layout.json`         | `--check-layout` 指定時、または実ページ番号が有効なReportのページ別検査結果 |
+| 原稿に記載した相対パスの素材 | JSON / Markdown の再読込に必要な画像・PDF原本のコピー                       |
 
 HTML と ZIP は単体で受け渡せます。JSON / Markdown は、出力先へ複写された素材も同じフォルダー構成で保持してください。入力は変更しません。入力ファイルと同じ名前になる出力先は避け、別フォルダーを指定してください。
 
@@ -48,7 +48,9 @@ HTML と ZIP は単体で受け渡せます。JSON / Markdown は、出力先へ
 node render.mjs --input /path/to/report.md --output-dir /path/to/output --fail-on-overflow
 ```
 
-`--check-layout` は生成した HTML をローカルの headless Chromium で開き、フォント・画像の読込後に、HTML 内の共通検査関数 `window.kumiInspectDocumentLayout()` を呼びます。ネットワーク要求は遮断します。Report は明示ページ、Slide はすべてのスライドを原寸で検査します。表示するページ番号は1から始まります。
+`--check-layout` は生成した HTML をローカルの headless Chromium で開き、フォント・画像の読込後に、HTML 内の共通検査関数 `window.kumiInspectDocumentLayout()` を呼びます。ネットワーク要求は遮断します。実ページ番号が無効なReportは表紙・目次・明示改ページによる論理ページ、Slideはすべてのスライドを原寸で検査します。検査結果のページ番号は1から始まります。
+
+Reportの `report_settings.toc_page_numbers: true` では、`--check-layout` を省略してもブラウザーによる組版・検査を実行します。組版の完了を待ち、自動改ページ後の全物理ページを検査します。標準出力JSONの `pages` は表紙・目次を含む物理ページ総数、`layout.pagination.bodyPageCount` は本文の物理ページ数です。一括モードでは `.layout.json` も保存します。設定が無効な場合の `pages` は従来の論理ページ数です。ブラウザーが未導入、組版が未完了、または生成ページ数と計測数が一致しない場合は保存を開始しません。
 
 検査 JSON の `pages` に、ページ種別・実寸・用紙寸法と、縦横のはみ出しやスクロール領域内の隠れた内容を記録します。単位は CSS px、許容差は 2 px です。検査対象の要素を特定できる場合は `nodeId` も含めます。HTML の Report 警告と同じ検査処理を使用します。
 
@@ -57,7 +59,7 @@ node render.mjs --input /path/to/report.md --output-dir /path/to/output --fail-o
 - `--check-out /path/to/check.json`：検査を有効にして、結果の保存先を指定。
 - 画像の読込失敗、未計測ページ、ブラウザー起動失敗など：終了コード 1。成果物の保存は開始しません。
 
-これは指定した Chromium・ローカルフォント環境での測定です。自動改ページ後の印刷ページ数や、別ブラウザー・プリンタでの組版を保証するものではありません。検査結果にはブラウザー版と viewport を記録します。最終配布時は印刷プレビューも確認してください。
+これは指定したChromium・ローカルフォント環境での測定です。実ページ番号が無効な場合は自動改ページ後の物理ページ数を算出しません。有効な場合も、別ブラウザー・フォント・プリンターでの組版が同一になる保証はありません。検査結果にはブラウザー版とviewportを記録します。最終配布時は印刷プレビューも確認してください。
 
 ## 既存の個別出力コマンド
 
@@ -82,6 +84,6 @@ npm test
 npm run test:layout
 ```
 
-前者は CLI 引数、旧コマンド互換、Report / Slide / 編集 SVG、ネイティブ ZIP 往復、JSON / Markdown と素材の再利用、入力保護・保存失敗の確認です。後者は Chromium による複数ページ、ページ番号付きはみ出し、画像・切抜き図の読込検査です。
+前者は CLI 引数、旧コマンド互換、Report / Slide / 編集 SVG、ネイティブ ZIP 往復、JSON / Markdown と素材の再利用、入力保護・保存失敗、設定に応じたブラウザー要否の確認です。後者は Chromium による複数ページ、ページ番号付きはみ出し、画像・切抜き図の読込、物理組版の完了待ちと実ページ数の検査です。
 
 章別プロジェクト ZIP / HTML の入力、複数原稿の manifest 一括処理、PDF / Word / PowerPoint の CLI 出力はこの入口の対象外です。章別管理やそれらの出力は Web アプリを使用してください。単体文書の JSON 仕様は `../web/src/document/model.ts` / `validation.ts`、ZIP 仕様は `../web/src/workspace/document-archive.ts` が正本です。

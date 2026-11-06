@@ -13,6 +13,7 @@ import {
 import type { DocumentData } from '@/src/document/model';
 import type { AssetUrls } from '@/src/workspace/files';
 import type { PrintSnapshot } from '@/src/export/print-html';
+import { waitForReportPagination } from '@/src/export/pagination-ready';
 
 export interface OutputSnapshot {
   document: DocumentData;
@@ -36,6 +37,7 @@ export function OutputPreviewDialog({
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [physicalPageCount, setPhysicalPageCount] = useState<number>();
   const frame = useRef<HTMLIFrameElement>(null);
   useEffect(() => {
     let cancelled = false;
@@ -62,13 +64,22 @@ export function OutputPreviewDialog({
   const loaded = async () => {
     const doc = frame.current?.contentDocument;
     if (!doc || !result) return;
+    // A newly mounted iframe can load its initial about:blank before srcdoc.
+    if (result.print.paginated && !doc.documentElement.dataset.kumiPagination)
+      return;
     setReady(false);
+    setError('');
+    setPhysicalPageCount(undefined);
     try {
+      const pagination = result.print.paginated
+        ? await waitForReportPagination(doc)
+        : undefined;
       await doc.fonts.ready;
       await Promise.all(
         [...doc.images].map((image) => image.decode().catch(() => undefined)),
       );
       if (frame.current?.contentDocument !== doc) return;
+      if (pagination) setPhysicalPageCount(pagination.pageCount);
       const messages: string[] = [];
       const broken = [...doc.images].filter(
         (image) => !image.naturalWidth,
@@ -109,7 +120,11 @@ export function OutputPreviewDialog({
         );
       if (mode === 'print') {
         const clipped = [
-          ...doc.querySelectorAll<HTMLElement>('.print-page *'),
+          ...doc.querySelectorAll<HTMLElement>(
+            result.print.paginated
+              ? '.pagedjs_page .report-layout, .pagedjs_page .report-layout *'
+              : '.print-page *',
+          ),
         ].some((element) => {
           if (
             element.namespaceURI !== 'http://www.w3.org/1999/xhtml' ||
@@ -139,7 +154,14 @@ export function OutputPreviewDialog({
       setWarnings(messages);
       setReady(true);
     } catch (cause) {
-      setError(String(cause));
+      if (frame.current?.contentDocument === doc)
+        setError(
+          result.print.paginated
+            ? ja
+              ? 'ページの組版を完了できませんでした。内容と画像を確認し、出力プレビューを開き直してください。'
+              : 'Pagination could not finish. Check the content and images, then reopen the output preview.'
+            : String(cause),
+        );
     }
   };
   return (
@@ -157,9 +179,13 @@ export function OutputPreviewDialog({
               : 'Output comparison / searchable PDF'}
           </DialogTitle>
           <DialogDescription>
-            {ja
-              ? 'HTML表示と印刷用紙を切り替えて確認できます。「印刷／PDF保存」で保存先をPDFにしてください。最終的な改ページはブラウザーの印刷プレビューで確認します。'
-              : 'Compare HTML and print layouts. Choose Save as PDF in the print dialog. Check final pagination in your browser’s print preview.'}
+            {result?.print.paginated
+              ? ja
+                ? 'HTMLと印刷に同じ組版済みページを使います。「印刷／PDF保存」で保存先をPDFにしてください。'
+                : 'HTML and print use the same paginated pages. Choose Save as PDF in the print dialog.'
+              : ja
+                ? 'HTML表示と印刷用紙を切り替えて確認できます。「印刷／PDF保存」で保存先をPDFにしてください。最終的な改ページはブラウザーの印刷プレビューで確認します。'
+                : 'Compare HTML and print layouts. Choose Save as PDF in the print dialog. Check final pagination in your browser’s print preview.'}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap items-center gap-2">
@@ -172,6 +198,7 @@ export function OutputPreviewDialog({
               onClick={() => {
                 if (mode === value) return;
                 setReady(false);
+                setPhysicalPageCount(undefined);
                 setWarnings([]);
                 setMode(value);
               }}
@@ -189,8 +216,9 @@ export function OutputPreviewDialog({
             {ja ? '印刷／PDF保存' : 'Print / Save PDF'}
           </Button>
           <span className="text-xs text-muted-foreground">
-            {result
-              ? `${result.print.pageCount} ${ja ? '原稿ページ' : 'source pages'}`
+            {result &&
+            (!result.print.paginated || physicalPageCount !== undefined)
+              ? `${physicalPageCount ?? result.print.pageCount} ${result.print.paginated ? (ja ? 'ページ（組版済み）' : 'paginated pages') : ja ? '原稿ページ' : 'source pages'}`
               : ja
                 ? '出力を準備しています…'
                 : 'Preparing output…'}
@@ -232,7 +260,9 @@ export function OutputPreviewDialog({
             sandbox={
               mode === 'html'
                 ? 'allow-same-origin allow-modals allow-scripts allow-popups'
-                : 'allow-same-origin allow-modals'
+                : result.print.paginated
+                  ? 'allow-same-origin allow-modals allow-scripts'
+                  : 'allow-same-origin allow-modals'
             }
             srcDoc={mode === 'print' ? result.print.html : result.html}
             onLoad={() => void loaded()}

@@ -43,6 +43,14 @@ describe('report structure settings', () => {
         name: '目次・図表目次を独立ページにする',
       }),
     );
+    const pageNumbers = screen.getByRole('checkbox', {
+      name: '目次に実際のページ番号を表示',
+    });
+    expect(pageNumbers).not.toBeChecked();
+    fireEvent.click(pageNumbers);
+    expect(
+      screen.getByText(/自動改ページを反映した実際のページ番号を表示/),
+    ).toBeInTheDocument();
     fireEvent.change(
       screen.getByRole('combobox', { name: '目次に含める見出し' }),
       { target: { value: '2' } },
@@ -61,11 +69,54 @@ describe('report structure settings', () => {
           caption_numbering: 'chapter',
           toc_depth: 2,
           toc_page: true,
+          toc_page_numbers: true,
           list_figures: true,
         }),
       }),
     );
   });
+  it.each([
+    [
+      'ja',
+      '目次に実際のページ番号を表示',
+      '報告書の構成を適用',
+      /ページ番号は表示しません/,
+    ],
+    [
+      'en',
+      'Show actual page numbers in contents',
+      'Apply report structure',
+      /without page numbers/,
+    ],
+  ] as const)(
+    'restores and disables actual page numbers in %s',
+    async (locale, checkbox, apply, disabledDescription) => {
+      localStorage.setItem('kumi.locale', locale);
+      const onApply = vi.fn();
+      render(
+        <AppPreferencesProvider>
+          <ReportSettingsPanel
+            metadata={{ report_settings: { toc_page_numbers: true } }}
+            disabled={false}
+            onApply={onApply}
+          />
+        </AppPreferencesProvider>,
+      );
+      const pageNumbers = await screen.findByRole('checkbox', {
+        name: checkbox,
+      });
+      expect(pageNumbers).toBeChecked();
+      fireEvent.click(pageNumbers);
+      expect(screen.getByText(disabledDescription)).toBeInTheDocument();
+      expect(onApply).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: apply }));
+      expect(onApply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          report_settings: expect.objectContaining({ toc_page_numbers: false }),
+        }),
+      );
+    },
+  );
   it('locks structure controls while Markdown is being edited', () => {
     render(
       <AppPreferencesProvider>
@@ -74,6 +125,9 @@ describe('report structure settings', () => {
     );
     expect(
       screen.getByRole('checkbox', { name: '表紙を付ける' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole('checkbox', { name: '目次に実際のページ番号を表示' }),
     ).toBeDisabled();
     expect(
       screen.getByRole('combobox', { name: '章・節の番号書式' }),

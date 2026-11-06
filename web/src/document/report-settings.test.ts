@@ -22,6 +22,7 @@ const settings: ReportSettings = {
   caption_numbering: 'chapter',
   toc_depth: 2,
   toc_page: true,
+  toc_page_numbers: true,
   list_figures: true,
   list_tables: true,
   affiliation: '構造研究室',
@@ -33,6 +34,7 @@ describe('report formatting settings and persistence', () => {
   it('resolves legacy defaults without adding stored metadata and accepts partial settings', () => {
     const metadata = {};
     expect(resolveReportSettings(metadata)).toEqual(defaultReportSettings);
+    expect(resolveReportSettings(metadata).toc_page_numbers).toBe(false);
     expect(metadata).toEqual({});
     expect(
       resolveReportSettings({ report_settings: { toc_depth: 3 } }),
@@ -41,6 +43,23 @@ describe('report formatting settings and persistence', () => {
       validateDocumentData(parseMarkdown('Body').document).metadata,
     ).not.toHaveProperty('report_settings');
   });
+
+  it.each([true, false])(
+    'round-trips optional actual page numbers (%s) without adding other settings',
+    (tocPageNumbers) => {
+      const document = parseMarkdown('Body').document;
+      document.metadata.report_settings = {
+        toc_page_numbers: tocPageNumbers,
+      };
+      const restored = parseMarkdown(serializeDocument(document)).document;
+      expect(restored.metadata.report_settings).toEqual({
+        toc_page_numbers: tocPageNumbers,
+      });
+      expect(
+        validateDocumentData(JSON.parse(JSON.stringify(document))),
+      ).toEqual(document);
+    },
+  );
 
   it('round-trips settings and per-heading options in Markdown and JSON', () => {
     const document = parseMarkdown(
@@ -73,6 +92,8 @@ describe('report formatting settings and persistence', () => {
     { toc_depth: 7 },
     { toc_depth: 1.5 },
     { toc_page: 1 },
+    { toc_page_numbers: 'true' },
+    { toc_page_numbers: null },
     { list_figures: null },
     { list_tables: 'yes' },
     { affiliation: 'a'.repeat(201) },

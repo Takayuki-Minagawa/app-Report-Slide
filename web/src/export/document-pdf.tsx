@@ -14,11 +14,15 @@ import {
 } from '@/src/document/page-settings';
 import { analyzeDocument } from '@/src/document/semantics';
 import { splitRenderedPages } from '@/src/document/report-pages';
+import { resolveReportSettings } from '@/src/document/report-settings';
 import { migrateDocumentData } from '@/src/document/validation';
 import type { AppLocale } from '@/src/i18n/messages';
 import type { AssetUrls } from '@/src/workspace/files';
 import { offlineMathStyles } from './math-styles';
 import { prepareOfficeImages } from './office-images';
+import { exportReportHtml } from './report-html';
+import { offlinePrintFonts } from './print-fonts';
+import { waitForReportPagination } from './pagination-ready';
 
 const pixelsPerMillimetre = 96 / 25.4;
 const maximumCanvasPixels = 8 * 1024 * 1024;
@@ -110,26 +114,195 @@ async function waitForImages(document: Document): Promise<void> {
   await document.fonts?.ready;
 }
 
-function hasClippedContent(article: HTMLElement): boolean {
+function hasClippedContent(article: HTMLElement, selector = '*'): boolean {
   const view = article.ownerDocument.defaultView;
   if (!view) return false;
-  return [...article.querySelectorAll<HTMLElement>('*')].some((element) => {
-    // KaTeX intentionally hides its parallel accessibility representation.
-    // The visible .katex-html branch is still checked for actual clipping.
-    if (element.closest('.katex-mathml')) return false;
-    if (element.clientWidth === 0 && element.clientHeight === 0) return false;
-    const style = view.getComputedStyle(element);
-    const clips = (value: string) =>
-      /^(?:auto|scroll|hidden|clip)$/.test(value);
-    return (
-      (element.clientWidth > 0 &&
-        clips(style.overflowX || style.overflow) &&
-        element.scrollWidth > element.clientWidth + 2) ||
-      (element.clientHeight > 0 &&
-        clips(style.overflowY || style.overflow) &&
-        element.scrollHeight > element.clientHeight + 2)
-    );
-  });
+  return [...article.querySelectorAll<HTMLElement>(selector)].some(
+    (element) => {
+      // KaTeX intentionally hides its parallel accessibility representation.
+      // The visible .katex-html branch is still checked for actual clipping.
+      if (element.closest('.katex-mathml')) return false;
+      if (element.clientWidth === 0 && element.clientHeight === 0) return false;
+      const style = view.getComputedStyle(element);
+      const clips = (value: string) =>
+        /^(?:auto|scroll|hidden|clip)$/.test(value);
+      return (
+        (element.clientWidth > 0 &&
+          clips(style.overflowX || style.overflow) &&
+          element.scrollWidth > element.clientWidth + 2) ||
+        (element.clientHeight > 0 &&
+          clips(style.overflowY || style.overflow) &&
+          element.scrollHeight > element.clientHeight + 2)
+      );
+    },
+  );
+}
+
+/** Keep html-to-image's clone at the dimensions already used for pagination. */
+function physicalCaptureStyles(page: HTMLElement): {
+  css: string;
+  restore: () => void;
+} {
+  const view = page.ownerDocument.defaultView;
+  if (!view) throw new Error('The physical page has no rendering context');
+  const attribute = 'data-kumi-pdf-layout';
+  const elements = [page, ...page.querySelectorAll('*')];
+  const previous = elements.map((element) => element.getAttribute(attribute));
+  const css = elements
+    .map((element, index) => {
+      const style = view.getComputedStyle(element);
+      element.setAttribute(attribute, String(index));
+      // html-to-image 1.11.13 rounds font-size down before drawing its clone.
+      // Restore the exact size so text keeps the same lines and page breaks.
+      let declarations = `font-size:${style.fontSize}!important;`;
+      if (
+        element.localName === 'table' &&
+        [...element.children].some((child) => child.localName === 'caption')
+      ) {
+        // A table's used height includes its caption. Reapplying that height
+        // to the table grid adds the caption twice and stretches body rows.
+        // The cloned rows already retain their measured individual heights.
+        declarations += 'height:auto!important;block-size:auto!important;';
+      }
+      if (
+        element.matches('div[id]') &&
+        element.children.length === 1 &&
+        element.firstElementChild?.localName === 'figure'
+      ) {
+        // Figure anchors have auto height. Fixing their used height prevents
+        // the figure's bottom margin from collapsing through the wrapper,
+        // pulling the following paragraph upwards in the capture clone.
+        declarations += 'height:auto!important;block-size:auto!important;';
+      }
+      return `[${attribute}="${index}"]{${declarations}}`;
+    })
+    .join('\n');
+  return {
+    css,
+    restore: () => {
+      elements.forEach((element, index) => {
+        const value = previous[index];
+        if (value === null) element.removeAttribute(attribute);
+        else element.setAttribute(attribute, value);
+      });
+    },
+  };
+}
+
+/** Capture the shared, completed physical layout without slicing its paragraphs. */
+async function exportPaginatedReportPdf(
+  document: DocumentData,
+  assets: AssetUrls,
+  locale: AppLocale,
+): Promise<{ blob: Blob; warnings: string[] }> {
+  const { html } = await exportReportHtml(document, assets, locale);
+  const [pageWidth, pageHeight] = pageDimensions(
+    resolvePageSettings(document.metadata),
+  );
+  const width = pageWidth * pixelsPerMillimetre;
+  const height = pageHeight * pixelsPerMillimetre;
+  const iframe = globalThis.document.createElement('iframe');
+  iframe.dataset.kumiPdf = '';
+  iframe.title =
+    locale === 'ja' ? 'PDF出力用のプレビュー' : 'PDF export preview';
+  iframe.setAttribute('aria-hidden', 'true');
+  // Only the hash-authorized scripts in our own exported HTML can execute.
+  iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts');
+  iframe.style.cssText = `position:fixed;left:-100000px;top:0;width:${width}px;height:${height}px;border:0;pointer-events:none;`;
+  let loadTimeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const loaded = new Promise<void>((resolve, reject) => {
+      loadTimeout = setTimeout(
+        () => reject(new Error('PDF preview did not load.')),
+        60_000,
+      );
+      iframe.onload = () => {
+        // Ignore the transient about:blank load before the srcdoc is parsed.
+        const state =
+          iframe.contentDocument?.documentElement.dataset.kumiPagination;
+        if (state && ['pending', 'ready', 'error'].includes(state)) resolve();
+      };
+      iframe.onerror = () => reject(new Error('PDF preview failed to load.'));
+    });
+    iframe.srcdoc = html;
+    globalThis.document.body.appendChild(iframe);
+    await loaded;
+    clearTimeout(loadTimeout);
+    const frame = iframe.contentDocument;
+    if (!frame) throw new Error('Could not create export document');
+    // Raster capture uses screen styles. Keep reader controls off the paper,
+    // including buttons added when the shared pagination promise resolves.
+    const captureStyle = frame.createElement('style');
+    captureStyle.textContent =
+      '.reader-zoom-button,.reader-detail-launcher,#reader-dialog{display:none!important}';
+    frame.head.appendChild(captureStyle);
+    await waitForReportPagination(frame);
+    await waitForImages(frame);
+    const pages = [...frame.querySelectorAll<HTMLElement>('.pagedjs_page')];
+    const pdf = new jsPDF({
+      orientation: pageWidth > pageHeight ? 'landscape' : 'portrait',
+      unit: 'mm',
+      format: [pageWidth, pageHeight],
+      compress: true,
+    });
+    pdf.setProperties({
+      title: documentTitle(document),
+      author: String(document.metadata.author ?? ''),
+      creator: 'Kumi Markdown Studio',
+    });
+    for (const [index, page] of pages.entries()) {
+      if (
+        page.scrollWidth > width + 2 ||
+        page.scrollHeight > height + 2 ||
+        // Paged.js can retain unused columns in its internal wrappers. Check
+        // the authored layout without treating those columns as lost content.
+        hasClippedContent(page, '.report-layout, .report-layout *')
+      )
+        throw new PdfExportError(copy[locale].clipped);
+      const captureStyles = physicalCaptureStyles(page);
+      const canvas = await toCanvas(page, {
+        width,
+        height,
+        pixelRatio: Math.min(
+          2,
+          Math.sqrt(maximumCanvasPixels / (width * height)),
+        ),
+        backgroundColor: '#ffffff',
+        style: { margin: '0', boxShadow: 'none', transform: 'none' },
+        fontEmbedCSS: `${offlineMathStyles}\n${offlinePrintFonts}\n${captureStyles.css}`,
+        cacheBust: false,
+      }).finally(captureStyles.restore);
+      try {
+        if (index > 0)
+          pdf.addPage(
+            [pageWidth, pageHeight],
+            pageWidth > pageHeight ? 'landscape' : 'portrait',
+          );
+        pdf.addImage(
+          canvas,
+          'PNG',
+          0,
+          0,
+          pageWidth,
+          pageHeight,
+          undefined,
+          'FAST',
+        );
+      } finally {
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+    }
+    return { blob: pdf.output('blob'), warnings: [copy[locale].raster] };
+  } catch (error) {
+    if (error instanceof PdfExportError) throw error;
+    throw new Error(copy[locale].failure, { cause: error });
+  } finally {
+    clearTimeout(loadTimeout);
+    iframe.onload = null;
+    iframe.onerror = null;
+    iframe.remove();
+  }
 }
 
 /** Rasterize one physical page at a time, so a long report never creates a tall canvas. */
@@ -140,6 +313,11 @@ export async function exportDocumentPdf(
 ): Promise<{ blob: Blob; warnings: string[] }> {
   const migrated = migrateDocumentData(source);
   const document = { ...migrated, children: withoutNotes(migrated.children) };
+  if (
+    document.type === 'report' &&
+    resolveReportSettings(document.metadata).toc_page_numbers
+  )
+    return exportPaginatedReportPdf(document, assets, locale);
   const { images } = await prepareOfficeImages(document, assets, locale);
   const resolveImageUrl = (src: string) => images.get(src)?.dataUrl ?? src;
   const slide = document.type === 'slide';

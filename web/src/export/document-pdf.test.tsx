@@ -2,8 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { toCanvas } from 'html-to-image';
 import { parseMarkdown } from '@/src/markdown/parser';
 import { exportDocumentPdf } from './document-pdf';
+import { exportReportHtml } from './report-html';
+import type { ReportPaginationResult } from './pagination-ready';
 
 vi.mock('html-to-image', () => ({ toCanvas: vi.fn() }));
+vi.mock('./report-html', () => ({ exportReportHtml: vi.fn() }));
 
 const png =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
@@ -26,7 +29,8 @@ beforeEach(() => {
       captures.push({
         markup: node.innerHTML,
         transform:
-          node.querySelector<HTMLElement>('#pdf-content')!.style.transform,
+          node.querySelector<HTMLElement>('#pdf-content')?.style.transform ??
+          '',
         policy: node.ownerDocument
           .querySelector('meta[http-equiv="Content-Security-Policy"]')!
           .getAttribute('content'),
@@ -100,7 +104,262 @@ function mockContentHeight(
   });
 }
 
+function mockPaginatedFrame(
+  ready: Promise<ReportPaginationResult>,
+  pageCount = 3,
+  prepare?: (frame: Document) => void,
+  initialBlankLoad = false,
+) {
+  vi.mocked(exportReportHtml).mockResolvedValue({
+    html: '<!doctype html><html><body>Shared report HTML</body></html>',
+    externalImages: [],
+  });
+  const append = document.body.appendChild.bind(document.body);
+  vi.spyOn(document.body, 'appendChild').mockImplementation(function <
+    T extends Node,
+  >(node: T): T {
+    append(node);
+    if (node instanceof HTMLIFrameElement) {
+      expect(node.getAttribute('sandbox')).toContain('allow-scripts');
+      expect(node.srcdoc).toContain('Shared report HTML');
+      if (initialBlankLoad) node.dispatchEvent(new Event('load'));
+      const frame = node.contentDocument!;
+      frame.head.innerHTML =
+        '<meta http-equiv="Content-Security-Policy" content="default-src &apos;none&apos;; script-src &apos;sha256-test&apos;">';
+      frame.body.innerHTML = Array.from(
+        { length: pageCount },
+        (_, index) =>
+          `<div class="pagedjs_page"><p>Physical page ${index + 1}</p><footer>${index + 1}</footer></div>`,
+      ).join('');
+      prepare?.(frame);
+      frame.documentElement.dataset.kumiPagination = 'pending';
+      Object.assign(node.contentWindow!, {
+        kumiPaginationReady: ready.then((result) => {
+          frame.documentElement.dataset.kumiPagination = 'ready';
+          return result;
+        }),
+      });
+      queueMicrotask(() => node.dispatchEvent(new Event('load')));
+    }
+    return node;
+  });
+}
+
 describe('PDF export', () => {
+  it('waits for pagination and captures each completed physical page exactly once', async () => {
+    let complete!: (result: ReportPaginationResult) => void;
+    mockPaginatedFrame(
+      new Promise((resolve) => {
+        complete = resolve;
+      }),
+    );
+    const source = parseMarkdown('One source page').document;
+    source.metadata.report_settings = { toc_page_numbers: true };
+    const pending = exportDocumentPdf(source, new Map(), 'en');
+    await vi.waitFor(() =>
+      expect(document.querySelector('iframe[data-kumi-pdf]')).not.toBeNull(),
+    );
+    expect(toCanvas).not.toHaveBeenCalled();
+    complete({ pageCount: 3, bodyPageCount: 2 });
+    const { blob, warnings } = await pending;
+    expect(await pdfText(blob)).toContain('/Count 3');
+    expect(
+      captures.map(
+        (capture) =>
+          new DOMParser().parseFromString(capture.markup, 'text/html').body
+            .textContent,
+      ),
+    ).toEqual(['Physical page 11', 'Physical page 22', 'Physical page 33']);
+    expect(captures.every((capture) => capture.transform === '')).toBe(true);
+    expect(warnings).toHaveLength(1);
+    expect(toCanvas).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        fontEmbedCSS: expect.stringContaining('Noto Serif JP'),
+      }),
+    );
+    expect(document.querySelector('iframe[data-kumi-pdf]')).toBeNull();
+    expect(
+      canvases.every((canvas) => canvas.width === 0 && canvas.height === 0),
+    ).toBe(true);
+  });
+
+  it('rejects incomplete pagination before capturing any page', async () => {
+    mockPaginatedFrame(Promise.resolve({ pageCount: 4, bodyPageCount: 3 }));
+    const source = parseMarkdown('Report').document;
+    source.metadata.report_settings = { toc_page_numbers: true };
+    await expect(exportDocumentPdf(source, new Map(), 'en')).rejects.toThrow(
+      'Could not generate the PDF',
+    );
+    expect(toCanvas).not.toHaveBeenCalled();
+    expect(document.querySelector('iframe[data-kumi-pdf]')).toBeNull();
+  });
+
+  it('ignores the initial blank frame load before the paginated HTML starts', async () => {
+    mockPaginatedFrame(
+      Promise.resolve({ pageCount: 1, bodyPageCount: 1 }),
+      1,
+      undefined,
+      true,
+    );
+    const source = parseMarkdown('Report').document;
+    source.metadata.report_settings = { toc_page_numbers: true };
+    const { blob } = await exportDocumentPdf(source, new Map(), 'en');
+    expect(await pdfText(blob)).toContain('/Count 1');
+    expect(toCanvas).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores unused Paged.js wrapper columns when the authored layout fits', async () => {
+    mockPaginatedFrame(
+      Promise.resolve({ pageCount: 1, bodyPageCount: 1 }),
+      1,
+      (frame) => {
+        frame.querySelector('.pagedjs_page')!.innerHTML =
+          '<div class="pagedjs_sheet" style="overflow:hidden"><section class="report-layout"><p>Final heading</p></section></div>';
+        const wrapper = frame.querySelector('.pagedjs_sheet')!;
+        Object.defineProperties(wrapper, {
+          clientWidth: { value: 559 },
+          scrollWidth: { value: 2043 },
+        });
+      },
+    );
+    const source = parseMarkdown('Report').document;
+    source.metadata.report_settings = { toc_page_numbers: true };
+    const { blob } = await exportDocumentPdf(source, new Map(), 'en');
+    expect(await pdfText(blob)).toContain('/Count 1');
+    expect(toCanvas).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['.report-layout', 'pre'])(
+    'still rejects clipped authored %s content in physical pages',
+    async (selector) => {
+      mockPaginatedFrame(
+        Promise.resolve({ pageCount: 1, bodyPageCount: 1 }),
+        1,
+        (frame) => {
+          frame.querySelector('.pagedjs_page')!.innerHTML =
+            '<section class="report-layout"><pre>Long code</pre></section>';
+          const clipped = frame.querySelector<HTMLElement>(selector)!;
+          clipped.style.overflow = 'hidden';
+          Object.defineProperties(clipped, {
+            clientWidth: { value: 100 },
+            scrollWidth: { value: 500 },
+          });
+        },
+      );
+      const source = parseMarkdown('Report').document;
+      source.metadata.report_settings = { toc_page_numbers: true };
+      await expect(exportDocumentPdf(source, new Map(), 'en')).rejects.toThrow(
+        'Reduce its width or font size',
+      );
+      expect(toCanvas).not.toHaveBeenCalled();
+    },
+  );
+
+  it('hides reader controls while capturing physical pages with screen styles', async () => {
+    mockPaginatedFrame(
+      Promise.resolve({ pageCount: 1, bodyPageCount: 1 }),
+      1,
+      (frame) => {
+        frame.querySelector('.pagedjs_page')!.innerHTML =
+          '<section class="report-layout"><figure><svg></svg><button class="reader-zoom-button">Enlarge</button></figure><button class="reader-detail-launcher">Details</button><dialog id="reader-dialog" open>Reader</dialog></section>';
+      },
+    );
+    const capture = vi.mocked(toCanvas).getMockImplementation()!;
+    vi.mocked(toCanvas).mockImplementation(async (node, options) => {
+      const view = node.ownerDocument.defaultView!;
+      for (const element of node.querySelectorAll(
+        '.reader-zoom-button,.reader-detail-launcher,#reader-dialog',
+      ))
+        expect(view.getComputedStyle(element).display).toBe('none');
+      expect(
+        view.getComputedStyle(node.querySelector('figure')!).display,
+      ).not.toBe('none');
+      return capture(node, options);
+    });
+    const source = parseMarkdown('Report').document;
+    source.metadata.report_settings = { toc_page_numbers: true };
+    await exportDocumentPdf(source, new Map(), 'en');
+    expect(toCanvas).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves exact font sizes, captioned table heights and figure margins in the capture clone', async () => {
+    let originalPage!: HTMLElement;
+    mockPaginatedFrame(
+      Promise.resolve({ pageCount: 1, bodyPageCount: 1 }),
+      1,
+      (frame) => {
+        originalPage = frame.querySelector('.pagedjs_page')!;
+        originalPage.innerHTML =
+          '<p style="font-size:14.25px" data-kumi-pdf-layout="original">Fractional text</p>' +
+          '<table style="height:111.469px"><caption>Caption</caption><tbody><tr><td style="font-size:12.04px">Cell</td></tr></tbody></table>' +
+          '<table><tbody><tr><td>Uncaptioned</td></tr></tbody></table>' +
+          '<div id="kumi-figure"><figure style="margin-bottom:24px">Figure</figure></div>';
+      },
+    );
+    const capture = vi.mocked(toCanvas).getMockImplementation()!;
+    vi.mocked(toCanvas).mockImplementation(async (node, options) => {
+      const paragraph = node.querySelector('p')!;
+      const cell = node.querySelector('td')!;
+      const [captioned, uncaptioned] = node.querySelectorAll('table');
+      const rule = (element: Element) =>
+        `[data-kumi-pdf-layout="${element.getAttribute('data-kumi-pdf-layout')}"]`;
+      const css = options!.fontEmbedCSS!;
+      expect(css).toContain(`${rule(paragraph)}{font-size:14.25px!important;}`);
+      expect(css).toContain(`${rule(cell)}{font-size:12.04px!important;}`);
+      const tableRule = css
+        .slice(css.indexOf(rule(captioned)))
+        .split('}', 1)[0];
+      expect(tableRule).toContain(
+        'height:auto!important;block-size:auto!important;',
+      );
+      const plainRule = css
+        .slice(css.indexOf(rule(uncaptioned)))
+        .split('}', 1)[0];
+      expect(plainRule).not.toContain('height:');
+      const anchor = node.querySelector('#kumi-figure')!;
+      const anchorRule = css.slice(css.indexOf(rule(anchor))).split('}', 1)[0];
+      expect(anchorRule).toContain(
+        'height:auto!important;block-size:auto!important;',
+      );
+      // Corrections belong to the clone stylesheet, never the live page's CSS.
+      expect(paragraph.style.fontSize).toBe('14.25px');
+      expect(captioned.style.height).toBe('111.469px');
+      return capture(node, options);
+    });
+    const source = parseMarkdown('Report').document;
+    source.metadata.report_settings = { toc_page_numbers: true };
+    await exportDocumentPdf(source, new Map(), 'en');
+    expect(originalPage.hasAttribute('data-kumi-pdf-layout')).toBe(false);
+    expect(originalPage.querySelector('p')).toHaveAttribute(
+      'data-kumi-pdf-layout',
+      'original',
+    );
+    expect(
+      originalPage.querySelectorAll('table[data-kumi-pdf-layout]'),
+    ).toHaveLength(0);
+  });
+
+  it('restores capture markers even when rasterization fails', async () => {
+    let originalPage!: HTMLElement;
+    mockPaginatedFrame(
+      Promise.resolve({ pageCount: 1, bodyPageCount: 1 }),
+      1,
+      (frame) => {
+        originalPage = frame.querySelector('.pagedjs_page')!;
+      },
+    );
+    vi.mocked(toCanvas).mockRejectedValue(new Error('Capture failed'));
+    const source = parseMarkdown('Report').document;
+    source.metadata.report_settings = { toc_page_numbers: true };
+    await expect(exportDocumentPdf(source, new Map(), 'en')).rejects.toThrow(
+      'Could not generate the PDF',
+    );
+    expect(originalPage.hasAttribute('data-kumi-pdf-layout')).toBe(false);
+    expect(originalPage.querySelector('[data-kumi-pdf-layout]')).toBeNull();
+    expect(document.querySelector('iframe[data-kumi-pdf]')).toBeNull();
+  });
+
   it('writes a real PDF with all explicit report pages including empty pages and excludes notes', async () => {
     const source = parseMarkdown(
       '---\ntype: report\n---\n\n::: pagebreak\n:::\n\n# Report\n\n数式 $x^2$\n\n::: notes\nPRIVATE NOTE ![private](https://example.com/private.png)\n:::\n\n::: pagebreak\n:::\n\n::: pagebreak\n:::',

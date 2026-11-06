@@ -26,6 +26,7 @@ import readerSource from './reader.js?raw';
 import readerStyles from './reader.css?raw';
 import { ReaderDetails, ReaderDialog } from './reader-content';
 import { layoutInspectionSource } from './layout-inspection';
+import { resolveReportSettings } from '@/src/document/report-settings';
 
 const reportScript = `const pages = [...document.querySelectorAll('.report-sheet')];
 const warning = document.getElementById('overflow-warning');
@@ -68,6 +69,10 @@ export async function exportReportHtml(
 ): Promise<{ html: string; externalImages: string[] }> {
   const document = migrateDocumentData(source);
   if (document.type !== 'report') throw new Error('Report document required');
+  if (resolveReportSettings(document.metadata).toc_page_numbers) {
+    const { exportPaginatedReportHtml } = await import('./paginated-report');
+    return exportPaginatedReportHtml(document, assets, locale);
+  }
   const { resolveImageUrl, external } = await embedSlideImages(
     document,
     assets,

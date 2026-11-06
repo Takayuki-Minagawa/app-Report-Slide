@@ -282,7 +282,49 @@ test('report front matter contributes to rendered page counts while preserving e
   assert.equal(result.result.pages, 4);
   const html = await readFile(result.result.outputs.html, 'utf8');
   assert.equal((html.match(/data-report-page-kind="cover"/g) ?? []).length, 1);
-  assert.equal((html.match(/data-report-page-kind="contents"/g) ?? []).length, 1);
+  assert.equal(
+    (html.match(/data-report-page-kind="contents"/g) ?? []).length,
+    1,
+  );
   assert.equal((html.match(/data-report-page-kind="body"/g) ?? []).length, 2);
-  assert.deepEqual(JSON.parse(await readFile(result.result.outputs.json)).children, data.children);
+  assert.deepEqual(
+    JSON.parse(await readFile(result.result.outputs.json)).children,
+    data.children,
+  );
+});
+
+test('ordinary report output and slide output do not require a browser', async (t) => {
+  for (const type of ['report', 'slide']) {
+    const data = document(type);
+    data.metadata.report_settings = { toc_page_numbers: type === 'slide' };
+    const { root, input, output } = await withFixture(t, data);
+    const result = await run(['--input', input, '--output-dir', output], {
+      env: {
+        ...process.env,
+        PLAYWRIGHT_BROWSERS_PATH: join(root, 'missing-browser'),
+      },
+    });
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.result.pages, 2);
+    assert.equal(result.result.layout, undefined);
+    assert.equal(result.result.outputs.layout, undefined);
+  }
+});
+
+test('actual Report page numbers require Chromium without an explicit check flag and preserve existing output on failure', async (t) => {
+  const data = document();
+  data.metadata.report_settings = { toc_page_numbers: true };
+  const { root, input, output } = await withFixture(t, data);
+  await mkdir(output);
+  await writeFile(join(output, 'source.html'), 'previous');
+  const result = await run(['--input', input, '--output-dir', output], {
+    env: {
+      ...process.env,
+      PLAYWRIGHT_BROWSERS_PATH: join(root, 'missing-browser'),
+    },
+  });
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /Executable doesn't exist|playwright install/);
+  assert.equal(await readFile(join(output, 'source.html'), 'utf8'), 'previous');
+  assert.deepEqual(await readdir(output), ['source.html']);
 });

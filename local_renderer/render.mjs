@@ -17,6 +17,8 @@ Batch writes HTML, .kumi.json, .md, .kumi.zip and referenced local assets.
 Options: --assets-dir DIR, --locale ja|en, --check-layout,
          --check-out FILE, --fail-on-overflow, --help
 --check-layout requires: npm run install:browser
+Report report_settings.toc_page_numbers=true automatically checks physical pagination
+and also requires Chromium. Without this setting or --check-layout, no browser is needed.
 --fail-on-overflow implies --check-layout; outputs and findings are saved, exit 2.
 --check-out implies --check-layout. With --output-dir, checks default to BASENAME.layout.json.
 Existing output files are replaced after all exports and checks succeed.
@@ -159,6 +161,11 @@ async function run() {
           }
         : api.parseMarkdown(source);
     const document = api.validateDocumentData(parsed.document);
+    const physicalPagination =
+      document.type === 'report' &&
+      document.metadata.report_settings?.toc_page_numbers === true;
+    if (physicalPagination && outputDir && !destinations.layout)
+      destinations.layout = join(outputDir, stem + '.layout.json');
     const errors = parsed.diagnostics.filter(
       (item) => item.severity === 'error',
     );
@@ -269,11 +276,14 @@ async function run() {
         api.revokeAssetUrls(restored.assets);
       }
     }
-    const pages = api.splitRenderedPages(document).length;
+    let pages = api.splitRenderedPages(document).length;
     let layout;
-    if (options['check-layout']) {
+    if (options['check-layout'] || physicalPagination) {
       const { inspectLayout } = await import('./layout.mjs');
-      layout = await inspectLayout(rendered.html, pages);
+      layout = await inspectLayout(rendered.html, pages, {
+        physicalPagination,
+      });
+      if (physicalPagination) pages = layout.pagination.pageCount;
       content.layout = JSON.stringify(layout, null, 2) + '\n';
     }
     const outputs = [

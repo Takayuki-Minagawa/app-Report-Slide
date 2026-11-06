@@ -34,7 +34,7 @@ export const pageSettingsMessages = {
     reset: '標準設定に戻す',
     help: '適用後、Markdown／JSONに保存されます。プロジェクトでは全章に共通で適用され、プロジェクトZIPまたは全体出力に保存されます。',
     preview:
-      '編集・完成プレビューに反映します。字下げは本文段落のみが対象です。自動改ページは行いません。',
+      '編集・完成プレビューに反映します。字下げは本文段落のみが対象です。実ページ番号を有効にすると、完成プレビューと出力で自動改ページします。',
     invalid:
       '入力範囲を確認してください。余白を除いた本文領域は幅・高さとも40 mm以上必要です。',
     pending: '設定はまだ適用されていません。',
@@ -76,7 +76,7 @@ export const pageSettingsMessages = {
     reset: 'Restore standard settings',
     help: 'After applying, save as Markdown or JSON. In a project, settings apply to all chapters and are saved in the project ZIP or combined export.',
     preview:
-      'Reflected in the editor and preview. Indentation applies to body paragraphs only. Pages do not break automatically.',
+      'Reflected in the editor and preview. Indentation applies to body paragraphs only. Enable actual page numbers to paginate the preview and output automatically.',
     invalid:
       'Check the input ranges. Margins must leave a body area at least 40 mm wide and high.',
     pending: 'These settings have not been applied yet.',
