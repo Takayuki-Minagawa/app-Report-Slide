@@ -37,11 +37,17 @@ export async function buildApi(outfile = resolve(here, '.cache/kumi-api.mjs')) {
         setup(build) {
           build.onResolve({ filter: /\?(raw|inline)$/ }, (args) => {
             const [bare, mode] = args.path.split('?');
-            const path = bare.startsWith('@/')
-              ? resolve(web, bare.slice(2))
-              : bare.startsWith('.')
-                ? resolve(args.resolveDir, bare)
-                : require.resolve(bare);
+            const path = bare.startsWith('pagedjs/')
+              ? resolve(
+                  dirname(require.resolve('pagedjs')),
+                  '..',
+                  bare.slice('pagedjs/'.length),
+                )
+              : bare.startsWith('@/')
+                ? resolve(web, bare.slice(2))
+                : bare.startsWith('.')
+                  ? resolve(args.resolveDir, bare)
+                  : require.resolve(bare);
             return { path, namespace: `kumi-${mode}` };
           });
           build.onLoad(

@@ -5,6 +5,9 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   resolve: {
     alias: {
+      pagedjs: fileURLToPath(
+        new URL('./node_modules/pagedjs', import.meta.url),
+      ),
       '@': fileURLToPath(new URL('.', import.meta.url)),
     },
   },

@@ -11,10 +11,12 @@ import {
   HeadingLevel,
   ImageRun,
   InternalHyperlink,
+  LeaderType,
   LevelFormat,
   Packer,
   PageBreak,
   PageNumber,
+  PageReference,
   PageOrientation,
   Paragraph,
   SectionType,
@@ -22,6 +24,8 @@ import {
   TableCell,
   TableLayoutType,
   TableRow,
+  Tab,
+  TabStopType,
   TextRun,
   WidthType,
   type IParagraphOptions,
@@ -89,7 +93,9 @@ const exportMessages = {
     math: '数式は編集可能なLaTeXテキストとして出力しました。',
     chart: 'グラフは全データを含む編集可能な表として出力しました。',
     numbering:
-      '目次・見出し番号・図表番号・参照は出力時点の値です。Wordで編集した後は必要に応じて修正してください。',
+      '目次の項目・見出し番号・図表番号・参照は出力時点の値です。Wordで編集した後は必要に応じて修正してください。',
+    contentsPageNumbers:
+      '目次のページ番号はWordの組版後に更新するフィールドです。開くときに更新を許可してください。番号が空欄、または編集後に古い場合は、Wordで全体を選択してフィールドを更新してください。',
     label: 'ラベル',
     figures: '図目次',
     tables: '表目次',
@@ -104,7 +110,9 @@ const exportMessages = {
     math: 'Equations were exported as editable LaTeX text.',
     chart: 'Charts were exported as editable tables containing all their data.',
     numbering:
-      'The table of contents, section and caption numbers, and references retain their exported values. Revise them as needed after editing in Word.',
+      'The table of contents entries, section and caption numbers, and references retain their exported values. Revise them as needed after editing in Word.',
+    contentsPageNumbers:
+      'Contents page numbers are fields updated after Word lays out the document. Allow field updates when opening it. If numbers are blank or outdated after editing, select the document in Word and update its fields.',
     label: 'Label',
     figures: 'List of figures',
     tables: 'List of tables',
@@ -691,6 +699,7 @@ export async function exportReportDocx(
   }
 
   const contents: Paragraph[] = [];
+  let hasContentsPageReferences = false;
   function contentsList(title: string, targets: SemanticTarget[]) {
     // Match HTML: inline contents are omitted when empty; a dedicated page
     // retains its explanatory notice rather than becoming an unexplained blank.
@@ -707,10 +716,25 @@ export async function exportReportDocx(
       return;
     }
     warnings.add(copy.numbering);
+    if (report.toc_page_numbers) {
+      hasContentsPageReferences = true;
+      warnings.add(copy.contentsPageNumbers);
+    }
     for (const target of targets)
       contents.push(
         new Paragraph({
           indent: { left: ((target.level ?? 1) - 1) * 240 },
+          ...(report.toc_page_numbers
+            ? {
+                tabStops: [
+                  {
+                    type: TabStopType.RIGHT,
+                    position: bodyWidth,
+                    leader: LeaderType.DOT,
+                  },
+                ],
+              }
+            : {}),
           children: [
             new InternalHyperlink({
               anchor: anchors.get(target.nodeId)!,
@@ -722,6 +746,14 @@ export async function exportReportDocx(
                         .filter(Boolean)
                         .join(' — '),
                 ),
+                ...(report.toc_page_numbers
+                  ? [
+                      new TextRun({ children: [new Tab()] }),
+                      new PageReference(anchors.get(target.nodeId)!, {
+                        hyperlink: true,
+                      }),
+                    ]
+                  : []),
               ],
             }),
           ],
@@ -839,6 +871,7 @@ export async function exportReportDocx(
     title: documentTitle(document),
     creator: document.metadata.author,
     description: document.metadata.subtitle,
+    ...(hasContentsPageReferences ? { features: { updateFields: true } } : {}),
     styles: {
       default: {
         document: {

@@ -38,7 +38,7 @@ Report uses the existing **Page break before chapter** option, with no automatic
 
 Numbering and references are calculated across included chapters; references into excluded chapters produce warnings. Report retains its existing project-wide labels. Importing another Slide deck renames labels that collide with earlier chapters and updates that deck's internal references. Conflicting publication IDs also remain distinct; subsequent edits to a shared publication update its chapters.
 
-Preview shows explicitly separated pages. It does not automatically paginate long Report content at A4 boundaries.
+Preview shows explicitly separated pages by default. For Reports, enable **Show actual page numbers in contents** to paginate the selected output scope using its paper settings and update contents and body page numbers. This setting is shared across chapters and does not apply to Slides. See the [report structure guide (Japanese)](./report-structure.ja.md#実際のページ番号を載せる).
 
 ## ZIP format and compatibility
 

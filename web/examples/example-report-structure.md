@@ -13,6 +13,7 @@ report_settings:
   caption_numbering: chapter
   toc_depth: 2
   toc_page: true
+  toc_page_numbers: true
   list_figures: true
   list_tables: true
   affiliation: サンプル技術部

@@ -464,6 +464,137 @@ describe('Word Report export', () => {
     expect(elements(xml, 'w:sectPr')).toHaveLength(2);
   });
 
+  it('writes Word-updated page references for included contents entries at the real text width', async () => {
+    const document = source(
+      '# First chapter\n{#sec:first}\n\nBody\n\n## Hidden by depth\n\n# Omitted heading\n{toc=false}\n\n::: pagebreak\n:::\n\n# Last chapter\n{#sec:last}\n\n| Value |\n| --- |\n| 3 |\n\n{#tab:result caption="Result table"}\n\n| Note |\n| --- |\n| Unnumbered |\n\n{caption="Unlisted table" numbered=false}',
+    );
+    document.metadata.title = 'Cover';
+    document.metadata.toc = true;
+    document.metadata.report_settings = {
+      cover: true,
+      toc_page: true,
+      toc_depth: 1,
+      toc_page_numbers: true,
+      list_tables: true,
+    };
+    document.metadata.page_settings = {
+      ...defaultPageSettings,
+      paper: 'A5',
+      orientation: 'landscape',
+      margin_left: 15,
+      margin_right: 15,
+    };
+    const result = await exportReportDocx(document, new Map(), 'en');
+    const zip = await unpack(result.blob);
+    const xml = zip.xml();
+    const pageReferences = elements(xml, 'w:instrText').filter((entry) =>
+      entry.textContent?.trim().startsWith('PAGEREF '),
+    );
+    expect(pageReferences).toHaveLength(3);
+    const bookmarks = new Map(
+      elements(xml, 'w:bookmarkStart').map((entry) => [
+        entry.getAttribute('w:name'),
+        entry.parentElement?.textContent,
+      ]),
+    );
+    const destinations: Array<string | null | undefined> = [];
+    for (const reference of pageReferences) {
+      const instruction = reference.textContent!.trim();
+      expect(instruction).toMatch(/^PAGEREF kumi_\d+ \\h$/);
+      destinations.push(bookmarks.get(instruction.split(' ')[1]));
+      const fieldRun = reference.parentElement!;
+      const begin = [...fieldRun.getElementsByTagName('w:fldChar')].find(
+        (entry) => entry.getAttribute('w:fldCharType') === 'begin',
+      );
+      expect(begin?.getAttribute('w:dirty')).toBe('true');
+      // No guessed logical-page number is cached: Word supplies its layout result.
+      expect(fieldRun.getElementsByTagName('w:t')).toHaveLength(0);
+      let paragraph = reference.parentElement;
+      while (paragraph && paragraph.localName !== 'p')
+        paragraph = paragraph.parentElement;
+      expect(paragraph).not.toBeNull();
+      const rightTab = [...paragraph!.getElementsByTagName('w:tab')].find(
+        (entry) => entry.getAttribute('w:val') === 'right',
+      );
+      expect(rightTab?.getAttribute('w:leader')).toBe('dot');
+      expect(rightTab?.getAttribute('w:pos')).toBe(
+        String(Math.round((180 * 1440) / 25.4)),
+      );
+      expect(
+        [...paragraph!.getElementsByTagName('w:tab')].filter(
+          (entry) => !entry.hasAttribute('w:val'),
+        ),
+      ).toHaveLength(1);
+    }
+    expect(destinations).toEqual([
+      'First chapter',
+      'Last chapter',
+      'Table 1 — Result table',
+    ]);
+    const updateFields = elements(
+      zip.xml('word/settings.xml'),
+      'w:updateFields',
+    );
+    expect(updateFields).toHaveLength(1);
+    // An empty OnOff element is true in WordprocessingML.
+    expect([null, 'true', '1']).toContain(
+      updateFields[0].getAttribute('w:val'),
+    );
+    const sections = elements(xml, 'w:sectPr');
+    expect(sections).toHaveLength(3);
+    expect(
+      sections[2]
+        .getElementsByTagName('w:pgNumType')[0]
+        .getAttribute('w:start'),
+    ).toBe('1');
+    expect(
+      result.warnings.some((warning) =>
+        warning.includes('Allow field updates'),
+      ),
+    ).toBe(true);
+  });
+
+  it.each([undefined, false])(
+    'keeps legacy contents free of page fields when the option is %s',
+    async (toc_page_numbers) => {
+      const document = source('# Heading\n\nBody');
+      document.metadata.toc = true;
+      document.metadata.report_settings =
+        toc_page_numbers === undefined ? {} : { toc_page_numbers };
+      const result = await exportReportDocx(document, new Map(), 'en');
+      const zip = await unpack(result.blob);
+      expect(zip.text('word/document.xml')).not.toContain('PAGEREF');
+      expect(
+        elements(zip.xml('word/settings.xml'), 'w:updateFields'),
+      ).toHaveLength(0);
+      expect(
+        result.warnings.some((warning) =>
+          warning.includes('Allow field updates'),
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it('does not request Word field updates when enabled contents have no entries', async () => {
+    const document = source('');
+    document.metadata.toc = true;
+    document.metadata.report_settings = {
+      toc_page: true,
+      toc_page_numbers: true,
+      list_figures: true,
+      list_tables: true,
+    };
+    const result = await exportReportDocx(document, new Map(), 'ja');
+    const zip = await unpack(result.blob);
+    expect(zip.text('word/document.xml')).not.toContain('PAGEREF');
+    expect(
+      elements(zip.xml('word/settings.xml'), 'w:updateFields'),
+    ).toHaveLength(0);
+    expect(
+      result.warnings.some((warning) => warning.includes('フィールド')),
+    ).toBe(false);
+  });
+
   it('exports chapter and appendix numbers consistently in headings, captions, references and table contents', async () => {
     const document = source(
       '# Methods\n{#sec:methods}\n\n| A |\n| --- |\n| 1 |\n{#tab:methods caption="Method table"}\n\n# Results\n{#sec:results}\n\n| B |\n| --- |\n| 2 |\n{#tab:results caption="Result table"}\n\n# Extras\n{#sec:extras}\n\n| C |\n| --- |\n| 3 |\n{#tab:extras caption="Extra table"}\n\nSee [@sec:results], [@sec:extras] and [@tab:extras].',
@@ -730,6 +861,21 @@ describe('Word Report export', () => {
     );
     expect(listedXml.documentElement.textContent).toContain('List of figures');
     expect(elements(listedXml, 'w:sectPr')).toHaveLength(2);
+
+    document.metadata.report_settings.toc_page_numbers = true;
+    const numbered = await unpack(
+      (await exportReportDocx(document, new Map(), 'en')).blob,
+    );
+    const numberedXml = numbered.xml();
+    const figureBookmark = elements(
+      numberedXml,
+      'w:bookmarkStart',
+    )[0].getAttribute('w:name');
+    expect(
+      elements(numberedXml, 'w:instrText').map((entry) =>
+        entry.textContent?.trim(),
+      ),
+    ).toEqual([`PAGEREF ${figureBookmark} \\h`]);
   });
 
   it('keeps math and every chart data value editable and reports localized conversion limits', async () => {

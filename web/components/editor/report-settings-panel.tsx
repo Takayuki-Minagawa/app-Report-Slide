@@ -229,6 +229,12 @@ export function ReportSettingsPanel({
                   ? '目次・図表目次を独立ページにする'
                   : 'Place contents on a separate page',
               ],
+              [
+                'toc_page_numbers',
+                ja
+                  ? '目次に実際のページ番号を表示'
+                  : 'Show actual page numbers in contents',
+              ],
             ] as const
           ).map(([key, label]) => (
             <label key={key} className="flex items-center gap-2">
@@ -244,8 +250,12 @@ export function ReportSettingsPanel({
           ))}
           <p className="text-xs text-muted-foreground">
             {ja
-              ? '目次はリンク付きで生成します。印刷後のページ番号は表示しません。'
-              : 'Contents use links. Printed page numbers are not included.'}
+              ? settings.toc_page_numbers
+                ? '目次はリンク付きで、自動改ページを反映した実際のページ番号を表示します。Wordのページ番号はWord側で更新します。'
+                : '目次はリンク付きで生成し、ページ番号は表示しません。この設定を有効にすると自動改ページを反映します。Wordのページ番号はWord側で更新します。'
+              : settings.toc_page_numbers
+                ? 'Contents include links and actual page numbers reflecting automatic page breaks. Word page numbers are updated in Word.'
+                : 'Contents include links without page numbers. Enable this setting to reflect automatic page breaks. Word page numbers are updated in Word.'}
           </p>
           {error && (
             <p role="alert">

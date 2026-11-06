@@ -5,6 +5,7 @@ import documentStyles from '@/components/preview/document.css?raw';
 import { documentTitle, type DocumentData } from '@/src/document/model';
 import { analyzeDocument } from '@/src/document/semantics';
 import { splitRenderedPages } from '@/src/document/report-pages';
+import { resolveReportSettings } from '@/src/document/report-settings';
 import {
   pageDimensions,
   resolvePageSettings,
@@ -16,12 +17,15 @@ import type { AssetUrls } from '@/src/workspace/files';
 import { embedSlideImages } from './embedded-images';
 import { offlineMathStyles } from './math-styles';
 import { offlinePrintFonts } from './print-fonts';
+import { exportReportHtml } from './report-html';
 
 export interface PrintSnapshot {
   html: string;
   pageCount: number;
   rasterElements: string[];
   externalImages: string[];
+  /** pageCount is provisional until the shared browser pagination finishes. */
+  paginated?: boolean;
 }
 
 /** Native text, KaTeX and SVG reach the browser print engine without canvas rasterization. */
@@ -58,6 +62,16 @@ export async function exportPrintHtml(
       return [node.attrs.alt || node.attrs.nodeId];
     },
   );
+  if (!slide && resolveReportSettings(document.metadata).toc_page_numbers) {
+    const result = await exportReportHtml(document, assets, locale);
+    return {
+      html: result.html,
+      pageCount: pages.length,
+      rasterElements,
+      externalImages: result.externalImages,
+      paginated: true,
+    };
+  }
   const style = `:root{color-scheme:light;--font-ui:Arial,'Noto Sans JP','Yu Gothic',Meiryo,sans-serif;--font-code:monospace;--border:#bdc8d1;--muted-foreground:#596b7b}*{box-sizing:border-box}html,body{margin:0;padding:0}body{font-family:var(--font-ui);background:#e8edf2}h1,h2,h3,h4,h5,h6,p,figure,blockquote,pre,ol,ul{margin:0}ol,ul{padding:0}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit}img{max-width:100%}table{border-collapse:collapse}
 ${documentStyles}\n${offlineMathStyles}\n${offlinePrintFonts}
 .print-page{width:${width}mm;min-height:${height}mm;margin:20px auto;background:white}.print-page>.slide-preview{width:${width}mm;height:${height}mm;overflow:hidden;box-shadow:none}.print-page>.report-sheet{width:${width}mm;max-width:none}.print-page .report-preview{box-shadow:none}.print-page .report-layout{min-height:${height}mm}.report-layout .preview-table-wrap{overflow:visible}thead{display:table-header-group}tr{break-inside:avoid}.document-renderer figure{break-inside:avoid}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}

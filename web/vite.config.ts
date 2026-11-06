@@ -2,6 +2,7 @@ import { sites } from '@openai/sites-vite-plugin';
 import tailwindcss from '@tailwindcss/postcss';
 import vinext, { type NextConfig } from 'vinext';
 import { defineConfig } from 'vite';
+import { fileURLToPath } from 'node:url';
 import hostingConfig from './.openai/hosting.json' with { type: 'json' };
 import { pdfAssetsPlugin } from './build/pdf-assets-plugin';
 import { ocrAssetsPlugin } from './build/ocr-assets-plugin';
@@ -63,11 +64,21 @@ export default defineConfig(async () => {
   const { cloudflare } = await import('@cloudflare/vite-plugin');
 
   return {
+    // This dependency is embedded as source text, not executed as an app module.
+    optimizeDeps: { exclude: ['pagedjs'] },
+    resolve: {
+      alias: {
+        pagedjs: fileURLToPath(
+          new URL('./node_modules/pagedjs', import.meta.url),
+        ),
+      },
+    },
     css: { postcss: { plugins: [tailwindcss()] } },
     environments: {
       client: {
         // Avoid a first-export dependency discovery reload that would discard edits.
         optimizeDeps: {
+          exclude: ['pagedjs'],
           include: [
             'react-dom/server.browser',
             '@zip.js/zip.js',

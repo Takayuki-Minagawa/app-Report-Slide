@@ -1,8 +1,33 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { parseMarkdown } from '@/src/markdown/parser';
 import { exportPrintHtml } from './print-html';
+import * as reportExporter from './report-html';
 
 describe('searchable browser print output', () => {
+  it('uses the shared report HTML and marks its initial page count as provisional', async () => {
+    const html =
+      '<html data-kumi-pagination="pending">Shared physical report</html>';
+    const exporter = vi
+      .spyOn(reportExporter, 'exportReportHtml')
+      .mockResolvedValue({ html, externalImages: [] });
+    const source = parseMarkdown('# Report').document;
+    source.metadata.report_settings = { toc_page_numbers: true };
+    const assets = new Map<string, string>();
+    const result = await exportPrintHtml(source, assets, 'en');
+    expect(exporter).toHaveBeenCalledWith(source, assets, 'en');
+    expect(result).toMatchObject({ html, paginated: true, pageCount: 1 });
+  });
+
+  it('keeps Slide printing independent from report pagination settings', async () => {
+    const exporter = vi.spyOn(reportExporter, 'exportReportHtml');
+    const source = parseMarkdown('---\ntype: slide\n---\n# Slide').document;
+    source.metadata.report_settings = { toc_page_numbers: true };
+    const result = await exportPrintHtml(source, new Map(), 'en');
+    expect(exporter).not.toHaveBeenCalled();
+    expect(result.paginated).toBeUndefined();
+    expect(result.html).toContain("script-src 'none'");
+  });
+
   it.each(['report', 'slide'] as const)(
     'keeps %s text, math, tables and SVG native; omits private source and speaker notes',
     async (type) => {

@@ -16,18 +16,31 @@ import {
 } from '@/src/document/semantics';
 import { DocumentPage } from './document-page';
 import { splitRenderedPages } from '@/src/document/report-pages';
+import { resolveReportSettings } from '@/src/document/report-settings';
+import { PhysicalReportPreview } from './physical-report-preview';
 
-export function PreviewSurface({
-  document,
-  resolveImageUrl,
-  analysis: providedAnalysis,
-  paginated = false,
-}: {
+interface PreviewSurfaceProps {
   document: DocumentData;
   resolveImageUrl?: (source: string) => string;
   analysis?: DocumentAnalysis;
   paginated?: boolean;
-}) {
+}
+
+export function PreviewSurface(props: PreviewSurfaceProps) {
+  return props.document.type === 'report' &&
+    resolveReportSettings(props.document.metadata).toc_page_numbers ? (
+    <PhysicalReportPreview {...props} />
+  ) : (
+    <LogicalPreviewSurface {...props} />
+  );
+}
+
+function LogicalPreviewSurface({
+  document,
+  resolveImageUrl,
+  analysis: providedAnalysis,
+  paginated = false,
+}: PreviewSurfaceProps) {
   const { copy, locale } = useAppPreferences();
   const slide = document.type === 'slide';
   const analysis = useMemo(

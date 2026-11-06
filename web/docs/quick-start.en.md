@@ -31,10 +31,12 @@ These settings apply to top-level Report body paragraphs. Headings, table cells,
 
 1. Open **Properties → Report structure**, enable **Include cover page**, and enter the title, author, date, and any other cover fields. Empty fields are omitted.
 2. Enable **Show heading numbers** and select **Heading number format**. Choose chapters to use H1 headings as chapter boundaries. Figure, table and equation numbers can run continuously or restart by chapter.
-3. Enable the table of contents and choose its depth. Optionally include lists of figures and tables and place them on a separate page. Choose **Apply report structure**.
+3. Enable the table of contents and choose its depth. Optionally include lists of figures and tables and place them on a separate page. Enable **Show actual page numbers in contents** to include page numbers, then choose **Apply report structure**.
 4. Select a heading to exclude it from the contents without removing it from the body. For the first appendix H1, enable appendix numbering in its properties and apply the attributes. With chapter numbering selected, that H1 and later chapters become Appendix A, B, and so on.
 
-The cover and separate contents page are generated for preview and export without adding source blocks. They have no displayed page number; body numbering starts at 1. Contents entries are links, without printed page numbers. See the [report structure guide (Japanese)](./report-structure.ja.md) and [structure sample](../examples/example-report-structure.md).
+The cover and separate contents pages are generated for preview and export without adding source blocks. They have no displayed page number; body numbering starts at 1. With actual page numbers enabled, all contents lists show their destinations' body page numbers after automatic page breaks. The default remains linked contents without page numbers.
+
+Wait for layout to finish before printing. Use the document's paper size and orientation, 100% scale, and turn off the browser's headers and footers. In Word, allow field updates when opening the file; if needed, select the whole document and press F9 to update its fields. See the [report structure guide (Japanese)](./report-structure.ja.md) and [structure sample](../examples/example-report-structure.md).
 
 ### Freely place images on a Slide
 

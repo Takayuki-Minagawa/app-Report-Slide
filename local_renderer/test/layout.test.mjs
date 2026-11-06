@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile, rm, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { document, fixture, run, svg } from './helpers.mjs';
+import { inspectLayout } from '../layout.mjs';
 
 async function withFixture(t, data) {
   const item = await fixture(data);
@@ -109,4 +110,107 @@ test('SVG cropped images are also awaited and decoded', async (t) => {
   ]);
   assert.equal(result.code, 0, result.stderr);
   assert.equal(result.result.layout.status, 'pass');
+});
+
+function paginationHtml({
+  pageCount = 3,
+  renderedPages = 3,
+  inspectedPages = 3,
+} = {}) {
+  return `<!doctype html><html data-kumi-pagination="pending"><body><script>
+    window.kumiInspectDocumentLayout = () => ({status: 'unmeasured', pages: []});
+    window.kumiPaginationReady = new Promise((resolve) => setTimeout(() => {
+      for (let i = 0; i < ${renderedPages}; i++) {
+        const page = document.createElement('div');
+        page.className = 'pagedjs_page';
+        document.body.appendChild(page);
+      }
+      document.documentElement.dataset.kumiPagination = 'ready';
+      window.kumiInspectDocumentLayout = () => ({
+        status: 'pass',
+        pages: Array.from({length: ${inspectedPages}}, (_, index) => ({page: index + 1, status: 'pass'})),
+      });
+      resolve({pageCount: ${pageCount}, bodyPageCount: 2});
+    }, 150));
+  </script></body></html>`;
+}
+
+test('waits for physical pagination and accepts more pages than the logical source', async () => {
+  const result = await inspectLayout(paginationHtml(), 1, {
+    physicalPagination: true,
+  });
+  assert.equal(result.pages.length, 3);
+  assert.deepEqual(result.pagination, { pageCount: 3, bodyPageCount: 2 });
+});
+
+test('rejects incomplete physical pagination and unmeasured physical pages', async () => {
+  for (const options of [{ pageCount: 2 }, { inspectedPages: 2 }]) {
+    await assert.rejects(
+      inspectLayout(paginationHtml(options), 1, { physicalPagination: true }),
+      /reported pages|measure every page/,
+    );
+  }
+  await assert.rejects(
+    inspectLayout('<html><body></body></html>', 1, {
+      physicalPagination: true,
+    }),
+    /pagination completion signal/,
+  );
+});
+
+test('still requires the exact logical page count when physical pagination is disabled', async () => {
+  const html = `<html><body><script>
+    window.kumiInspectDocumentLayout = () => ({status: 'pass', pages: [{page: 1}, {page: 2}]});
+  </script></body></html>`;
+  await assert.rejects(inspectLayout(html, 1), /measure every page \(2\/1/);
+});
+
+test('automatically paginates a long Report and reports its actual page count without a check flag', async (t) => {
+  const data = document();
+  data.metadata.toc = true;
+  data.metadata.report_settings = {
+    cover: true,
+    toc_page: true,
+    toc_page_numbers: true,
+  };
+  data.children = [
+    {
+      type: 'heading',
+      attrs: { nodeId: 'intro', level: 1 },
+      content: [{ type: 'text', text: 'Introduction' }],
+    },
+    ...Array.from({ length: 50 }, (_, index) => ({
+      type: 'paragraph',
+      attrs: { nodeId: `body-${index}` },
+      content: [
+        {
+          type: 'text',
+          text: `Paragraph ${index}. This text continues across physical pages after automatic pagination. `.repeat(
+            3,
+          ),
+        },
+      ],
+    })),
+  ];
+  const { input, output } = await withFixture(t, data);
+  const result = await run(['--input', input, '--output-dir', output]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.ok(
+    result.result.pages > 3,
+    `Expected automatic body breaks, received ${result.result.pages} pages`,
+  );
+  assert.equal(result.result.pages, result.result.layout.pagination.pageCount);
+  assert.equal(result.result.pages, result.result.layout.pages.length);
+  assert.equal(
+    result.result.layout.pagination.bodyPageCount,
+    result.result.pages - 2,
+  );
+  assert.deepEqual(
+    JSON.parse(await readFile(result.result.outputs.layout)),
+    result.result.layout,
+  );
+  assert.deepEqual(
+    JSON.parse(await readFile(result.result.outputs.json)).children,
+    data.children,
+  );
 });
