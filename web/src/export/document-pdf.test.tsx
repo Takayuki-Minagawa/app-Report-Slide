@@ -209,7 +209,81 @@ describe('PDF export', () => {
     expect(toCanvas).toHaveBeenCalledTimes(1);
   });
 
-  it('preserves exact font sizes and captioned table row heights in the capture clone', async () => {
+  it('ignores unused Paged.js wrapper columns when the authored layout fits', async () => {
+    mockPaginatedFrame(
+      Promise.resolve({ pageCount: 1, bodyPageCount: 1 }),
+      1,
+      (frame) => {
+        frame.querySelector('.pagedjs_page')!.innerHTML =
+          '<div class="pagedjs_sheet" style="overflow:hidden"><section class="report-layout"><p>Final heading</p></section></div>';
+        const wrapper = frame.querySelector('.pagedjs_sheet')!;
+        Object.defineProperties(wrapper, {
+          clientWidth: { value: 559 },
+          scrollWidth: { value: 2043 },
+        });
+      },
+    );
+    const source = parseMarkdown('Report').document;
+    source.metadata.report_settings = { toc_page_numbers: true };
+    const { blob } = await exportDocumentPdf(source, new Map(), 'en');
+    expect(await pdfText(blob)).toContain('/Count 1');
+    expect(toCanvas).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['.report-layout', 'pre'])(
+    'still rejects clipped authored %s content in physical pages',
+    async (selector) => {
+      mockPaginatedFrame(
+        Promise.resolve({ pageCount: 1, bodyPageCount: 1 }),
+        1,
+        (frame) => {
+          frame.querySelector('.pagedjs_page')!.innerHTML =
+            '<section class="report-layout"><pre>Long code</pre></section>';
+          const clipped = frame.querySelector<HTMLElement>(selector)!;
+          clipped.style.overflow = 'hidden';
+          Object.defineProperties(clipped, {
+            clientWidth: { value: 100 },
+            scrollWidth: { value: 500 },
+          });
+        },
+      );
+      const source = parseMarkdown('Report').document;
+      source.metadata.report_settings = { toc_page_numbers: true };
+      await expect(exportDocumentPdf(source, new Map(), 'en')).rejects.toThrow(
+        'Reduce its width or font size',
+      );
+      expect(toCanvas).not.toHaveBeenCalled();
+    },
+  );
+
+  it('hides reader controls while capturing physical pages with screen styles', async () => {
+    mockPaginatedFrame(
+      Promise.resolve({ pageCount: 1, bodyPageCount: 1 }),
+      1,
+      (frame) => {
+        frame.querySelector('.pagedjs_page')!.innerHTML =
+          '<section class="report-layout"><figure><svg></svg><button class="reader-zoom-button">Enlarge</button></figure><button class="reader-detail-launcher">Details</button><dialog id="reader-dialog" open>Reader</dialog></section>';
+      },
+    );
+    const capture = vi.mocked(toCanvas).getMockImplementation()!;
+    vi.mocked(toCanvas).mockImplementation(async (node, options) => {
+      const view = node.ownerDocument.defaultView!;
+      for (const element of node.querySelectorAll(
+        '.reader-zoom-button,.reader-detail-launcher,#reader-dialog',
+      ))
+        expect(view.getComputedStyle(element).display).toBe('none');
+      expect(
+        view.getComputedStyle(node.querySelector('figure')!).display,
+      ).not.toBe('none');
+      return capture(node, options);
+    });
+    const source = parseMarkdown('Report').document;
+    source.metadata.report_settings = { toc_page_numbers: true };
+    await exportDocumentPdf(source, new Map(), 'en');
+    expect(toCanvas).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves exact font sizes, captioned table heights and figure margins in the capture clone', async () => {
     let originalPage!: HTMLElement;
     mockPaginatedFrame(
       Promise.resolve({ pageCount: 1, bodyPageCount: 1 }),
@@ -219,7 +293,8 @@ describe('PDF export', () => {
         originalPage.innerHTML =
           '<p style="font-size:14.25px" data-kumi-pdf-layout="original">Fractional text</p>' +
           '<table style="height:111.469px"><caption>Caption</caption><tbody><tr><td style="font-size:12.04px">Cell</td></tr></tbody></table>' +
-          '<table><tbody><tr><td>Uncaptioned</td></tr></tbody></table>';
+          '<table><tbody><tr><td>Uncaptioned</td></tr></tbody></table>' +
+          '<div id="kumi-figure"><figure style="margin-bottom:24px">Figure</figure></div>';
       },
     );
     const capture = vi.mocked(toCanvas).getMockImplementation()!;
@@ -242,6 +317,11 @@ describe('PDF export', () => {
         .slice(css.indexOf(rule(uncaptioned)))
         .split('}', 1)[0];
       expect(plainRule).not.toContain('height:');
+      const anchor = node.querySelector('#kumi-figure')!;
+      const anchorRule = css.slice(css.indexOf(rule(anchor))).split('}', 1)[0];
+      expect(anchorRule).toContain(
+        'height:auto!important;block-size:auto!important;',
+      );
       // Corrections belong to the clone stylesheet, never the live page's CSS.
       expect(paragraph.style.fontSize).toBe('14.25px');
       expect(captioned.style.height).toBe('111.469px');

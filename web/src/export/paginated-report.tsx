@@ -37,6 +37,9 @@ export async function exportPaginatedReportHtml(
     throw new Error('The report pagination runtime could not be loaded.');
   const settings = resolvePageSettings(document.metadata);
   const [width, height] = pageDimensions(settings);
+  // Keep the printed page number below the text, even with a zero bottom margin.
+  // The source setting remains intact; this reserve belongs to physical output.
+  const bottomMargin = Math.max(8, settings.margin_bottom);
   const { resolveImageUrl, external } = await embedSlideImages(
     document,
     assets,
@@ -51,16 +54,16 @@ h1,h2,h3,h4,h5,h6,p,figure,blockquote,pre,ol,ul{margin:0}ol,ul{padding:0}h1,h2,h
 ${offlinePrintFonts}
 ${offlineMathStyles}
 ${documentStyles}
-@page{size:${width}mm ${height}mm;margin:${settings.margin_top}mm ${settings.margin_right}mm ${settings.margin_bottom}mm ${settings.margin_left}mm}
+@page{size:${width}mm ${height}mm;margin:${settings.margin_top}mm ${settings.margin_right}mm ${bottomMargin}mm ${settings.margin_left}mm}
 .report-sheet{width:100%;min-width:0;min-height:1px;container-type:normal;
 --report-width:${width}mm!important;--report-height:${height}mm!important;
---report-top:${settings.margin_top}mm!important;--report-bottom:${settings.margin_bottom}mm!important;
+--report-top:${settings.margin_top}mm!important;--report-bottom:${bottomMargin}mm!important;
 --report-left:${settings.margin_left}mm!important;--report-right:${settings.margin_right}mm!important;
 --report-font-size:${settings.font_size}pt!important;--report-paragraph-spacing:${settings.paragraph_spacing}pt!important}
 .report-sheet+.report-sheet{break-before:page}
 .report-sheet .report-layout{width:100%;min-height:1px;padding:0;box-shadow:none;background:white}
 .report-layout>footer{display:none}
-.report-cover{min-height:${height - settings.margin_top - settings.margin_bottom - 1}mm;break-inside:avoid}
+.report-cover{min-height:${height - settings.margin_top - bottomMargin - 1}mm;break-inside:avoid}
 .document-renderer h1,.document-renderer h2,.document-renderer h3,.document-renderer h4,.document-renderer h5,.document-renderer h6{break-after:avoid}
 .document-renderer p{orphans:2;widows:2}
 .document-renderer figure,.equation-body,.document-toc li{break-inside:avoid}
@@ -68,7 +71,7 @@ ${documentStyles}
 .document-toc a{display:flex;align-items:baseline;gap:.5em;text-decoration:none}
 .kumi-toc-title{min-width:0}.kumi-toc-leader{flex:1;min-width:1em;border-bottom:1px dotted #a8b4be}
 .kumi-toc-page{flex:0 0 4em;width:4em;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.kumi-physical-footer{position:absolute;bottom:${Math.max(1, settings.margin_bottom / 2 - 1.5)}mm;right:${settings.margin_right}mm;font:9pt 'Noto Serif JP',serif;line-height:1}
+.kumi-physical-footer{position:absolute;bottom:${Math.max(1, bottomMargin / 2 - 1.5)}mm;right:${settings.margin_right}mm;font:9pt 'Noto Serif JP',serif;line-height:1}
 `;
   const screenCss = `
 ${readerStyles}

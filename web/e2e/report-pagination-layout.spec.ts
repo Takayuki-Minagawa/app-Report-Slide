@@ -9,7 +9,12 @@ async function downloadText(download: Download) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-async function exportedReport(page: Page, body: string, settings = '') {
+async function exportedReport(
+  page: Page,
+  body: string,
+  settings = '',
+  pageSettings = '',
+) {
   await page.goto('/');
   await expect(page.locator('.tiptap')).toBeVisible();
   const source = `---
@@ -21,6 +26,7 @@ report_settings:
   toc_page: true
   toc_depth: 2
 ${settings}
+${pageSettings}
 ---
 
 ${body}`;
@@ -256,3 +262,79 @@ test('leading, consecutive and trailing explicit breaks retain empty body pages'
     await exported.close();
   }
 });
+
+for (const marginBottom of [0, 3]) {
+  for (const lineHeight of [1.89, 1.9]) {
+    test(`A5 body text stays above the footer with ${marginBottom} mm bottom margin and ${lineHeight} line height`, async ({
+      page,
+    }) => {
+      const paragraph = '本文の配置を確認する長い文章です。'.repeat(700);
+      const exported = await exportedReport(
+        page,
+        `# 本文の開始\n\n${paragraph}\n\n# 本文の終了`,
+        '',
+        `page_settings:
+  paper: A5
+  orientation: portrait
+  margin_top: 20
+  margin_bottom: ${marginBottom}
+  margin_left: 20
+  margin_right: 20
+  font_size: 10.5
+  first_line_indent: 0
+  line_height: ${lineHeight}
+  paragraph_spacing: 12`,
+      );
+      try {
+        const bodyPages = exported.locator(
+          '.pagedjs_page[data-report-page-kind="body"]',
+        );
+        expect(await bodyPages.count()).toBeGreaterThan(2);
+        expect(
+          (
+            await bodyPages.locator('.document-renderer > p').allTextContents()
+          ).join(''),
+        ).toBe(paragraph);
+        const placements = await bodyPages.evaluateAll((pages) =>
+          pages.map((page) => {
+            const area = page
+              .querySelector('.pagedjs_area')!
+              .getBoundingClientRect();
+            const footer = page
+              .querySelector('.kumi-physical-footer')!
+              .getBoundingClientRect();
+            const textBottom = Math.max(
+              ...[...page.querySelectorAll('.document-renderer p')].flatMap(
+                (paragraph) => {
+                  if (!paragraph.textContent?.trim()) return [];
+                  const range = document.createRange();
+                  range.selectNodeContents(paragraph);
+                  return [...range.getClientRects()].map((rect) => rect.bottom);
+                },
+              ),
+            );
+            return {
+              page: (page as HTMLElement).dataset.bodyPage,
+              areaBottom: area.bottom,
+              textBottom,
+              footerTop: footer.top,
+            };
+          }),
+        );
+        for (const placement of placements) {
+          const detail = JSON.stringify(placement);
+          expect(placement.footerTop, detail).toBeGreaterThanOrEqual(
+            placement.areaBottom,
+          );
+          expect(placement.footerTop, detail).toBeGreaterThan(
+            placement.textBottom,
+          );
+        }
+        await expect(exported.locator('[data-toc-target]')).toHaveCount(2);
+        await expectContentsMatchPages(exported);
+      } finally {
+        await exported.close();
+      }
+    });
+  }
+}

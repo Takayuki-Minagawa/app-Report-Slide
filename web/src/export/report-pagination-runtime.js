@@ -6,6 +6,36 @@
   const status = document.getElementById('pagination-status');
   const source = document.getElementById('kumi-pagination-source');
   const print = document.getElementById('print-report');
+  const incomplete = () =>
+    new Error(
+      ja
+        ? '本文の一部を組版できませんでした。長い段落や図表を分けて再試行してください。'
+        : 'Some content could not be laid out. Split long paragraphs or tables and try again.',
+    );
+  const contentText = (root) => {
+    const text = [];
+    for (const section of root.querySelectorAll('.report-layout')) {
+      const walker = document.createTreeWalker(section, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        const parent = node.parentElement;
+        if (
+          parent.closest('footer, [data-kumi-repeated-header], .katex-mathml')
+        )
+          continue;
+        let value = node.textContent;
+        // Paged.js appends a nonbreaking hyphen to a word split at a page edge.
+        if (
+          parent.classList.contains('pagedjs_hyphen') &&
+          parent.lastChild === node &&
+          value.endsWith('\u2011')
+        )
+          value = value.slice(0, -1);
+        text.push(value);
+      }
+    }
+    return text.join('');
+  };
   const timeout = (promise, milliseconds) => {
     let timer;
     return Promise.race([
@@ -41,6 +71,29 @@
     }
     for (const image of fragment.querySelectorAll('img'))
       image.loading = 'eager';
+    // Paged.js 0.4.3 mistakes an inline style without display (for example,
+    // paragraph text-indent) for hidden content and carries heading keep-with-next
+    // past it. Preserve the browser's real display value on the output clone.
+    const measuring = document.createElement('div');
+    measuring.style.cssText =
+      'position:fixed;left:-100000px;top:0;visibility:hidden;pointer-events:none';
+    document.body.append(measuring);
+    try {
+      measuring.append(fragment);
+      for (const element of measuring.querySelectorAll('[style]')) {
+        if (element.style && !element.style.display)
+          element.style.display = getComputedStyle(element).display;
+      }
+    } finally {
+      fragment.append(...measuring.childNodes);
+      measuring.remove();
+    }
+    let expectedText = contentText(fragment);
+    const expectedNodes = new Set(
+      [...fragment.querySelectorAll('[data-node-id]')].map(
+        (node) => node.dataset.nodeId,
+      ),
+    );
     // Eagerly decode embedded images before determining their page positions.
     await timeout(
       Promise.all([
@@ -84,8 +137,36 @@
     }
     const style = document.getElementById('kumi-pagination-css');
     const previewer = new Paged.Previewer();
+    const renderedTextSources = new WeakMap();
+    previewer.chunker.hooks.renderNode.register((rendered, original) => {
+      if (
+        rendered.nodeType !== Node.TEXT_NODE ||
+        original.nodeType !== Node.TEXT_NODE
+      )
+        return;
+      const sourceText = original.textContent;
+      const remainingText = rendered.textContent;
+      if (sourceText.endsWith(remainingText)) {
+        renderedTextSources.set(rendered, {
+          node: original,
+          consumed: sourceText.length - remainingText.length,
+        });
+      }
+    });
+    previewer.chunker.hooks.onBreakToken.register((token, overflow) => {
+      if (!token || !overflow) return;
+      const original = renderedTextSources.get(overflow.startContainer);
+      if (!original) return;
+      // Paged.js uses indexOf(remainingText), which jumps backwards for repeated
+      // text. The rendered clone is the actual suffix, so retain its exact offset.
+      token.node = original.node;
+      token.offset = original.consumed + overflow.startOffset;
+    });
     const tableHeaders = new Map();
     previewer.chunker.hooks.afterParsed.register((content) => {
+      // Use the source after HTML whitespace normalization, before any page
+      // splitting. Multiple collapsible spaces may legitimately become one.
+      expectedText = contentText(content);
       for (const table of content.querySelectorAll('table')) {
         if (table.tHead) tableHeaders.set(table.dataset.ref, table.tHead);
       }
@@ -107,6 +188,14 @@
       }
     });
     let generatedPages = 0;
+    const render = previewer.chunker.render.bind(previewer.chunker);
+    previewer.chunker.render = async (...args) => {
+      const result = await render(...args);
+      // Paged.js 0.4.3 returns OverflowContentError as a generator result on
+      // repeated breaks. Its preview() otherwise resolves a truncated report.
+      if (result?.value instanceof Error) throw incomplete();
+      return result;
+    };
     previewer.on('page', () => {
       // Bound pathological overflow instead of emitting guessed page references.
       if (++generatedPages > 2000) throw new Error('Report exceeds 2000 pages');
@@ -121,6 +210,18 @@
     );
     const pages = [...output.querySelectorAll('.pagedjs_page')];
     if (!pages.length) throw new Error('No pages were generated');
+    // A preview promise resolving does not prove every source node was emitted.
+    // Compare before filling contents numbers or adding physical footers.
+    const actualNodes = new Set(
+      [...output.querySelectorAll('[data-node-id]')].map(
+        (node) => node.dataset.nodeId,
+      ),
+    );
+    if (
+      contentText(output) !== expectedText ||
+      [...expectedNodes].some((id) => !actualNodes.has(id))
+    )
+      throw incomplete();
     const targets = new Map();
     let bodyPage = 0;
     for (const [index, page] of pages.entries()) {
@@ -171,7 +272,11 @@
         const area = page.querySelector('.pagedjs_area');
         const limit = area.getBoundingClientRect();
         const issues = [];
-        for (const element of area.querySelectorAll('*')) {
+        // Paged's internal column wrapper can span unused columns on the final
+        // page. Measure the authored layout and every descendant, not that wrapper.
+        for (const element of area.querySelectorAll(
+          '.report-layout, .report-layout *',
+        )) {
           if (
             !(element instanceof HTMLElement) ||
             element.closest('.katex-mathml')

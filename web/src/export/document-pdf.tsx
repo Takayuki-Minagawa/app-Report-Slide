@@ -114,26 +114,28 @@ async function waitForImages(document: Document): Promise<void> {
   await document.fonts?.ready;
 }
 
-function hasClippedContent(article: HTMLElement): boolean {
+function hasClippedContent(article: HTMLElement, selector = '*'): boolean {
   const view = article.ownerDocument.defaultView;
   if (!view) return false;
-  return [...article.querySelectorAll<HTMLElement>('*')].some((element) => {
-    // KaTeX intentionally hides its parallel accessibility representation.
-    // The visible .katex-html branch is still checked for actual clipping.
-    if (element.closest('.katex-mathml')) return false;
-    if (element.clientWidth === 0 && element.clientHeight === 0) return false;
-    const style = view.getComputedStyle(element);
-    const clips = (value: string) =>
-      /^(?:auto|scroll|hidden|clip)$/.test(value);
-    return (
-      (element.clientWidth > 0 &&
-        clips(style.overflowX || style.overflow) &&
-        element.scrollWidth > element.clientWidth + 2) ||
-      (element.clientHeight > 0 &&
-        clips(style.overflowY || style.overflow) &&
-        element.scrollHeight > element.clientHeight + 2)
-    );
-  });
+  return [...article.querySelectorAll<HTMLElement>(selector)].some(
+    (element) => {
+      // KaTeX intentionally hides its parallel accessibility representation.
+      // The visible .katex-html branch is still checked for actual clipping.
+      if (element.closest('.katex-mathml')) return false;
+      if (element.clientWidth === 0 && element.clientHeight === 0) return false;
+      const style = view.getComputedStyle(element);
+      const clips = (value: string) =>
+        /^(?:auto|scroll|hidden|clip)$/.test(value);
+      return (
+        (element.clientWidth > 0 &&
+          clips(style.overflowX || style.overflow) &&
+          element.scrollWidth > element.clientWidth + 2) ||
+        (element.clientHeight > 0 &&
+          clips(style.overflowY || style.overflow) &&
+          element.scrollHeight > element.clientHeight + 2)
+      );
+    },
+  );
 }
 
 /** Keep html-to-image's clone at the dimensions already used for pagination. */
@@ -160,6 +162,16 @@ function physicalCaptureStyles(page: HTMLElement): {
         // A table's used height includes its caption. Reapplying that height
         // to the table grid adds the caption twice and stretches body rows.
         // The cloned rows already retain their measured individual heights.
+        declarations += 'height:auto!important;block-size:auto!important;';
+      }
+      if (
+        element.matches('div[id]') &&
+        element.children.length === 1 &&
+        element.firstElementChild?.localName === 'figure'
+      ) {
+        // Figure anchors have auto height. Fixing their used height prevents
+        // the figure's bottom margin from collapsing through the wrapper,
+        // pulling the following paragraph upwards in the capture clone.
         declarations += 'height:auto!important;block-size:auto!important;';
       }
       return `[${attribute}="${index}"]{${declarations}}`;
@@ -218,6 +230,12 @@ async function exportPaginatedReportPdf(
     clearTimeout(loadTimeout);
     const frame = iframe.contentDocument;
     if (!frame) throw new Error('Could not create export document');
+    // Raster capture uses screen styles. Keep reader controls off the paper,
+    // including buttons added when the shared pagination promise resolves.
+    const captureStyle = frame.createElement('style');
+    captureStyle.textContent =
+      '.reader-zoom-button,.reader-detail-launcher,#reader-dialog{display:none!important}';
+    frame.head.appendChild(captureStyle);
     await waitForReportPagination(frame);
     await waitForImages(frame);
     const pages = [...frame.querySelectorAll<HTMLElement>('.pagedjs_page')];
@@ -236,7 +254,9 @@ async function exportPaginatedReportPdf(
       if (
         page.scrollWidth > width + 2 ||
         page.scrollHeight > height + 2 ||
-        hasClippedContent(page)
+        // Paged.js can retain unused columns in its internal wrappers. Check
+        // the authored layout without treating those columns as lost content.
+        hasClippedContent(page, '.report-layout, .report-layout *')
       )
         throw new PdfExportError(copy[locale].clipped);
       const captureStyles = physicalCaptureStyles(page);

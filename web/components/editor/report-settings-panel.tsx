@@ -257,6 +257,13 @@ export function ReportSettingsPanel({
                 ? 'Contents include links and actual page numbers reflecting automatic page breaks. Word page numbers are updated in Word.'
                 : 'Contents include links without page numbers. Enable this setting to reflect automatic page breaks. Word page numbers are updated in Word.'}
           </p>
+          {settings.toc_page_numbers && (
+            <p className="text-xs text-muted-foreground">
+              {ja
+                ? '完成プレビュー・HTML・PDFでは、本文とページ番号が重ならないよう下余白を最低8mm確保します。保存した余白設定は変更しません。'
+                : 'Preview, HTML and PDF reserve at least 8 mm at the bottom to keep page numbers clear of the text. Your saved margin setting stays unchanged.'}
+            </p>
+          )}
           {error && (
             <p role="alert">
               {ja

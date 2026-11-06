@@ -121,7 +121,9 @@ export function OutputPreviewDialog({
       if (mode === 'print') {
         const clipped = [
           ...doc.querySelectorAll<HTMLElement>(
-            result.print.paginated ? '.pagedjs_page *' : '.print-page *',
+            result.print.paginated
+              ? '.pagedjs_page .report-layout, .pagedjs_page .report-layout *'
+              : '.print-page *',
           ),
         ].some((element) => {
           if (

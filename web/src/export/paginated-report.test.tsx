@@ -47,5 +47,6 @@ describe('offline physical Report output', () => {
     // Reopening the editable HTML restores source settings, not generated pages/numbers.
     const restored = importHtml(html);
     expect(restored.document).toEqual(source);
-  });
+    // Parsing the full offline font payload twice is CPU-heavy in the parallel suite.
+  }, 15_000);
 });

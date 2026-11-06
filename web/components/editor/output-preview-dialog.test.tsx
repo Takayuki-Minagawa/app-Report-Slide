@@ -51,7 +51,17 @@ async function preview(ready: Promise<ReportPaginationResult>) {
   });
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: '印刷／PDF保存' })).toBeDisabled();
-  frame.body.innerHTML = '<div class="pagedjs_page"></div>'.repeat(4);
+  frame.body.innerHTML =
+    '<div class="pagedjs_page"><div class="pagedjs_sheet" style="overflow-x:hidden"><article class="report-layout"><p>Body</p></article></div></div>'.repeat(
+      4,
+    );
+  // The engine's final-page column wrapper can include unused columns.
+  // All authored content remains within its physical page.
+  const internalSheet = frame.querySelector('.pagedjs_sheet')!;
+  Object.defineProperties(internalSheet, {
+    clientWidth: { value: 400 },
+    scrollWidth: { value: 2000 },
+  });
   Object.defineProperty(frame, 'fonts', {
     configurable: true,
     value: { ready: Promise.resolve() },
@@ -82,6 +92,9 @@ describe('paginated output preview', () => {
     await act(async () => complete({ pageCount: 4, bodyPageCount: 2 }));
     await waitFor(() => expect(print).toBeEnabled());
     expect(screen.getByText('4 ページ（組版済み）')).toBeInTheDocument();
+    expect(
+      screen.queryByText(/表示範囲で切れる内容があります/),
+    ).not.toBeInTheDocument();
     const printWindow = vi
       .spyOn(iframe.contentWindow!, 'print')
       .mockImplementation(() => {});
