@@ -3,7 +3,13 @@ import layoutInspectionSource from './layout-inspection-runtime.js?raw';
 export type LayoutStatus = 'pass' | 'overflow' | 'unmeasured';
 
 export interface LayoutIssue {
-  code: 'page-height' | 'page-width' | 'clipped-x' | 'clipped-y' | 'unmeasured';
+  code:
+    | 'page-height'
+    | 'page-width'
+    | 'clipped-x'
+    | 'clipped-y'
+    | 'paragraph-indent'
+    | 'unmeasured';
   element: string;
   nodeId?: string;
   measuredPx?: number;

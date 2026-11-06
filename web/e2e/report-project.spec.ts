@@ -74,8 +74,9 @@ test('章別レポートを画像・除外設定ごとZIP保存し再開でき�
   await page
     .getByLabel('プロジェクト名', { exact: true })
     .fill('Combined report');
-  await page.getByLabel('節番号', { exact: true }).check();
-  await page.getByLabel('目次', { exact: true }).check();
+  await page.getByLabel('章・節番号を表示', { exact: true }).check();
+  await page.getByLabel('見出しの目次を付ける', { exact: true }).check();
+  await page.getByRole('button', { name: '報告書の構成を適用' }).click();
   const chapterDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: '章 JSON', exact: true }).click();
   expect(

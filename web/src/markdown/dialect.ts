@@ -211,7 +211,7 @@ export function createMarkdownIt(): MarkdownIt {
           .trim();
       const line = lineAt(startLine);
       const attributes =
-        /^\{(?:#|(?:label|caption|numbered|width|align|slide_layout|text_ruler|figure_edit|source_reference|block_layout)=)/.test(
+        /^\{(?:#|(?:label|caption|numbered|toc|appendix|width|align|slide_layout|text_ruler|first_line_indent|figure_edit|source_reference|block_layout)=)/.test(
           line,
         );
       const pageBreak = /^:::\s+(pagebreak|slidebreak)\s*$/.exec(line);

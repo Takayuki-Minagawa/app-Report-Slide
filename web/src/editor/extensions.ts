@@ -1,3 +1,4 @@
+import { ParagraphFormat } from './paragraph-format';
 import { tableFillTextColor } from '@/src/document/table-fill';
 import {
   Extension,
@@ -199,6 +200,29 @@ const DocumentAttributes = Extension.create({
               attrs.caption != null ? { 'data-caption': attrs.caption } : {},
           },
         },
+      },
+      {
+        types: ['heading'],
+        attributes: Object.fromEntries(
+          ['toc', 'appendix'].map((key) => [
+            key,
+            {
+              default: null,
+              parseHTML: (element: HTMLElement) => {
+                const value = element.getAttribute(`data-kumi-${key}`);
+                return value === 'true'
+                  ? true
+                  : value === 'false'
+                    ? false
+                    : null;
+              },
+              renderHTML: (attrs: Record<string, unknown>) =>
+                typeof attrs[key] === 'boolean'
+                  ? { [`data-kumi-${key}`]: String(attrs[key]) }
+                  : {},
+            },
+          ]),
+        ),
       },
       {
         types: ['table'],
@@ -762,6 +786,7 @@ export function createEditorExtensions({
       },
     }),
     DocumentAttributes,
+    ParagraphFormat,
     InlineImage.configure({
       inline: true,
       allowBase64: true,

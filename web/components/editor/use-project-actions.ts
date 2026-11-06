@@ -387,14 +387,16 @@ export function useProjectActions(bridge: ProjectWorkspaceBridge) {
             ...current,
             project: {
               ...project,
-              metadata: {
-                ...project.metadata,
-                ...current.project.metadata,
-                ...(project.metadata.figure_references !== undefined
-                  ? { figure_references: project.metadata.figure_references }
-                  : {}),
-                ...updates,
-              },
+              metadata: Object.fromEntries(
+                Object.entries({
+                  ...project.metadata,
+                  ...current.project.metadata,
+                  ...(project.metadata.figure_references !== undefined
+                    ? { figure_references: project.metadata.figure_references }
+                    : {}),
+                  ...updates,
+                }).filter(([, value]) => value !== undefined),
+              ),
             },
             dirty: true,
           }

@@ -17,6 +17,7 @@ import {
   PageNumber,
   PageOrientation,
   Paragraph,
+  SectionType,
   Table,
   TableCell,
   TableLayoutType,
@@ -25,6 +26,8 @@ import {
   WidthType,
   type IParagraphOptions,
   type IPropertiesOptions,
+  type ISectionOptions,
+  type ISectionPropertiesOptions,
   type ITableCellBorders,
   type ParagraphChild,
 } from 'docx';
@@ -39,11 +42,23 @@ import {
   pageDimensions,
   resolvePageSettings,
 } from '@/src/document/page-settings';
-import { analyzeDocument, collectFootnotes } from '@/src/document/semantics';
+import {
+  analyzeDocument,
+  collectFootnotes,
+  reportOutline,
+  type SemanticTarget,
+} from '@/src/document/semantics';
+import { resolveReportSettings } from '@/src/document/report-settings';
+import { hasReportBodyContent } from '@/src/document/report-pages';
 import { isTextRuler } from '@/src/document/text-ruler';
+import {
+  paragraphAfterHeadingIds,
+  resolveParagraphIndent,
+} from '@/src/document/paragraph-format';
 import { migrateDocumentData } from '@/src/document/validation';
 import {
   formatSemanticReference,
+  formatHeadingNumber,
   localizeDiagnosticMessage,
 } from '@/src/i18n/diagnostics';
 import { messages, type AppLocale } from '@/src/i18n/messages';
@@ -76,6 +91,12 @@ const exportMessages = {
     numbering:
       '目次・見出し番号・図表番号・参照は出力時点の値です。Wordで編集した後は必要に応じて修正してください。',
     label: 'ラベル',
+    figures: '図目次',
+    tables: '表目次',
+    affiliation: '所属',
+    recipient: '提出先',
+    reportNumber: '報告書番号',
+    emptyContents: '項目なし',
     indentation: '深い入れ子のインデントを本文幅に収まるように調整しました。',
   },
   en: {
@@ -85,6 +106,12 @@ const exportMessages = {
     numbering:
       'The table of contents, section and caption numbers, and references retain their exported values. Revise them as needed after editing in Word.',
     label: 'Label',
+    figures: 'List of figures',
+    tables: 'List of tables',
+    affiliation: 'Affiliation',
+    recipient: 'Recipient',
+    reportNumber: 'Report number',
+    emptyContents: 'No entries',
     indentation: 'Deeply nested indentation was adjusted to fit the text area.',
   },
 };
@@ -93,6 +120,7 @@ interface BlockContext {
   width: number;
   indent: number;
   depth: number;
+  topLevel: boolean;
   numbering?: IParagraphOptions['numbering'];
   alignment?: IParagraphOptions['alignment'];
   bold?: boolean;
@@ -120,6 +148,8 @@ export async function exportReportDocx(
   );
   await addOfficeFigureImages(document, images);
   const settings = resolvePageSettings(document.metadata);
+  const report = resolveReportSettings(document.metadata);
+  const afterHeadingIds = paragraphAfterHeadingIds(document.children);
   const [pageWidth, pageHeight] = pageDimensions(settings);
   const bodyWidth = mmToTwips(
     pageWidth - settings.margin_left - settings.margin_right,
@@ -247,11 +277,26 @@ export async function exportReportDocx(
   ): Paragraph {
     const ruler = node.attrs.textRuler;
     const rulerWidth = context.width - context.indent;
-    const indent: NonNullable<IParagraphOptions['indent']> = isTextRuler(ruler)
-      ? {
-          left: context.indent + Math.round((rulerWidth * ruler.left) / 100),
-          right: Math.round((rulerWidth * ruler.right) / 100),
-          ...(ruler.firstLine >= ruler.left
+    const firstLineEm =
+      node.type === 'paragraph'
+        ? resolveParagraphIndent(node, settings, {
+            topLevel: context.topLevel,
+            afterHeading: afterHeadingIds.has(node.attrs.nodeId),
+          }).em
+        : isTextRuler(ruler)
+          ? null
+          : 0;
+    const indent: NonNullable<IParagraphOptions['indent']> = {
+      left:
+        context.indent +
+        (isTextRuler(ruler) ? Math.round((rulerWidth * ruler.left) / 100) : 0),
+      ...(isTextRuler(ruler)
+        ? { right: Math.round((rulerWidth * ruler.right) / 100) }
+        : {}),
+      ...(firstLineEm !== null
+        ? { firstLine: Math.round(firstLineEm * settings.font_size * 20) }
+        : isTextRuler(ruler)
+          ? ruler.firstLine >= ruler.left
             ? {
                 firstLine: Math.round(
                   (rulerWidth * (ruler.firstLine - ruler.left)) / 100,
@@ -261,18 +306,14 @@ export async function exportReportDocx(
                 hanging: Math.round(
                   (rulerWidth * (ruler.left - ruler.firstLine)) / 100,
                 ),
-              }),
-        }
-      : {
-          left: context.indent,
-          firstLine:
-            context.numbering || node.type === 'heading'
-              ? 0
-              : settings.first_line_indent * settings.font_size * 20,
-        };
+              }
+          : {}),
+    };
     const target = analysis.targets.get(node.attrs.nodeId);
     const runs = [
-      ...(target?.number ? [new TextRun(`${target.number} `)] : []),
+      ...(target?.number
+        ? [new TextRun(`${formatHeadingNumber(target, locale)} `)]
+        : []),
       ...inline(node.content, rulerWidth, context.bold, context.color),
     ];
     if (target?.number) warnings.add(copy.numbering);
@@ -400,6 +441,7 @@ export async function exportReportDocx(
                   width: Math.max(300, cellWidth - 200),
                   indent: 0,
                   depth: 0,
+                  topLevel: false,
                   alignment: cell.attrs.align ?? undefined,
                   bold: cell.type === 'tableHeader',
                   color: tableFillTextColor(cell.attrs.fill)?.slice(1),
@@ -472,6 +514,7 @@ export async function exportReportDocx(
               depth: context.depth + 1,
               indent,
               numbering: undefined,
+              topLevel: false,
             };
             const numbered = { ...next, numbering: { reference, level } };
             return first &&
@@ -487,7 +530,7 @@ export async function exportReportDocx(
           });
         }
         case 'listItem':
-          return blocks(node.content, context);
+          return blocks(node.content, { ...context, topLevel: false });
         case 'blockquote':
           return [
             ...(node.attrs.callout
@@ -507,6 +550,7 @@ export async function exportReportDocx(
             ...blocks(node.content, {
               ...context,
               indent: nestedIndent(context, 360),
+              topLevel: false,
             }),
           ];
         case 'codeBlock':
@@ -646,17 +690,25 @@ export async function exportReportDocx(
     });
   }
 
-  const children: Array<Paragraph | Table> = [];
-  if (document.metadata.toc === true && analysis.outline.length) {
-    warnings.add(copy.numbering);
-    children.push(
+  const contents: Paragraph[] = [];
+  function contentsList(title: string, targets: SemanticTarget[]) {
+    // Match HTML: inline contents are omitted when empty; a dedicated page
+    // retains its explanatory notice rather than becoming an unexplained blank.
+    if (!targets.length && !report.toc_page) return;
+    contents.push(
       new Paragraph({
-        text: messages[locale].preview.toc,
+        text: title,
         heading: HeadingLevel.HEADING_2,
+        keepNext: true,
       }),
     );
-    for (const target of analysis.outline)
-      children.push(
+    if (!targets.length) {
+      contents.push(new Paragraph(copy.emptyContents));
+      return;
+    }
+    warnings.add(copy.numbering);
+    for (const target of targets)
+      contents.push(
         new Paragraph({
           indent: { left: ((target.level ?? 1) - 1) * 240 },
           children: [
@@ -664,7 +716,11 @@ export async function exportReportDocx(
               anchor: anchors.get(target.nodeId)!,
               children: [
                 new TextRun(
-                  `${target.number ? `${target.number} ` : ''}${target.title}`,
+                  target.type === 'heading'
+                    ? `${target.number ? `${formatHeadingNumber(target, locale)} ` : ''}${target.title}`
+                    : [formatSemanticReference(target, locale), target.title]
+                        .filter(Boolean)
+                        .join(' — '),
                 ),
               ],
             }),
@@ -672,9 +728,113 @@ export async function exportReportDocx(
         }),
       );
   }
-  children.push(
-    ...blocks(document.children, { width: bodyWidth, indent: 0, depth: 0 }),
-  );
+  if (document.metadata.toc === true)
+    contentsList(
+      messages[locale].preview.toc,
+      reportOutline(document, analysis),
+    );
+  for (const [enabled, type, title] of [
+    [report.list_figures, 'figure', copy.figures],
+    [report.list_tables, 'table', copy.tables],
+  ] as const) {
+    if (enabled)
+      contentsList(
+        title,
+        [...analysis.targets.values()].filter(
+          (target) => target.type === type && Boolean(target.number),
+        ),
+      );
+  }
+  const body = blocks(document.children, {
+    width: bodyWidth,
+    indent: 0,
+    depth: 0,
+    topLevel: true,
+  });
+  const page: NonNullable<ISectionPropertiesOptions['page']> = {
+    size: {
+      width: mmToTwips(Math.min(pageWidth, pageHeight)),
+      height: mmToTwips(Math.max(pageWidth, pageHeight)),
+      orientation:
+        settings.orientation === 'landscape'
+          ? PageOrientation.LANDSCAPE
+          : PageOrientation.PORTRAIT,
+    },
+    margin: {
+      top: mmToTwips(settings.margin_top),
+      bottom: mmToTwips(settings.margin_bottom),
+      left: mmToTwips(settings.margin_left),
+      right: mmToTwips(settings.margin_right),
+    },
+  };
+  const sections: ISectionOptions[] = [];
+  if (report.cover) {
+    const cover = [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text:
+              document.metadata.title?.trim() ||
+              (locale === 'ja' ? '無題の報告書' : 'Untitled report'),
+            bold: true,
+            size: settings.font_size * 4,
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 1440, after: 360 },
+      }),
+      ...[
+        document.metadata.subtitle,
+        document.metadata.author,
+        document.metadata.date,
+        report.affiliation.trim() &&
+          `${copy.affiliation}: ${report.affiliation}`,
+        report.recipient.trim() && `${copy.recipient}: ${report.recipient}`,
+        report.report_number.trim() &&
+          `${copy.reportNumber}: ${report.report_number}`,
+      ]
+        .filter((text): text is string => Boolean(text?.trim()))
+        .map(
+          (text) =>
+            new Paragraph({
+              text,
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 240 },
+            }),
+        ),
+    ];
+    sections.push({ properties: { page }, children: cover });
+  }
+  if (report.toc_page && contents.length)
+    sections.push({
+      properties: { page, type: SectionType.NEXT_PAGE },
+      children: contents,
+    });
+  const children = [
+    ...(report.toc_page ? [] : contents),
+    ...(sections.length && !hasReportBodyContent(document) ? [] : body),
+  ];
+  if (children.length || !sections.length)
+    sections.push({
+      properties: {
+        page: {
+          ...page,
+          ...(sections.length ? { pageNumbers: { start: 1 } } : {}),
+        },
+        ...(sections.length ? { type: SectionType.NEXT_PAGE } : {}),
+      },
+      footers: {
+        default: new Footer({
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.RIGHT,
+              children: [new TextRun({ children: [PageNumber.CURRENT] })],
+            }),
+          ],
+        }),
+      },
+      children: children.length ? children : [new Paragraph('')],
+    });
   const file = new Document({
     title: documentTitle(document),
     creator: document.metadata.author,
@@ -702,39 +862,7 @@ export async function exportReportDocx(
         { children: [new Paragraph(node.attrs.text)] },
       ]),
     ),
-    sections: [
-      {
-        properties: {
-          page: {
-            size: {
-              width: mmToTwips(Math.min(pageWidth, pageHeight)),
-              height: mmToTwips(Math.max(pageWidth, pageHeight)),
-              orientation:
-                settings.orientation === 'landscape'
-                  ? PageOrientation.LANDSCAPE
-                  : PageOrientation.PORTRAIT,
-            },
-            margin: {
-              top: mmToTwips(settings.margin_top),
-              bottom: mmToTwips(settings.margin_bottom),
-              left: mmToTwips(settings.margin_left),
-              right: mmToTwips(settings.margin_right),
-            },
-          },
-        },
-        footers: {
-          default: new Footer({
-            children: [
-              new Paragraph({
-                alignment: AlignmentType.RIGHT,
-                children: [new TextRun({ children: [PageNumber.CURRENT] })],
-              }),
-            ],
-          }),
-        },
-        children: children.length ? children : [new Paragraph('')],
-      },
-    ],
+    sections,
   });
   return { blob: await Packer.toBlob(file), warnings: [...warnings] };
 }

@@ -1,7 +1,9 @@
 import { resolveDocumentTheme } from './metadata';
 import type { PageSettings } from './page-settings';
+import type { ReportSettings } from './report-settings';
 import type { TableCellBorders } from './table';
 import type { TextRuler } from './text-ruler';
+import type { FirstLineIndent } from './paragraph-format';
 import type { FigureEdit } from './figure-edit';
 import type { BlockLayout } from './block-layout';
 import type { ChartPlot } from './chart';
@@ -23,6 +25,7 @@ export interface DocumentMetadata {
   date?: string;
   theme?: string;
   page_settings?: PageSettings;
+  report_settings?: ReportSettings;
   [key: string]: JsonValue | undefined;
 }
 
@@ -121,7 +124,10 @@ interface IdentifiedNode {
 
 export interface ParagraphNode extends IdentifiedNode {
   type: 'paragraph';
-  attrs: IdentifiedNode['attrs'] & { textRuler?: TextRuler | null };
+  attrs: IdentifiedNode['attrs'] & {
+    textRuler?: TextRuler | null;
+    firstLineIndent?: FirstLineIndent | null;
+  };
   content?: InlineNode[];
 }
 
@@ -130,6 +136,8 @@ export interface HeadingNode extends IdentifiedNode {
   attrs: IdentifiedNode['attrs'] & {
     level: 1 | 2 | 3 | 4 | 5 | 6;
     textRuler?: TextRuler | null;
+    toc?: boolean | null;
+    appendix?: boolean | null;
   };
   content?: InlineNode[];
 }

@@ -269,7 +269,7 @@ async function run() {
         api.revokeAssetUrls(restored.assets);
       }
     }
-    const pages = api.splitDocumentPages(document).length;
+    const pages = api.splitRenderedPages(document).length;
     let layout;
     if (options['check-layout']) {
       const { inspectLayout } = await import('./layout.mjs');

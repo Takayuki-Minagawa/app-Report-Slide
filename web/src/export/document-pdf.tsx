@@ -12,7 +12,8 @@ import {
   pageDimensions,
   resolvePageSettings,
 } from '@/src/document/page-settings';
-import { analyzeDocument, splitDocumentPages } from '@/src/document/semantics';
+import { analyzeDocument } from '@/src/document/semantics';
+import { splitRenderedPages } from '@/src/document/report-pages';
 import { migrateDocumentData } from '@/src/document/validation';
 import type { AppLocale } from '@/src/i18n/messages';
 import type { AssetUrls } from '@/src/workspace/files';
@@ -147,7 +148,7 @@ export async function exportDocumentPdf(
     : pageDimensions(resolvePageSettings(document.metadata));
   const width = slide ? 960 : pageWidth * pixelsPerMillimetre;
   const height = slide ? 540 : pageHeight * pixelsPerMillimetre;
-  const pages = splitDocumentPages(document);
+  const pages = splitRenderedPages(document);
   const analysis = analyzeDocument(document);
   const warnings = [copy[locale].raster];
   const iframe = globalThis.document.createElement('iframe');

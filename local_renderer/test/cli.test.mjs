@@ -271,3 +271,18 @@ test(
     assert.equal(batch.code, 0, batch.stderr);
   },
 );
+
+test('report front matter contributes to rendered page counts while preserving editable pages', async (t) => {
+  const data = document();
+  data.metadata.toc = true;
+  data.metadata.report_settings = { cover: true, toc_page: true };
+  const { input, output } = await withFixture(t, data);
+  const result = await run(['--input', input, '--output-dir', output]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.result.pages, 4);
+  const html = await readFile(result.result.outputs.html, 'utf8');
+  assert.equal((html.match(/data-report-page-kind="cover"/g) ?? []).length, 1);
+  assert.equal((html.match(/data-report-page-kind="contents"/g) ?? []).length, 1);
+  assert.equal((html.match(/data-report-page-kind="body"/g) ?? []).length, 2);
+  assert.deepEqual(JSON.parse(await readFile(result.result.outputs.json)).children, data.children);
+});

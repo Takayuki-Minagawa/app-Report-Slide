@@ -9,7 +9,12 @@ import {
   pageDimensions,
   resolvePageSettings,
 } from '@/src/document/page-settings';
-import { analyzeDocument, splitDocumentPages } from '@/src/document/semantics';
+import { analyzeDocument } from '@/src/document/semantics';
+import {
+  frontMatterPageCount,
+  reportPageKind,
+  splitRenderedPages,
+} from '@/src/document/report-pages';
 import { migrateDocumentData } from '@/src/document/validation';
 import type { AppLocale } from '@/src/i18n/messages';
 import type { AssetUrls } from '@/src/workspace/files';
@@ -68,7 +73,7 @@ export async function exportReportHtml(
     assets,
   );
   const analysis = analyzeDocument(document);
-  const pages = splitDocumentPages(document);
+  const pages = splitRenderedPages(document);
   const settings = resolvePageSettings(document.metadata);
   const [width, height] = pageDimensions(settings);
   const { script, policy } = await hashedInlineScript(
@@ -121,11 +126,13 @@ button{font:inherit;cursor:pointer}.report-tools{position:sticky;top:0;z-index:2
                 count={pages.length}
                 resolveImageUrl={resolveImageUrl}
               />
-              <ReaderDetails
-                document={document}
-                index={index}
-                locale={locale}
-              />
+              {reportPageKind(document, index) === 'body' && (
+                <ReaderDetails
+                  document={document}
+                  index={index - frontMatterPageCount(document)}
+                  locale={locale}
+                />
+              )}
             </Fragment>
           ))}
         </main>

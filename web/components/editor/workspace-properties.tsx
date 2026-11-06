@@ -34,6 +34,8 @@ import { localizeDiagnosticMessage } from '@/src/i18n/diagnostics';
 import type { DisplayedWorkspaceStatus } from '@/src/workspace/status';
 import type { SelectedNode } from './use-document-selection';
 import { PageSettingsPanel } from './page-settings-panel';
+import { ReportSettingsPanel } from './report-settings-panel';
+import { ParagraphFormatControls } from './paragraph-format-controls';
 import {
   resolvePageSettings,
   type PageSettings,
@@ -53,6 +55,8 @@ interface WorkspacePropertiesProps {
   overlay?: boolean;
   idPrefix?: string;
   document: DocumentData;
+  paragraphDocument?: DocumentData;
+  paragraphContextPrefix?: string;
   editor: Editor | null;
   documentWriteLocked: boolean;
   analysis: DocumentAnalysis;
@@ -79,6 +83,8 @@ export function WorkspaceProperties({
   overlay = false,
   idPrefix = 'workspace',
   document,
+  paragraphDocument,
+  paragraphContextPrefix,
   editor,
   documentWriteLocked,
   analysis,
@@ -110,7 +116,7 @@ export function WorkspaceProperties({
     slide_number: copy.workspace.slideNumbers,
   };
   const flagOptions = documentFlags
-    .filter((key) => key !== 'slide_number' || document.type === 'slide')
+    .filter(() => document.type === 'slide')
     .map((key) => [key, flagLabels[key]] as const);
   const footnoteText =
     typeof selectedNode?.attrs.text === 'string' ? selectedNode.attrs.text : '';
@@ -240,6 +246,27 @@ export function WorkspaceProperties({
           {document.type === 'report' && (
             <>
               <Separator />
+              <ReportSettingsPanel
+                key={JSON.stringify([
+                  (paragraphDocument ?? document).metadata.title,
+                  (paragraphDocument ?? document).metadata.subtitle,
+                  (paragraphDocument ?? document).metadata.author,
+                  (paragraphDocument ?? document).metadata.date,
+                  (paragraphDocument ?? document).metadata.report_settings,
+                  (paragraphDocument ?? document).metadata.toc,
+                  (paragraphDocument ?? document).metadata.number_sections,
+                ])}
+                metadata={(paragraphDocument ?? document).metadata}
+                disabled={documentWriteLocked}
+                onApply={updateMetadata}
+              />
+              <Separator />
+              <ParagraphFormatControls
+                editor={editor}
+                document={paragraphDocument ?? document}
+                chapterPrefix={paragraphContextPrefix}
+                disabled={documentWriteLocked}
+              />
               <PageSettingsPanel
                 key={`${document.children[0]?.attrs.nodeId}:${JSON.stringify(resolvePageSettings(document.metadata))}`}
                 settings={resolvePageSettings(document.metadata)}
@@ -343,6 +370,7 @@ export function WorkspaceProperties({
                 )}
                 {selectedSemantic && (
                   <SemanticProperties
+                    report={document.type === 'report'}
                     key={`${selectedSemantic.attrs.nodeId}:${JSON.stringify(selectedSemantic.attrs)}`}
                     node={selectedSemantic}
                     disabled={documentWriteLocked}

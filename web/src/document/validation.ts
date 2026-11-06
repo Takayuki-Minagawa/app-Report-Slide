@@ -17,6 +17,7 @@ import {
 } from './model';
 import { booleanMetadataKeys, stringMetadataKeys } from './metadata';
 import { pageSettingsIssues } from './page-settings';
+import { reportSettingsIssues } from './report-settings';
 import { labelPattern, semanticTypes } from './semantics';
 import {
   isTableCellBorders,
@@ -26,6 +27,7 @@ import {
 import { isSlideImagePlacement } from './slide-layout';
 import { slideDesignIssues, slidePresetsSchema } from './slide-design';
 import { isTextRuler } from './text-ruler';
+import { isFirstLineIndent } from './paragraph-format';
 import { figureEditSchema, figureReferencesSchema } from './figure-edit';
 
 const documentEnvelopeSchema = z
@@ -588,6 +590,25 @@ function validateBlockNode(
         );
       }
     }
+    if (attrs.firstLineIndent !== undefined) {
+      if (node.type !== 'paragraph') {
+        issues.push(`${path}.attrs.firstLineIndent: 段落だけに指定できます`);
+      } else if (
+        attrs.firstLineIndent !== null &&
+        !isFirstLineIndent(attrs.firstLineIndent)
+      ) {
+        issues.push(
+          `${path}.attrs.firstLineIndent: modeはinherit、またはemと0〜8の有限数値valueを指定してください`,
+        );
+      }
+    }
+    for (const key of ['toc', 'appendix']) {
+      if (attrs[key] === undefined || attrs[key] === null) continue;
+      if (node.type !== 'heading')
+        issues.push(`${path}.attrs.${key}: 見出しだけに指定できます`);
+      if (typeof attrs[key] !== 'boolean')
+        issues.push(`${path}.attrs.${key}: booleanが必要です`);
+    }
     if (attrs.callout !== undefined && attrs.callout !== null) {
       if (node.type !== 'blockquote')
         issues.push(`${path}.attrs.callout: 引用だけに指定できます`);
@@ -950,6 +971,9 @@ export function validateDocumentData(value: unknown): DocumentData {
       (issue) => `metadata.${issue}`,
     ),
     ...pageSettingsIssues(metadata.page_settings).map(
+      (issue) => `metadata.${issue}`,
+    ),
+    ...reportSettingsIssues(metadata.report_settings).map(
       (issue) => `metadata.${issue}`,
     ),
   );

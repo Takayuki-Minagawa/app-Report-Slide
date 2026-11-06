@@ -6,6 +6,7 @@ import {
   serializeSlideImagePlacement,
 } from '@/src/document/slide-layout';
 import { isTextRuler } from '@/src/document/text-ruler';
+import { isFirstLineIndent } from '@/src/document/paragraph-format';
 import { readFigureEdit } from '@/src/document/figure-edit';
 
 /** A strict single-line attribute grammar. Quoted values follow JSON string escaping. */
@@ -31,10 +32,13 @@ export function parseBlockAttributes(
         'label',
         'caption',
         'numbered',
+        'toc',
+        'appendix',
         'width',
         'align',
         'slide_layout',
         'text_ruler',
+        'first_line_indent',
         'figure_edit',
         'source_reference',
         'block_layout',
@@ -65,11 +69,42 @@ export function parseBlockAttributes(
     }
     if (node.type !== 'paragraph' && !semanticTypes.has(node.type))
       throw new Error('このブロックではblock_layoutだけを指定できます');
-    if (node.type === 'paragraph' && key !== 'text_ruler') {
-      throw new Error('段落にはtext_rulerだけを指定できます');
+    if (
+      node.type === 'paragraph' &&
+      key !== 'text_ruler' &&
+      key !== 'first_line_indent'
+    ) {
+      throw new Error('段落にはtext_ruler・first_line_indentを指定できます');
+    }
+    if (key === 'first_line_indent') {
+      if (node.type !== 'paragraph')
+        throw new Error('first_line_indentは段落だけに指定できます');
+      const indent =
+        value === 'inherit'
+          ? { mode: 'inherit' }
+          : typeof value === 'string' &&
+              /^(?:0|[1-9]\d*)(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(value)
+            ? { mode: 'em', value: Number(value) }
+            : null;
+      if (!isFirstLineIndent(indent))
+        throw new Error(
+          'first_line_indentはinheritまたは0〜8の字数を指定してください',
+        );
+      attrs.firstLineIndent = indent;
+      rest = rest.slice(match[0].length);
+      continue;
     }
     if (key === 'caption' && node.type === 'heading')
       throw new Error('見出しにはcaptionを指定できません');
+    if (key === 'toc' || key === 'appendix') {
+      if (node.type !== 'heading')
+        throw new Error(`${key}は見出しだけに指定できます`);
+      if (value !== 'true' && value !== 'false')
+        throw new Error(`${key}にはtrueまたはfalseを指定してください`);
+      attrs[key] = value === 'true';
+      rest = rest.slice(match[0].length);
+      continue;
+    }
     if (key === 'text_ruler') {
       if (node.type !== 'paragraph' && node.type !== 'heading')
         throw new Error('text_rulerは段落・見出しだけに指定できます');
@@ -166,6 +201,15 @@ export function serializeBlockAttributes(node: DocumentNode): string {
     const { left, right, firstLine } = node.attrs.textRuler;
     attrs.push(`text_ruler=${left},${right},${firstLine}`);
   }
+  if (
+    node.type === 'paragraph' &&
+    isFirstLineIndent(node.attrs.firstLineIndent)
+  ) {
+    const indent = node.attrs.firstLineIndent;
+    attrs.push(
+      `first_line_indent=${indent.mode === 'inherit' ? 'inherit' : indent.value}`,
+    );
+  }
   if (node.type === 'table' && node.attrs.sourceReferenceId)
     attrs.push(
       `source_reference=${JSON.stringify(node.attrs.sourceReferenceId)}`,
@@ -186,6 +230,11 @@ export function serializeBlockAttributes(node: DocumentNode): string {
     attrs.push(`caption=${JSON.stringify(node.attrs.caption)}`);
   if (semanticTypes.has(node.type) && node.attrs.numbered != null)
     attrs.push(`numbered=${node.attrs.numbered}`);
+  if (node.type === 'heading') {
+    if (node.attrs.toc != null) attrs.push(`toc=${node.attrs.toc}`);
+    if (node.attrs.appendix != null)
+      attrs.push(`appendix=${node.attrs.appendix}`);
+  }
   return attrs.length
     ? `${node.type === 'table' ? '\n\n' : '\n'}{${attrs.join(' ')}}`
     : '';

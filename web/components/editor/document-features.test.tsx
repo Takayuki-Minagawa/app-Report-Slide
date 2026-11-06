@@ -68,8 +68,12 @@ describe('document feature workspace', () => {
     expect(
       screen.getByRole('spinbutton', { name: '図の幅（%）' }),
     ).toBeDisabled();
-    expect(screen.getByRole('checkbox', { name: '目次' })).toBeDisabled();
-    expect(screen.getByRole('checkbox', { name: '節番号' })).toBeDisabled();
+    expect(
+      screen.getByRole('checkbox', { name: '見出しの目次を付ける' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole('checkbox', { name: '章・節番号を表示' }),
+    ).toBeDisabled();
     expect(screen.getByRole('button', { name: '参照を挿入' })).toBeDisabled();
     fireEvent.change(source, {
       target: { value: `${(source as HTMLTextAreaElement).value}\n\n未適用` },

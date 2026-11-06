@@ -1,6 +1,6 @@
 'use client';
 
-import { useDeferredValue, useMemo } from 'react';
+import { useDeferredValue, useEffect, useMemo } from 'react';
 import { EditorContent, type Editor } from '@tiptap/react';
 import { Braces } from 'lucide-react';
 import { useAppPreferences } from '@/components/app-preferences';
@@ -24,9 +24,12 @@ import { FormatToolbar } from './format-toolbar';
 import type { BlockInsertionTarget } from '@/src/editor/block-commands';
 import { TableToolbar } from './table-toolbar';
 import { TextRulerBar } from './text-ruler';
+import { ParagraphFormatControls } from './paragraph-format-controls';
+import { setParagraphFormatContext } from '@/src/editor/paragraph-format';
 
 interface WorkspaceEditorProps {
   previewDocument?: DocumentData;
+  paragraphContextPrefix?: string;
   project?: boolean;
   resolvePreviewImageUrl?: (source: string) => string;
   document: DocumentData;
@@ -54,6 +57,7 @@ interface WorkspaceEditorProps {
 
 export function WorkspaceEditor({
   previewDocument,
+  paragraphContextPrefix,
   project = false,
   resolvePreviewImageUrl,
   document,
@@ -76,6 +80,14 @@ export function WorkspaceEditor({
   openPdfImport,
 }: WorkspaceEditorProps) {
   const { copy, locale } = useAppPreferences();
+  useEffect(() => {
+    if (editor)
+      setParagraphFormatContext(
+        editor,
+        previewDocument ?? document,
+        paragraphContextPrefix,
+      );
+  }, [editor, document, previewDocument, paragraphContextPrefix]);
   const settings = resolvePageSettings((previewDocument ?? document).metadata);
   // Counting is not urgent: let typing render first on long documents.
   const countedNodes = useDeferredValue(document.children);
@@ -134,6 +146,12 @@ export function WorkspaceEditor({
             onInsertImage={insertImage}
           />
           <TableToolbar editor={editor} documentType={document.type} />
+          <ParagraphFormatControls
+            editor={editor}
+            document={previewDocument ?? document}
+            chapterPrefix={paragraphContextPrefix}
+            disabled={documentWriteLocked}
+          />
           <ScrollArea className="min-h-0 flex-1">
             <div className="editor-stage">
               <div
@@ -145,6 +163,7 @@ export function WorkspaceEditor({
                 }
               >
                 <TextRulerBar
+                  chapterPrefix={paragraphContextPrefix}
                   editor={editor}
                   document={previewDocument ?? document}
                   disabled={documentWriteLocked}

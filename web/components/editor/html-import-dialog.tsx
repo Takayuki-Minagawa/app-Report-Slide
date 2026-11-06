@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { DocumentPage } from '@/components/preview/document-page';
 import { documentTitle } from '@/src/document/model';
-import { analyzeDocument, splitDocumentPages } from '@/src/document/semantics';
+import { analyzeDocument } from '@/src/document/semantics';
+import { splitRenderedPages } from '@/src/document/report-pages';
 import type { AppLocale } from '@/src/i18n/messages';
 import type { ImportedDocument } from '@/src/workspace/files';
 import { Button } from '@/components/ui/button';
@@ -32,7 +33,7 @@ export function HtmlImportDialog({
   if (!importResult?.htmlImport) return null;
   const ja = locale === 'ja';
   const { document, htmlImport, assets } = importResult;
-  const pages = splitDocumentPages(document);
+  const pages = splitRenderedPages(document);
   const index = Math.min(pageIndex, pages.length - 1);
   const editable = htmlImport.kind === 'editable';
   return (

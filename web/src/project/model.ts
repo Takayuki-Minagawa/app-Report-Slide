@@ -86,6 +86,7 @@ export function projectChapterDocument(
   const sharedSettings: DocumentMetadata = {};
   for (const key of [
     'page_settings',
+    'report_settings',
     'paper',
     'orientation',
     'toc',
