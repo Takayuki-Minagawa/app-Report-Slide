@@ -15,6 +15,7 @@ page_settings:
   font_size: 10.5
   first_line_indent: 1
   after_heading_indent: none
+  no_indent_after: [math]
   line_height: 1.85
   paragraph_spacing: 0
 ---
@@ -45,10 +46,9 @@ $$
 
 {#eq:linear caption="一次式"}
 
-ここで、$a$ は傾き、$b$ は切片を表します。数式から説明を続けるこの段落には、個別に「下げない」を指定しています。
-{first_line_indent=0}
+ここで、$a$ は傾き、$b$ は切片を表します。数式から説明を続けるこの段落は、ページ設定の「数式の直後は下げない」に従って下げません。
 
-式 [@eq:linear] に続いて、新しい段落を始める場合は通常の本文書式に戻せます。数式の後という理由だけでは、字下げを自動で解除しません。
+式 [@eq:linear] に続いて、新しい段落を始める場合は通常の本文書式に戻せます。数式の直後の段落が対象なので、この段落は通常どおり下がります。
 {first_line_indent=inherit}
 
 ## 本文字下げの対象外

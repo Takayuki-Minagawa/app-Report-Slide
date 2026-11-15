@@ -84,3 +84,59 @@ describe('body format presets', () => {
     ).toBeDisabled();
   });
 });
+
+describe('no-indent block rules', () => {
+  it('applies, detects pending changes, omits an empty list, and resets', () => {
+    const onApply = vi.fn();
+    render(
+      <AppPreferencesProvider>
+        <PageSettingsPanel
+          settings={{ ...defaultPageSettings, no_indent_after: ['table'] }}
+          disabled={false}
+          onApply={onApply}
+        />
+      </AppPreferencesProvider>,
+    );
+    const math = screen.getByRole('checkbox', { name: '数式' });
+    const table = screen.getByRole('checkbox', { name: '表' });
+    expect(table).toBeChecked();
+    expect(screen.queryByText('設定はまだ適用されていません。')).toBeNull();
+    fireEvent.click(math);
+    expect(screen.getByText('設定はまだ適用されていません。')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'ページ設定を適用' }));
+    expect(onApply).toHaveBeenLastCalledWith({
+      ...defaultPageSettings,
+      no_indent_after: ['math', 'table'],
+    });
+    fireEvent.click(math);
+    fireEvent.click(table);
+    fireEvent.click(screen.getByRole('button', { name: 'ページ設定を適用' }));
+    expect(onApply).toHaveBeenLastCalledWith(defaultPageSettings);
+    fireEvent.click(math);
+    fireEvent.click(screen.getByRole('button', { name: '標準設定に戻す' }));
+    expect(math).not.toBeChecked();
+    expect(onApply).toHaveBeenLastCalledWith(defaultPageSettings);
+  });
+});
+
+describe('no-indent block rule ordering', () => {
+  it('does not report a pending change when a checkbox is toggled back', () => {
+    render(
+      <AppPreferencesProvider>
+        <PageSettingsPanel
+          settings={{
+            ...defaultPageSettings,
+            no_indent_after: ['math', 'table'],
+          }}
+          disabled={false}
+          onApply={vi.fn()}
+        />
+      </AppPreferencesProvider>,
+    );
+    const math = screen.getByRole('checkbox', { name: '数式' });
+    fireEvent.click(math);
+    expect(screen.getByText('設定はまだ適用されていません。')).toBeTruthy();
+    fireEvent.click(math);
+    expect(screen.queryByText('設定はまだ適用されていません。')).toBeNull();
+  });
+});

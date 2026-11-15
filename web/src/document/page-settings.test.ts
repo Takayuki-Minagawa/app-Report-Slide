@@ -46,6 +46,21 @@ describe('report page settings persistence', () => {
     expect(serializeDocument(markdown)).toEqual(serializeDocument(document));
   });
 
+  it('round-trips the optional no-indent block list and omits it when absent', () => {
+    const document = report();
+    document.metadata.page_settings = {
+      ...settings,
+      no_indent_after: ['math', 'figure', 'table'],
+    };
+    const text = serializeDocument(document);
+    expect(text).toContain('no_indent_after:');
+    expect(parseMarkdown(text).document.metadata.page_settings).toEqual(
+      document.metadata.page_settings,
+    );
+    expect(serializeDocument(report())).not.toContain('no_indent_after');
+    expect(defaultPageSettings).not.toHaveProperty('no_indent_after');
+  });
+
   it('retains legacy metadata and resolves defaults without migrating the source', () => {
     const metadata = {
       paper: 'A5',
@@ -73,6 +88,10 @@ describe('report page settings persistence', () => {
     { first_line_indent: -1 },
     { after_heading_indent: 'invalid' },
     { after_heading_indent: null },
+    { no_indent_after: ['unknown'] },
+    { no_indent_after: ['math', 'math'] },
+    { no_indent_after: 'math' },
+    { no_indent_after: null },
     { margin_top: 71 },
     { paper: 'unknown' },
     { orientation: 'up' },
