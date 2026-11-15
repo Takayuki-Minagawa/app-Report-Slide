@@ -50,7 +50,11 @@ export function PageSettingsPanel({
     Object.entries(scalarDraft(settings)).some(
       ([key, value]) => draft[key] !== value,
     ) ||
-    noIndentAfter.join() !== (settings.no_indent_after ?? []).join() ||
+    noIndentAfterKinds.some(
+      (kind) =>
+        noIndentAfter.includes(kind) !==
+        (settings.no_indent_after ?? []).includes(kind),
+    ) ||
     (draft.after_heading_indent ?? 'same') !==
       (settings.after_heading_indent ?? 'same');
   const indent = Number(draft.first_line_indent);

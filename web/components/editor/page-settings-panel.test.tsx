@@ -118,3 +118,25 @@ describe('no-indent block rules', () => {
     expect(onApply).toHaveBeenLastCalledWith(defaultPageSettings);
   });
 });
+
+describe('no-indent block rule ordering', () => {
+  it('does not report a pending change when a checkbox is toggled back', () => {
+    render(
+      <AppPreferencesProvider>
+        <PageSettingsPanel
+          settings={{
+            ...defaultPageSettings,
+            no_indent_after: ['math', 'table'],
+          }}
+          disabled={false}
+          onApply={vi.fn()}
+        />
+      </AppPreferencesProvider>,
+    );
+    const math = screen.getByRole('checkbox', { name: '数式' });
+    fireEvent.click(math);
+    expect(screen.getByText('設定はまだ適用されていません。')).toBeTruthy();
+    fireEvent.click(math);
+    expect(screen.queryByText('設定はまだ適用されていません。')).toBeNull();
+  });
+});
