@@ -9,16 +9,18 @@ import {
   resolvePageSettings,
 } from '@/src/document/page-settings';
 import {
+  indentContext,
   isFirstLineIndent,
   resolveParagraphIndent,
   type FirstLineIndent,
+  type IndentLead,
 } from '@/src/document/paragraph-format';
 import { isTextRuler } from '@/src/document/text-ruler';
 import { selectedTextBlocks } from '@/src/editor/text-ruler-commands';
 import {
   applyParagraphIndent,
-  editorAfterHeadingIds,
   editorDocumentNodes,
+  editorIndentLeads,
 } from '@/src/editor/paragraph-format';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -73,13 +75,13 @@ export function ParagraphFormatControls({
       editor!.state.doc.nodeAt(block.position)!.toJSON() as ParagraphNode,
   );
   const settings = resolvePageSettings(document.metadata);
-  const afterHeading = editor
-    ? editorAfterHeadingIds(
+  const leads = editor
+    ? editorIndentLeads(
         editorDocumentNodes(editor.state.doc),
         document,
         chapterPrefix,
       )
-    : new Set<string>();
+    : new Map<string, IndentLead>();
   const values = paragraphs.map((paragraph) => {
     const indent = paragraph.attrs.firstLineIndent;
     return isFirstLineIndent(indent)
@@ -93,10 +95,11 @@ export function ParagraphFormatControls({
   const mixed = new Set(values).size > 1;
   const selected = mixed ? 'mixed' : values[0];
   const resolved = paragraphs.map((paragraph) =>
-    resolveParagraphIndent(paragraph, settings, {
-      topLevel: true,
-      afterHeading: afterHeading.has(paragraph.attrs.nodeId),
-    }),
+    resolveParagraphIndent(
+      paragraph,
+      settings,
+      indentContext(leads, paragraph.attrs.nodeId, true),
+    ),
   );
   const signatures = new Set(
     resolved.map((value, index) => {
@@ -136,13 +139,17 @@ export function ParagraphFormatControls({
       ? ja
         ? '見出し直後の設定'
         : 'After-heading rule'
-      : result?.source === 'explicit'
+      : result?.source === 'block'
         ? ja
-          ? 'この段落の指定'
-          : 'Paragraph override'
-        : ja
-          ? '文書の設定'
-          : 'Document setting';
+          ? '直前のブロックの設定'
+          : 'After-block rule'
+        : result?.source === 'explicit'
+          ? ja
+            ? 'この段落の指定'
+            : 'Paragraph override'
+          : ja
+            ? '文書の設定'
+            : 'Document setting';
   return (
     <fieldset
       className="space-y-2 rounded-md border p-2 text-xs"
