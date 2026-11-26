@@ -16,6 +16,15 @@ Input: native document JSON or KUMI Markdown (one Report or Slide).
 Batch writes HTML, .kumi.json, .md, .kumi.zip and referenced local assets.
 Options: --assets-dir DIR, --locale ja|en, --check-layout,
          --check-out FILE, --fail-on-overflow, --help
+         --style FILE.css  Report only. Appended to report_style.css of the document, so
+                           every output (HTML, PDF, JSON, Markdown, ZIP) carries the same style.
+         --pdf [FILE]      Report only. Prints the inspected layout with Chromium.
+                           With --output-dir the file is BASENAME.pdf (no FILE).
+         --docx [FILE]     Report only. Word document, built in Chromium like the editor does.
+                           With --output-dir the file is BASENAME.docx (no FILE).
+         --check-docx      Converts the Word document with LibreOffice (soffice) and checks
+                           contents page numbers, caption numbers and widths. Implies --docx.
+--pdf, --docx and --check-docx require: npm run install:browser
 --check-layout requires: npm run install:browser
 Report report_settings.toc_page_numbers=true automatically checks physical pagination
 and also requires Chromium. Without this setting or --check-layout, no browser is needed.
@@ -36,14 +45,28 @@ function parseArgs(args) {
     'assets-dir',
     'locale',
     'check-out',
+    'style',
   ]);
-  const flags = new Set(['check-layout', 'fail-on-overflow', 'help']);
+  const flags = new Set([
+    'check-layout',
+    'fail-on-overflow',
+    'help',
+    'check-docx',
+  ]);
+  // A path in single-file mode; a bare flag with --output-dir.
+  const optionalValues = new Set(['pdf', 'docx']);
   const options = {};
   for (let i = 0; i < args.length; i++) {
     const key = args[i].startsWith('--') ? args[i].slice(2) : '';
-    if ((!values.has(key) && !flags.has(key)) || key in options)
+    if (
+      (!values.has(key) && !flags.has(key) && !optionalValues.has(key)) ||
+      key in options
+    )
       throw new Error(`Unknown or duplicate argument: ${args[i]}`);
     if (flags.has(key)) options[key] = true;
+    else if (optionalValues.has(key))
+      options[key] =
+        args[i + 1] && !args[i + 1].startsWith('--') ? args[++i] : true;
     else {
       const value = args[++i];
       if (!value || value.startsWith('--'))
@@ -67,6 +90,14 @@ function parseArgs(args) {
     );
   if (options.name && !options['output-dir'])
     throw new Error('--name requires --output-dir');
+  if (options['check-docx'] && !options.docx) options.docx = true;
+  for (const key of ['pdf', 'docx']) {
+    if (!(key in options)) continue;
+    if (options['output-dir'] && options[key] !== true)
+      throw new Error(`--${key} takes no file name with --output-dir`);
+    if (!options['output-dir'] && options[key] === true)
+      throw new Error(`--${key} requires a file name with --output`);
+  }
   if (options['check-out'] || options['fail-on-overflow'])
     options['check-layout'] = true;
   return options;
@@ -121,6 +152,24 @@ async function run() {
         }),
         ...(options['zip-out'] && { zip: resolve(options['zip-out']) }),
       };
+  for (const key of ['pdf', 'docx']) {
+    if (options[key])
+      destinations[key] = outputDir
+        ? join(outputDir, `${stem}.${key}`)
+        : resolve(options[key]);
+  }
+  if (options['check-docx'])
+    destinations.docxCheck = outputDir
+      ? join(outputDir, stem + '.docx-check.json')
+      : destinations.docx.replace(/(\.docx)?$/i, '.docx-check.json');
+  let styleSource;
+  if (options.style) {
+    const stylePath = await realpath(resolve(options.style));
+    const styleInfo = await stat(stylePath);
+    if (!styleInfo.isFile() || styleInfo.size > 64 * 1024)
+      throw new Error('--style must be a CSS file no larger than 64 KiB');
+    styleSource = await readFile(stylePath, 'utf8');
+  }
   if (options['check-out']) destinations.layout = resolve(options['check-out']);
   else if (outputDir && options['check-layout'])
     destinations.layout = join(outputDir, stem + '.layout.json');
@@ -160,7 +209,27 @@ async function run() {
             diagnostics: [],
           }
         : api.parseMarkdown(source);
-    const document = api.validateDocumentData(parsed.document);
+    let document = api.validateDocumentData(parsed.document);
+    if (
+      document.type !== 'report' &&
+      (styleSource !== undefined || options.pdf || options.docx)
+    )
+      throw new Error('--style, --pdf and --docx require a Report document');
+    if (styleSource !== undefined) {
+      // Stored in the document, after its own CSS, so that opening the saved
+      // Markdown, JSON or ZIP in the editor reproduces exactly this output.
+      const existing = document.metadata.report_style?.css;
+      document = api.validateDocumentData({
+        ...document,
+        metadata: {
+          ...document.metadata,
+          report_style: {
+            ...document.metadata.report_style,
+            css: [existing, styleSource].filter(Boolean).join('\n'),
+          },
+        },
+      });
+    }
     const physicalPagination =
       document.type === 'report' &&
       document.metadata.report_settings?.toc_page_numbers === true;
@@ -278,13 +347,32 @@ async function run() {
     }
     let pages = api.splitRenderedPages(document).length;
     let layout;
-    if (options['check-layout'] || physicalPagination) {
+    if (options['check-layout'] || physicalPagination || destinations.pdf) {
       const { inspectLayout } = await import('./layout.mjs');
-      layout = await inspectLayout(rendered.html, pages, {
+      // The PDF is printed from the very page that was measured.
+      const inspected = await inspectLayout(rendered.html, pages, {
         physicalPagination,
+        pdf: Boolean(destinations.pdf),
       });
+      content.pdf = inspected.pdf;
+      delete inspected.pdf;
+      layout = inspected;
       if (physicalPagination) pages = layout.pagination.pageCount;
-      content.layout = JSON.stringify(layout, null, 2) + '\n';
+      if (destinations.layout)
+        content.layout = JSON.stringify(layout, null, 2) + '\n';
+    }
+    let docx;
+    if (destinations.docx) {
+      const { exportDocx } = await import('./docx.mjs');
+      docx = await exportDocx(document, assets, options.locale || 'ja');
+      content.docx = docx.bytes;
+      if (destinations.docxCheck) {
+        const { checkDocx } = await import('./docx-check.mjs');
+        docx.check = await checkDocx(docx.bytes, document, api, {
+          locale: options.locale || 'ja',
+        });
+        content.docxCheck = JSON.stringify(docx.check, null, 2) + '\n';
+      }
     }
     const outputs = [
       ...Object.entries(destinations).map(([kind, path]) => ({
@@ -298,7 +386,8 @@ async function run() {
     await checkDestinations(outputs, protectedPaths, legacyJsonInput);
     await writeOutputs(outputs);
     const failedLayout =
-      options['fail-on-overflow'] && layout?.status === 'overflow';
+      (options['fail-on-overflow'] && layout?.status === 'overflow') ||
+      docx?.check?.status === 'fail';
     console.log(
       JSON.stringify(
         {
@@ -321,6 +410,13 @@ async function run() {
             ...api.analyzeDocument(document).diagnostics,
           ],
           ...(layout && { layout }),
+          ...(docx && {
+            docx: {
+              bytes: docx.bytes.length,
+              warnings: docx.warnings,
+              ...(docx.check && { check: docx.check }),
+            },
+          }),
         },
         null,
         2,

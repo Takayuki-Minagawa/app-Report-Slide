@@ -1094,12 +1094,6 @@
 .report-cover[data-cover-layout='centered'] .report-cover-fields > div {
   display: block;
 }
-/* Field names stay available to assistive technology. */
 .report-cover[data-cover-layout='centered'] .report-cover-fields dt {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+  display: none;
 }

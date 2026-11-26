@@ -4,7 +4,7 @@ import { chromium } from 'playwright';
 export async function inspectLayout(
   html,
   expectedPages,
-  { physicalPagination = false } = {},
+  { physicalPagination = false, pdf = false } = {},
 ) {
   const browser = await chromium.launch({ headless: true });
   try {
@@ -112,6 +112,13 @@ export async function inspectLayout(
     return {
       ...result,
       ...(pagination && { pagination }),
+      // Printed after measuring, from the same completed layout.
+      ...(pdf && {
+        pdf: await page.pdf({
+          preferCSSPageSize: true,
+          printBackground: true,
+        }),
+      }),
       browser: 'chromium',
       browserVersion: browser.version(),
       viewport: { width: 1440, height: 1000 },
