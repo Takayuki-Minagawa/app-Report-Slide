@@ -87,6 +87,8 @@ export function projectChapterDocument(
   for (const key of [
     'page_settings',
     'report_settings',
+    // The page style belongs to the whole report, like its settings.
+    'report_style',
     'paper',
     'orientation',
     'toc',
