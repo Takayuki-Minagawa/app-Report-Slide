@@ -45,12 +45,20 @@ const accents: Record<string, string> = {
 };
 const bars = new Set(['¯', 'ˉ', '‾', '_', '\u0305', '\u0332', '―', '⎯']);
 
-function run(text: string, style?: 'p' | 'b' | 'bi' | 'i', normal = false) {
+type Variant = {
+  style?: 'p' | 'b' | 'bi' | 'i';
+  script?: 'script' | 'fraktur' | 'double-struck' | 'sans-serif' | 'monospace';
+};
+
+function run(text: string, variant: Variant = {}, normal = false) {
   if (!text) return '';
+  // m:scr precedes m:sty in the schema.
   const properties = normal
     ? '<m:rPr><m:nor/></m:rPr>'
-    : style
-      ? `<m:rPr><m:sty m:val="${style}"/></m:rPr>`
+    : variant.script || variant.style
+      ? `<m:rPr>${variant.script ? `<m:scr m:val="${variant.script}"/>` : ''}${
+          variant.style ? `<m:sty m:val="${variant.style}"/>` : ''
+        }</m:rPr>`
       : '';
   return `<m:r>${properties}<w:rPr><w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math"/></w:rPr><m:t xml:space="preserve">${escapeXml(text)}</m:t></m:r>`;
 }
@@ -60,25 +68,47 @@ const text = (node: Element) => node.textContent ?? '';
 const isOperator = (node: Element | undefined, set: Set<string>) =>
   node?.localName === 'mo' && set.has(text(node).trim());
 
-function variant(node: Element): 'p' | 'b' | 'bi' | 'i' | undefined {
-  switch (node.getAttribute('mathvariant')) {
+function variant(node: Element): Variant {
+  const value = node.getAttribute('mathvariant');
+  switch (value) {
     case 'normal':
-      return 'p';
+      return { style: 'p' };
     case 'bold':
-      return 'b';
+      return { style: 'b' };
     case 'bold-italic':
-      return 'bi';
+      return { style: 'bi' };
     case 'italic':
-      return 'i';
+      return { style: 'i' };
+    case 'script':
+    case 'fraktur':
+    case 'double-struck':
+    case 'monospace':
+    case 'sans-serif':
+      return { script: value, style: 'p' };
+    case 'bold-script':
+      return { script: 'script', style: 'b' };
+    case 'bold-fraktur':
+      return { script: 'fraktur', style: 'b' };
+    case 'bold-sans-serif':
+      return { script: 'sans-serif', style: 'b' };
+    case 'sans-serif-italic':
+      return { script: 'sans-serif', style: 'i' };
+    case 'sans-serif-bold-italic':
+      return { script: 'sans-serif', style: 'bi' };
     case null:
       // MathML renders a multi-letter identifier (sin, max) upright.
       return node.localName === 'mi' && Array.from(text(node)).length > 1
-        ? 'p'
-        : undefined;
+        ? { style: 'p' }
+        : {};
     default:
-      // Script, fraktur and double-struck arrive as their own code points.
-      return 'p';
+      throw new Error(`Unsupported mathvariant: ${value}`);
   }
+}
+
+/** A token holds text only; markup inside it (a stacked operator) is not text. */
+function token(node: Element): string {
+  if (node.children.length) throw new Error('Unsupported nested token');
+  return text(node);
 }
 
 function arg(name: string, content: string) {
@@ -179,13 +209,19 @@ function convert(node: Element): string {
       );
     case 'mi':
     case 'mn':
-      return run(text(node), variant(node));
     case 'mo':
-      return run(text(node), variant(node));
+      return run(token(node), variant(node));
     case 'mtext':
-      return run(text(node), undefined, true);
+      // KaTeX writes negative space as a space with an invisible separator.
+      return token(node).includes('\u2063') ? '' : run(token(node), {}, true);
     case 'mspace':
-      return node.getAttribute('linebreak') ? '' : run(' ', undefined, true);
+      // A line break inside one equation has no single-equation equivalent.
+      if (node.getAttribute('linebreak'))
+        throw new Error('Unsupported line break');
+      // Negative space only tightens; it must not become a visible gap.
+      return (node.getAttribute('width') ?? '').trim().startsWith('-')
+        ? ''
+        : run(' ', {}, true);
     case 'mfrac':
       return `<m:f>${
         /^0(?:[a-z%]*)$/.test(node.getAttribute('linethickness') ?? '')
@@ -253,6 +289,9 @@ function convert(node: Element): string {
     case 'mphantom':
       return `<m:phant><m:phantPr><m:show m:val="0"/></m:phantPr>${arg('e', row(children))}</m:phant>`;
     case 'menclose':
+      // Only a plain frame; a strike-through would otherwise turn into a box.
+      if (!/^(?:box|roundedbox|)$/.test(node.getAttribute('notation') ?? ''))
+        throw new Error('Unsupported enclosure');
       return `<m:borderBox>${arg('e', row(children))}</m:borderBox>`;
     case 'merror':
       throw new Error('Invalid LaTeX');
@@ -261,6 +300,8 @@ function convert(node: Element): string {
   }
 }
 
+const unsupportedColor = '#fe0b0c';
+
 /** OMML for one equation, without the surrounding paragraph element. */
 export function latexToOmml(latex: string, display: boolean): string {
   const html = katex.renderToString(latex, {
@@ -268,8 +309,14 @@ export function latexToOmml(latex: string, display: boolean): string {
     throwOnError: true,
     trust: false,
     strict: 'ignore',
+    // Commands KaTeX declines (untrusted links, HTML classes) are drawn as
+    // their own name in this colour; such an equation is not converted.
+    errorColor: unsupportedColor,
     output: 'mathml',
   });
+  if (html.includes(unsupportedColor)) throw new Error('Unsupported command');
+  // An equation tag would become a matrix cell rather than a number.
+  if (/\\tag\b/.test(latex)) throw new Error('Unsupported tag');
   const start = html.indexOf('<math');
   const end = html.lastIndexOf('</math>');
   if (start < 0 || end < 0) throw new Error('KaTeX produced no MathML');
@@ -284,11 +331,19 @@ export function latexToOmml(latex: string, display: boolean): string {
   return `<m:oMath xmlns:m="${mathNamespace}" xmlns:w="${wordNamespace}">${body}</m:oMath>`;
 }
 
-/** A paragraph child (inline) or, with `display`, a centred display equation. */
-export function mathComponent(latex: string, display: boolean) {
+/**
+ * A paragraph child. `ownParagraph` wraps a display equation as the only
+ * content of its paragraph; without it the equation can share a line with
+ * tabs and its number.
+ */
+export function mathComponent(
+  latex: string,
+  display: boolean,
+  ownParagraph = display,
+) {
   const equation = latexToOmml(latex, display);
   const parsed = ImportedXmlComponent.fromXmlString(
-    display
+    ownParagraph
       ? `<m:oMathPara xmlns:m="${mathNamespace}" xmlns:w="${wordNamespace}">${equation.replace(
           / xmlns:m="[^"]+" xmlns:w="[^"]+"/,
           '',

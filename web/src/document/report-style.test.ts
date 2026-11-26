@@ -45,7 +45,10 @@ describe('report style data', () => {
     expect(css).toContain(
       ".report-preview[data-theme] .document-renderer h1{font-family:'Noto Sans JP'",
     );
-    expect(css).toContain('font-size:1.333em');
+    expect(css).toContain('font-size:calc(var(--report-font-size) * 1.333)');
+    // A table caption is 10pt although it sits inside the 9pt table.
+    expect(css).toContain(':is(figcaption,caption){font-family');
+    expect(css).toContain('font-size:calc(var(--report-font-size) * 0.952)');
     expect(css).toContain('border:0.75pt solid #000000');
     expect(css).toContain("li[data-toc-level='1']");
     expect(css).not.toContain('%P');
@@ -81,7 +84,9 @@ describe('report style data', () => {
       gothic: 'Yu Gothic',
       latin: 'Times New Roman',
     });
-    expect(reportStyleCss(metadata)).toContain('font-size:1.5em');
+    expect(reportStyleCss(metadata)).toContain(
+      'font-size:calc(var(--report-font-size) * 1.5)',
+    );
   });
 
   it('writes only the specified values for a theme without style data', () => {
@@ -91,6 +96,17 @@ describe('report style data', () => {
     });
     expect(css).toBe(
       '.report-preview[data-theme] .document-renderer :is(figcaption,caption){text-align:left}',
+    );
+  });
+
+  it('sizes spacing from the body size, not from the heading it belongs to', () => {
+    // 16pt above an h1 of unknown size on a 10.5pt body.
+    expect(
+      reportStyleCss({
+        report_style: { headings: { h1: { space_before: 16 } } },
+      }),
+    ).toBe(
+      '.report-preview[data-theme] .document-renderer h1{margin-top:calc(var(--report-font-size) * 1.524)}',
     );
   });
 

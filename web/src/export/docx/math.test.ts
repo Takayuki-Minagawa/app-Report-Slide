@@ -74,6 +74,37 @@ describe('LaTeX to Word equations (OMML)', () => {
     expect(body('a < b')).toContain('<m:t>&lt;</m:t>');
   });
 
+  it('keeps letter styles Word has and refuses what it cannot express', () => {
+    expect(body('\\mathbb{R}')).toContain(
+      '<m:rPr><m:scr m:val="double-struck"/><m:sty m:val="p"/></m:rPr><m:t>R</m:t>',
+    );
+    expect(body('\\mathcal{L}')).toContain('<m:scr m:val="script"/>');
+    expect(body('\\mathfrak{g}')).toContain('<m:scr m:val="fraktur"/>');
+    // Negative thin space leaves no visible gap.
+    expect(body('a\\!b')).toBe(
+      '<m:r><m:t>a</m:t></m:r><m:r><m:t>b</m:t></m:r>',
+    );
+    for (const latex of [
+      '\\cancel{x}',
+      'a \\\\ b',
+      'a = b \\tag{3}',
+      '\\htmlClass{a}{b}',
+      '\\href{https://example.com}{x}',
+      '\\stackrel{def}{=}',
+    ])
+      expect(() => latexToOmml(latex, true), latex).toThrow();
+  });
+
+  it('converts environments that only exist in display mode', () => {
+    expect(
+      latexToOmml('\\begin{align} a &= b \\\\ c &= d \\end{align}', true),
+    ).toContain('<m:m>');
+    // Sums take limits above and below in a display equation.
+    expect(body('\\sum_{i=1}^{n} x_i', true)).toContain(
+      '<m:limLoc m:val="undOvr"/>',
+    );
+  });
+
   it('rejects invalid LaTeX instead of writing a wrong equation', () => {
     expect(() => latexToOmml('\\frac{a}{', true)).toThrow();
     expect(() => latexToOmml('\\notacommand{x}', true)).toThrow();

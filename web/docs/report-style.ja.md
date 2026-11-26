@@ -31,7 +31,7 @@ Reportの紙面の書式は、次の3層で決まります。後のものが前�
 ```yaml
 report_settings:
   caption_separator: ': ' # 図 1: 表題（既定は " — "）
-  number_depth: 2 # H2まで番号を付ける。それより下は番号を数えない
+  number_depth: 2 # H2まで番号を付ける。それより下は numbered=true でも付けず、数えない
   appendix_numbering: letter # auto（既定）| letter | continue
   toc_title: 目 次
   page_number_format: '- {n} -' # {n}=ページ番号、{total}=本文の総ページ数

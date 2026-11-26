@@ -89,9 +89,9 @@ describe('stable formatting hooks in the report DOM', () => {
     ).toBe('centered');
     const bodyPage = page.querySelector('[data-report-page-kind="body"]')!;
     expect(bodyPage.querySelector('footer')!.textContent).toBe('- 1 / 1 -');
-    expect(bodyPage.getAttribute('data-page-number-position')).toBe(
-      'bottom-right',
-    );
+    // Logical pages keep their centred number; position belongs to the
+    // paginated layout and to Word.
+    expect(bodyPage.hasAttribute('data-page-number-position')).toBe(false);
   });
 
   it('omits an empty callout title and uses theme wording only where it was written for the locale', () => {
@@ -105,11 +105,6 @@ describe('stable formatting hooks in the report DOM', () => {
     expect(themed.querySelector('.callout-title')!.textContent).toBe('（注）');
     expect(themed.querySelector('.document-toc h2')!.textContent).toBe('目 次');
     expect(themed.querySelector('footer')!.textContent).toBe('- 1 -');
-    expect(
-      themed
-        .querySelector('[data-report-page-kind="body"]')!
-        .hasAttribute('data-page-number-position'),
-    ).toBe(false);
     const english = render('theme: report-jp\ntoc: true', body, 'en');
     expect(english.querySelector('.callout-title')!.textContent).toBe('Note');
   });

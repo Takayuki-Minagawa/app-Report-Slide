@@ -175,6 +175,24 @@ describe('appendix letters and numbering depth', () => {
     expect(analysis.labels.get('fig:a')?.number).toBe('1');
   });
 
+  it('keeps section numbers under an appendix heading that has no letter', () => {
+    const analysis = analyzeDocument(
+      report(
+        'number_sections: true\nreport_settings:\n  appendix_numbering: letter',
+        '# One\n\n# Two\n\n# Notes\n{appendix=true numbered=false}\n\n## Data\n\n### Deep\n\n# Tables\n{appendix=true}\n\n## List',
+      ),
+    );
+    expect(analysis.outline.map((entry) => entry.number)).toEqual([
+      '1',
+      '2',
+      undefined,
+      '2.1',
+      '2.1.1',
+      'A',
+      'A.1',
+    ]);
+  });
+
   it('leaves levels below number_depth unnumbered without consuming a number', () => {
     const analysis = analyzeDocument(
       report(

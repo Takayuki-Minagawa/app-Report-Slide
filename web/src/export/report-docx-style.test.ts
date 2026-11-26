@@ -296,7 +296,8 @@ describe('Word export from the report style data', () => {
         ).document.getElementsByTagName('w:tbl')[0],
         'w:tr',
       ).map((row) => row.getElementsByTagName('w:keepNext').length);
-    expect(await keepNext('never')).toEqual([0, 0]);
+    // A header row always stays with the row after it.
+    expect(await keepNext('never')).toEqual([2, 0]);
     // Every row but the last is tied to the next one.
     expect(await keepNext('always')).toEqual([2, 0]);
     expect(await keepNext('auto')).toEqual([2, 0]);
@@ -306,9 +307,10 @@ describe('Word export from the report style data', () => {
     );
     const rows = all((await exported(long)).document, 'w:tr');
     expect(rows).toHaveLength(81);
+    // Only the header row is tied to the next one; the long table may break.
     expect(
-      rows.every((row) => row.getElementsByTagName('w:keepNext').length === 0),
-    ).toBe(true);
+      rows.map((row) => row.getElementsByTagName('w:keepNext').length),
+    ).toEqual([1, ...Array(80).fill(0)]);
   });
 
   it('warns that document CSS does not reach Word', async () => {
@@ -362,7 +364,9 @@ describe('Word fields for numbers, references and contents', () => {
 
     // Caption: "表 " + SEQ(1) is bookmarked; the text follows outside it.
     const caption = all(file.document, 'w:p').find(
-      (entry) => entry.textContent === '表 1 — 条件',
+      (entry) =>
+        entry.textContent === '表 1 — 条件' &&
+        attribute(entry, 'w:pStyle', 'w:val') === 'Caption',
     )!;
     expect(attribute(caption, 'w:pStyle', 'w:val')).toBe('Caption');
     const sequence = caption.getElementsByTagName('w:fldSimple')[0];

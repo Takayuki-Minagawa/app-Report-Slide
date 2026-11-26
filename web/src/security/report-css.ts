@@ -39,20 +39,29 @@ export function reportCssIssues(value: unknown): string[] {
   // oxlint-disable-next-line no-control-regex -- Control characters have no use in a style sheet.
   if (/[\u0000-\u0008\u000b\u000e-\u001f\u007f]/.test(value))
     return ['制御文字は使用できません。'];
+  // Checked on the raw text, before comments and strings are set aside: the
+  // HTML parser ends a style element at "</style" wherever it appears.
+  if (value.includes('<')) return ['「<」は使用できません。'];
   const css = value.replace(/\r\n?|\f/g, '\n');
   const issues: string[] = [];
   // Strings and comments are removed before balancing; an unterminated one would
   // swallow the closing brace of the scope the style sheet is nested in.
   let structure = '';
   const closers: string[] = [];
-  // Text after the last complete rule; must be empty at the end.
-  let outside = '';
+  // What each open "{" holds. Declarations belong in style rules (and @page);
+  // at the top level or directly inside @media and similar they would style
+  // the scope element itself.
+  const blocks: Array<'rule' | 'group' | 'declarations'> = [];
+  // Text since the last "{", "}" or ";" at each block level.
+  const pending: string[] = [''];
+  const holdsRulesOnly = () => !blocks.length || blocks.at(-1) === 'group';
   for (let index = 0; index < css.length; index++) {
     const character = css[index];
     if (character === '\\') {
       // An escaped newline or end of input cannot be judged safely.
       if (index + 1 >= css.length) return ['末尾の「\\」は使用できません。'];
       structure += css.slice(index, index + 2);
+      pending[pending.length - 1] += css.slice(index, index + 2);
       index++;
     } else if (character === '/' && css[index + 1] === '*') {
       const end = css.indexOf('*/', index + 2);
@@ -66,27 +75,43 @@ export function reportCssIssues(value: unknown): string[] {
         end += css[end] === '\\' ? 2 : 1;
       }
       if (end >= css.length) return ['文字列が閉じられていません。'];
-      // The content of a string is inert, apart from ending the style element.
-      if (css.slice(index, end + 1).includes('<'))
-        return ['「<」は使用できません。'];
       structure += '""';
+      pending[pending.length - 1] += '""';
       index = end;
     } else {
+      const nested = closers.some((closer) => closer !== '}');
       if ('{[('.includes(character))
         closers.push({ '{': '}', '[': ']', '(': ')' }[character]!);
       else if ('}])'.includes(character) && closers.pop() !== character)
         return ['括弧の対応が正しくありません。'];
-      // Outside every rule there are only rules. A declaration there would
-      // style the scope element itself and stops the paginated layout.
-      else if (character === ';' && !closers.length)
-        return ['セレクターのない宣言は使用できません。'];
-      if (character === '}' && !closers.length) outside = '';
-      else if (!closers.length) outside += character;
+      if (nested || '[]()'.includes(character))
+        pending[pending.length - 1] += character;
+      else if (character === '{') {
+        const prelude = pending[pending.length - 1].trim().toLowerCase();
+        blocks.push(
+          !prelude.startsWith('@')
+            ? 'rule'
+            : /^@(?:page|(?:top|bottom|left|right)-)/.test(prelude)
+              ? 'declarations'
+              : 'group',
+        );
+        pending[pending.length - 1] = '';
+        pending.push('');
+      } else if (character === '}') {
+        if (blocks.at(-1) === 'group' && pending.at(-1)!.trim())
+          return ['セレクターのない宣言は使用できません。'];
+        blocks.pop();
+        pending.pop();
+        pending[pending.length - 1] = '';
+      } else if (character === ';') {
+        if (holdsRulesOnly()) return ['セレクターのない宣言は使用できません。'];
+        pending[pending.length - 1] = '';
+      } else pending[pending.length - 1] += character;
       structure += character;
     }
   }
   if (closers.length) return ['括弧が閉じられていません。'];
-  if (outside.trim()) return ['セレクターのない宣言は使用できません。'];
+  if (pending[0].trim()) return ['セレクターのない宣言は使用できません。'];
   // Whitespace and comments cannot split these tokens in a way browsers accept,
   // but removing them only makes the check stricter.
   const decoded = decodeEscapes(structure).toLowerCase();
@@ -100,7 +125,7 @@ export function reportCssIssues(value: unknown): string[] {
   // style sheet on its own, where it stops the paginated layout.
   if (/(?:^|[{};,])\s*[+~>]/.test(decoded))
     issues.push('結合子（+ ~ >）で始まるセレクターは使用できません。');
-  for (const [, name] of decoded.matchAll(/@([a-z-]*)/g)) {
+  for (const [, name] of decoded.matchAll(/@([\w-]*)/g)) {
     if (
       !/^(?:media|supports|page|layer|container|(?:top|bottom|left|right)-[a-z-]+)$/.test(
         name,

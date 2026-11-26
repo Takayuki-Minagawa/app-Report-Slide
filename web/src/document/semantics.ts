@@ -126,7 +126,9 @@ export function analyzeDocument(document: DocumentData): DocumentAnalysis {
         ) {
           // Chapter captions and displayed headings must share the structural
           // H1 counter, even when headings use the plain section-number format.
-          if (chapterHeadings || chapterCaptions || appendixMode) {
+          // Plain section numbers move to "A.1" only once a letter exists; an
+          // unnumbered appendix heading leaves its sub-headings as they were.
+          if (chapterHeadings || chapterCaptions || appendix > 0) {
             if (level === 1) number = currentChapter;
             else {
               for (let index = 0; index < level - 2; index++) {

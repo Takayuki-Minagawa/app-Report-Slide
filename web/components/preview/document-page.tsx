@@ -76,12 +76,6 @@ export function DocumentPage({
       }
       data-page={index + 1}
       data-report-page-kind={!slide ? kind : undefined}
-      // The logical preview has always centred its numbers; move them only on request.
-      data-page-number-position={
-        report && document.metadata.report_settings?.page_number_position
-          ? report.page_number_position
-          : undefined
-      }
       data-slide-layout-canvas={figureInteraction ? '' : undefined}
     >
       {kind === 'cover' ? (

@@ -119,6 +119,7 @@ export async function checkDocx(bytes, document, api, { locale = 'ja' } = {}) {
   const settings = api.resolveReportSettings(document.metadata);
   const analysis = api.analyzeDocument(document);
   const issues = [];
+  const separator = settings.caption_separator ?? ' — ';
 
   // 1. Caption numbers and references are the ones KUMI shows.
   const captions = {};
@@ -142,9 +143,10 @@ export async function checkDocx(bytes, document, api, { locale = 'ja' } = {}) {
             ? equationParagraphs.some((paragraph) => paragraph.endsWith(label))
             : captionParagraphs.some(
                 (paragraph) =>
-                  // "表 1" must not be satisfied by "表 10" or "表 1.2".
-                  paragraph.startsWith(label) &&
-                  !/[\d.]/.test(paragraph[label.length] ?? ''),
+                  // The whole label: "表 1" alone or followed by the configured
+                  // separator, so "表 10" and "表 1.2" do not stand in for it.
+                  paragraph === label ||
+                  paragraph.startsWith(label + separator),
               )),
       );
     captions[key] = {
@@ -161,11 +163,14 @@ export async function checkDocx(bytes, document, api, { locale = 'ja' } = {}) {
     [...analysis.targets.keys()].map((id, index) => [id, `kumi_${index + 1}`]),
   );
   const expectedReferences = [];
+  // A reference without a target is printed as its raw label in every output.
+  const unresolved = [];
   const collect = (nodes) => {
     for (const node of nodes ?? []) {
       if (node.type === 'reference') {
         const target = analysis.labels.get(node.attrs.target);
-        if (target)
+        if (!target) unresolved.push(node.attrs.target);
+        else
           expectedReferences.push({
             anchor: anchors.get(target.nodeId),
             text: api.formatSemanticReference(target, locale),
@@ -228,6 +233,8 @@ export async function checkDocx(bytes, document, api, { locale = 'ja' } = {}) {
   }
   for (const entry of wrongReferences)
     issues.push({ code: 'reference', detail: entry });
+  for (const label of unresolved)
+    issues.push({ code: 'unresolved-reference', detail: label });
 
   // 2. Nothing is wider than the text area.
   const emuPerTwip = 635;
@@ -394,6 +401,7 @@ export async function checkDocx(bytes, document, api, { locale = 'ja' } = {}) {
       expected: expectedReferences.length,
       found: actualReferences.length,
       wrong: wrongReferences,
+      unresolved,
     },
     wide,
     contents,

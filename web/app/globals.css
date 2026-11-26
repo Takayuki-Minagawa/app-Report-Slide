@@ -835,7 +835,7 @@
 .kumi-report-style-frame {
   width: 100%;
   padding: 16px 0;
-  contain: layout paint;
+  contain: layout paint style;
   isolation: isolate;
 }
 .kumi-report-style-scope {

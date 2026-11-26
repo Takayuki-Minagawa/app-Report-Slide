@@ -370,7 +370,12 @@ test('exports and checks a Word document from the command line', async (t) => {
     missing: [],
   });
   assert.equal(check.captions.equations.expected, 1);
-  assert.deepEqual(check.references, { expected: 2, found: 2, wrong: [] });
+  assert.deepEqual(check.references, {
+    expected: 2,
+    found: 2,
+    wrong: [],
+    unresolved: [],
+  });
   assert.deepEqual(check.wide, []);
   const { findOffice } = await import('../docx-check.mjs');
   if (await findOffice()) {
@@ -465,6 +470,33 @@ test('the Word check reports a wrong reference, a wrong caption number and an ov
     assert.equal(wrong.status, 'fail', reference);
     assert.equal(wrong.issues[0].code, 'reference');
   }
+
+  // A separator that starts with a full stop is still a caption of "表 1".
+  const dotted = await checkDocx(
+    body(
+      link('kumi_1', '表 1') + captions().replaceAll(' — Caption', '. Caption'),
+    ),
+    document,
+    { ...api, resolveReportSettings: () => ({ caption_separator: '. ' }) },
+  );
+  assert.equal(dotted.status, 'pass', JSON.stringify(dotted.issues));
+
+  const unresolved = await checkDocx(
+    body(link('kumi_1', '表 1') + captions()),
+    {
+      ...document,
+      children: [
+        ...document.children,
+        {
+          type: 'paragraph',
+          content: [{ type: 'reference', attrs: { target: 'tab:none' } }],
+        },
+      ],
+    },
+    api,
+  );
+  assert.deepEqual(unresolved.references.unresolved, ['tab:none']);
+  assert.equal(unresolved.status, 'fail');
 
   const wide = await checkDocx(
     body(link('kumi_1', '表 1') + captions(), 9100),
@@ -568,4 +600,114 @@ test('prints a report without physical pagination as one PDF page per page', asy
   assert.ok(
     Math.abs(size.width - 595.3) < 1 && Math.abs(size.height - 841.9) < 1,
   );
+});
+
+const sweep = (settings) => `---
+type: report
+toc: true
+report_settings:
+  toc_page: true
+  toc_page_numbers: true
+  front_matter_page_numbers: roman
+  page_number_format: "{n} / {total}"
+${settings}
+---
+
+${Array.from({ length: 16 }, (_, index) => index + 12)
+  .map(
+    (lines) => `# Case ${lines}
+
+${Array.from({ length: lines }, (_, index) => `Filler line ${index + 1}.`).join('\n\n')}
+
+| Row | Value |
+| --- | --- |
+${Array.from({ length: 6 }, (_, index) => `| ${index + 1} | ${index} |`).join('\n')}
+
+## Section of case ${lines}
+
+${Array.from({ length: 4 }, (_, index) => `### Entry ${index + 1} of case ${lines}\n\nText.`).join('\n\n')}`,
+  )
+  .join('\n\n::: pagebreak\n:::\n\n')}
+`;
+
+async function sweepLayout(t, settings) {
+  const item = await withFixture(t);
+  const input = join(item.root, 'sweep.md');
+  await writeFile(input, sweep(settings));
+  const result = await run(
+    ['--input', input, '--output-dir', item.output, '--fail-on-overflow'],
+    { timeout: 180_000 },
+  );
+  assert.equal(result.code, 0, result.stderr || result.stdout);
+  const { chromium } = await import('playwright');
+  const browser = await chromium.launch();
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  await page.setContent(await readFile(result.result.outputs.html, 'utf8'));
+  return {
+    result: result.result,
+    layout: await page.evaluate(async () => {
+      await window.kumiPaginationReady;
+      const pages = [...document.querySelectorAll('.pagedjs_page')];
+      // Fragments of one source table share data-ref; count pages per table.
+      const tables = new Map();
+      for (const table of document.querySelectorAll('.report-layout table')) {
+        const key = table.dataset.ref;
+        if (!tables.has(key)) tables.set(key, new Set());
+        tables
+          .get(key)
+          .add(table.closest('.pagedjs_page').dataset.physicalPage);
+      }
+      return {
+        kinds: pages.map((item) => item.dataset.reportPageKind),
+        footers: pages.map(
+          (item) => item.querySelector('.kumi-physical-footer')?.textContent,
+        ),
+        contents: [...document.querySelectorAll('.kumi-toc-page')].map(
+          (item) => item.textContent,
+        ),
+        tablePages: [...tables.values()].map((set) => set.size),
+      };
+    }),
+  };
+}
+
+test('keep_tables decides whether a short table may break at a page edge', async (t) => {
+  const free = await sweepLayout(t, '  keep_tables: never');
+  const kept = await sweepLayout(t, '  keep_tables: auto');
+  assert.equal(free.layout.tablePages.length, 16);
+  // The sweep does put some tables across a page edge when nothing prevents it.
+  assert.ok(
+    free.layout.tablePages.some((count) => count > 1),
+    'no table crossed a page edge without keep_tables',
+  );
+  assert.deepEqual(kept.layout.tablePages, Array(16).fill(1));
+});
+
+test('formats totals and Roman numbers across several contents pages', async (t) => {
+  const { result, layout } = await sweepLayout(t, '  keep_tables: never');
+  const contents = layout.kinds.filter((kind) => kind === 'contents').length;
+  const body = result.layout.pagination.bodyPageCount;
+  assert.ok(contents > 1, 'the contents should need more than one page');
+  assert.ok(contents < 9);
+  assert.equal(layout.kinds.length, contents + body);
+  const roman = ['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii'];
+  // Front matter counts in Roman numerals against its own total.
+  assert.deepEqual(
+    layout.footers.slice(0, contents),
+    roman.slice(0, contents).map((n) => `${n} / ${roman[contents - 1]}`),
+  );
+  assert.deepEqual(
+    layout.footers.slice(contents),
+    Array.from({ length: body }, (_, index) => `${index + 1} / ${body}`),
+  );
+  // Contents entries use the same format, with the total known after layout.
+  assert.equal(layout.contents.length, 16 * 6);
+  assert.ok(
+    layout.contents.every((value) =>
+      new RegExp(`^\\d+ / ${body}$`).test(value),
+    ),
+    layout.contents.slice(0, 3).join(),
+  );
+  assert.equal(layout.contents[0], `1 / ${body}`);
 });

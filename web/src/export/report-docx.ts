@@ -120,6 +120,8 @@ const exportMessages = {
       '章ごとの図表番号はWordのフィールドにできないため、出力時点の文字として出力しました。',
     fieldContents:
       '目次から除外した見出しは、Wordで目次を更新すると目次に表示されます。',
+    fieldContentsFormat:
+      '目次のページ番号の書式（- 1 - など）は、Wordで目次を更新すると数字だけになります。',
     chart: 'グラフは全データを含む編集可能な表として出力しました。',
     numbering:
       '目次の項目・見出し番号・図表番号・参照は出力時点の値です。Wordで編集した後は必要に応じて修正してください。',
@@ -147,6 +149,8 @@ const exportMessages = {
       'Caption numbers by chapter cannot be Word fields and were exported as fixed text.',
     fieldContents:
       'Headings excluded from the contents will appear when the contents are updated in Word.',
+    fieldContentsFormat:
+      'The page number format of the contents (such as "- 1 -") becomes plain numbers when the contents are updated in Word.',
     chart: 'Charts were exported as editable tables containing all their data.',
     numbering:
       'The table of contents entries, section and caption numbers, and references retain their exported values. Revise them as needed after editing in Word.',
@@ -244,9 +248,17 @@ export async function exportReportDocx(
   const staticNumber = (target: SemanticTarget) => {
     if (target.number && !isField(target)) warnings.add(copy.numbering);
   };
-  function math(latex: string, display: boolean): ParagraphChild | undefined {
+  function math(
+    latex: string,
+    display: boolean,
+    ownParagraph = display,
+  ): ParagraphChild | undefined {
     try {
-      return mathComponent(latex, display) as unknown as ParagraphChild;
+      return mathComponent(
+        latex,
+        display,
+        ownParagraph,
+      ) as unknown as ParagraphChild;
     } catch {
       warnings.add(copy.math);
       return undefined;
@@ -512,8 +524,10 @@ export async function exportReportDocx(
     const width = context.width - context.indent;
     const numbered = Boolean(target?.number);
     if (target) staticNumber(target);
+    // Always converted as a display equation; beside its number it is written
+    // without the paragraph wrapper, which may not share a line with tabs.
     const body =
-      math(node.attrs.latex, !numbered) ??
+      math(node.attrs.latex, true, !numbered) ??
       new TextRun({ text: node.attrs.latex, font: 'Cambria Math' });
     const number =
       target?.number && isField(target)
@@ -531,8 +545,12 @@ export async function exportReportDocx(
           ? {
               alignment: AlignmentType.LEFT,
               tabStops: [
-                { type: TabStopType.CENTER, position: Math.round(width / 2) },
-                { type: TabStopType.RIGHT, position: width },
+                // Tab positions are measured from the margin, not the indent.
+                {
+                  type: TabStopType.CENTER,
+                  position: context.indent + Math.round(width / 2),
+                },
+                { type: TabStopType.RIGHT, position: context.indent + width },
               ],
               children: [
                 new TextRun({ children: [new Tab()] }),
@@ -629,7 +647,13 @@ export async function exportReportDocx(
                   alignment: cell.attrs.align ?? undefined,
                   style: header ? styleIds.tableHeader : styleIds.tableText,
                   color: tableFillTextColor(cell.attrs.fill)?.slice(1),
-                  keepNext: keep && rowIndex < node.content.length - 1,
+                  // A header row is never left alone at the foot of a page.
+                  keepNext:
+                    rowIndex < node.content.length - 1 &&
+                    (keep ||
+                      row.content!.every(
+                        (item) => item.type === 'tableHeader',
+                      )),
                 }),
               ),
             });
@@ -966,18 +990,36 @@ export async function exportReportDocx(
             separator,
           );
     if (report.toc_page_numbers) updateFieldsOnOpen = true;
+    const level = (target: SemanticTarget) =>
+      kind === 'heading' ? (target.level ?? 1) : 1;
+    const entry = (target: SemanticTarget) =>
+      new Paragraph({
+        style: styleIds.contents(level(target)),
+        children: [
+          new InternalHyperlink({
+            anchor: anchors.get(target.nodeId)!,
+            children: [
+              new TextRun(entryText(target)),
+              ...(report.toc_page_numbers
+                ? pageReference(anchors.get(target.nodeId)!)
+                : []),
+            ],
+          }),
+        ],
+      });
     // A Word contents field is rebuilt from the headings (or captions) when
-    // Word updates it. The entries written here are shown until then.
+    // Word updates it. Until then it shows the same entries as the fixed list.
     if (fields && (kind === 'heading' || captionFields)) {
       if (
         kind === 'heading' &&
-        analysis.outline.length !== targets.length &&
         analysis.outline.some(
-          (entry) =>
-            (entry.level ?? 1) <= report.toc_depth && !targets.includes(entry),
+          (item) =>
+            (item.level ?? 1) <= report.toc_depth && !targets.includes(item),
         )
       )
         warnings.add(copy.fieldContents);
+      if (report.toc_page_numbers && report.toc_page_number_format !== '{n}')
+        warnings.add(copy.fieldContentsFormat);
       contents.push(
         new TableOfContents(title, {
           hyperlink: true,
@@ -992,11 +1034,7 @@ export async function exportReportDocx(
           ...(report.toc_page_numbers
             ? {}
             : { pageNumbersEntryLevelsRange: '1-9' }),
-          cachedEntries: targets.map((target) => ({
-            title: entryText(target),
-            level: kind === 'heading' ? (target.level ?? 1) : 1,
-            href: anchors.get(target.nodeId)!,
-          })),
+          contentChildren: targets.map(entry),
           // Written clean when nothing depends on Word's own page layout.
           beginDirty: report.toc_page_numbers,
         }),
@@ -1005,25 +1043,7 @@ export async function exportReportDocx(
     }
     warnings.add(copy.numbering);
     if (report.toc_page_numbers) warnings.add(copy.contentsPageNumbers);
-    for (const target of targets)
-      contents.push(
-        new Paragraph({
-          style: styleIds.contents(
-            kind === 'heading' ? (target.level ?? 1) : 1,
-          ),
-          children: [
-            new InternalHyperlink({
-              anchor: anchors.get(target.nodeId)!,
-              children: [
-                new TextRun(entryText(target)),
-                ...(report.toc_page_numbers
-                  ? pageReference(anchors.get(target.nodeId)!)
-                  : []),
-              ],
-            }),
-          ],
-        }),
-      );
+    contents.push(...targets.map(entry));
   }
   if (document.metadata.toc === true)
     contentsList(

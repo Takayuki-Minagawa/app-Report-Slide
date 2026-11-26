@@ -381,7 +381,7 @@ const cssFonts: Record<FontFamily, string> = {
 
 /**
  * CSS for everything the style data specifies. Sizes are relative to the body
- * size, so the scaled preview keeps the proportions of the printed page.
+ * size variable, so the scaled preview keeps the proportions of the printed page.
  */
 export function reportStyleCss(metadata: DocumentMetadata): string {
   const { input, themeCss } = styleInput(metadata);
@@ -393,21 +393,24 @@ export function reportStyleCss(metadata: DocumentMetadata): string {
     const list = declarations.filter(Boolean);
     if (list.length) rules.push(`${selector}{${list.join(';')}}`);
   };
-  const em = (value: number, base: number) =>
-    `${Math.round((value / base) * 1000) / 1000}em`;
-  const text = (value: TextStyleInput | undefined, inherited = body) => {
+  // Points become a share of the body size variable, which is a real length
+  // on paper and scales with the sheet in the preview. Unlike em, the result
+  // does not depend on the element's own or inherited font size (a table
+  // caption sits inside the smaller table text, for example).
+  const size = (points: number) =>
+    `calc(var(--report-font-size) * ${Math.round((points / body) * 1000) / 1000})`;
+  const text = (value: TextStyleInput | undefined) => {
     if (!value) return [];
-    const size = value.size ?? inherited;
     return [
       value.font !== undefined && `font-family:${cssFonts[value.font]}`,
-      value.size !== undefined && `font-size:${em(value.size, body)}`,
+      value.size !== undefined && `font-size:${size(value.size)}`,
       value.bold !== undefined && `font-weight:${value.bold ? 700 : 400}`,
       value.color !== undefined && `color:${value.color}`,
       value.align !== undefined && `text-align:${value.align}`,
       value.space_before !== undefined &&
-        `margin-top:${em(value.space_before, size)}`,
+        `margin-top:${size(value.space_before)}`,
       value.space_after !== undefined &&
-        `margin-bottom:${em(value.space_after, size)}`,
+        `margin-bottom:${size(value.space_after)}`,
     ];
   };
   if (input.body) {
@@ -450,7 +453,7 @@ export function reportStyleCss(metadata: DocumentMetadata): string {
   if (table) {
     rule(`${D} .preview-table-wrap table`, [
       table.border_width !== undefined && 'border-collapse:collapse',
-      table.size !== undefined && `font-size:${em(table.size, body)}`,
+      table.size !== undefined && `font-size:${size(table.size)}`,
     ]);
     rule(`${P} .preview-table-wrap :is(th,td)`, [
       table.border_width !== undefined &&
@@ -542,9 +545,14 @@ export function reportStyleCss(metadata: DocumentMetadata): string {
 
 /** Theme and data CSS followed by the document's own CSS, which wins. */
 export function reportDocumentCss(metadata: DocumentMetadata): string {
-  return [reportStyleCss(metadata), reportCustomCss(metadata)]
-    .filter(Boolean)
-    .join('\n');
+  return (
+    [reportStyleCss(metadata), reportCustomCss(metadata)]
+      .filter(Boolean)
+      .join('\n')
+      // The validator already rejects "<". This is the last line of defence
+      // for the style elements the result is written into.
+      .replaceAll('<', '\\3c ')
+  );
 }
 
 export function reportCustomCss(metadata: DocumentMetadata): string {

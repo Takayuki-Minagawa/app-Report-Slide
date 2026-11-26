@@ -1072,13 +1072,6 @@
   text-indent: 0;
 }
 
-/* Page number position (report_settings.page_number_position). */
-.report-preview[data-page-number-position='bottom-right'] > footer {
-  right: var(--report-right, 76px);
-  left: auto;
-  text-align: right;
-}
-
 /* Cover without field names (report_settings.cover_layout: centered). */
 .report-cover[data-cover-layout='centered'] {
   justify-content: flex-start;
