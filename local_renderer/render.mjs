@@ -196,6 +196,8 @@ async function run() {
     XMLSerializer: dom.window.XMLSerializer,
   });
   const assets = new Map();
+  // The same files for the Word exporter, which runs in a browser page.
+  const assetFiles = new Map();
   let temporary;
   try {
     await mkdir(join(here, '.cache'), { recursive: true });
@@ -269,6 +271,7 @@ async function run() {
         source,
         URL.createObjectURL(new Blob([asset.bytes], { type: contentType })),
       );
+      assetFiles.set(source, { type: contentType, bytes: asset.bytes });
       if (outputDir) {
         const target = join(outputDir, asset.relative);
         let same = false;
@@ -364,7 +367,7 @@ async function run() {
     let docx;
     if (destinations.docx) {
       const { exportDocx } = await import('./docx.mjs');
-      docx = await exportDocx(document, assets, options.locale || 'ja');
+      docx = await exportDocx(document, assetFiles, options.locale || 'ja');
       content.docx = docx.bytes;
       if (destinations.docxCheck) {
         const { checkDocx } = await import('./docx-check.mjs');

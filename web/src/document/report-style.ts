@@ -62,6 +62,8 @@ export const reportStyleSchema = z.strictObject({
       font: family,
       size: points,
       zebra: z.boolean(),
+      /** Tight rows: single spacing and no gap between paragraphs in a cell. */
+      compact: z.boolean(),
     })
     .partial()
     .optional(),
@@ -73,6 +75,17 @@ export const reportStyleSchema = z.strictObject({
     .partial()
     .optional(),
   equation: z.strictObject({ background: z.boolean() }).partial().optional(),
+  contents: z
+    .strictObject({
+      /** First-level entries: weight, family and whether a dot leader is drawn. */
+      level1_bold: z.boolean(),
+      level1_font: family,
+      level1_leader: z.boolean(),
+      /** Indent of each further level, in millimetres. */
+      indent: z.number().min(0).max(30),
+    })
+    .partial()
+    .optional(),
   /** Word cannot embed the web fonts, so each family maps to an installed font. */
   docx_fonts: z
     .strictObject({ mincho: fontName, gothic: fontName, latin: fontName })
@@ -115,6 +128,13 @@ export interface ResolvedReportStyle {
     font: FontFamily | null;
     size: number | null;
     zebra: boolean;
+    compact: boolean;
+  };
+  contents: {
+    level1_bold: boolean;
+    level1_font: FontFamily | null;
+    level1_leader: boolean;
+    indent: number | null;
   };
   callout: { frame: 'bar' | 'box'; title_font: FontFamily | null };
   equation: { background: boolean };
@@ -152,6 +172,13 @@ const baseStyle: ResolvedReportStyle = {
     font: null,
     size: null,
     zebra: true,
+    compact: false,
+  },
+  contents: {
+    level1_bold: false,
+    level1_font: null,
+    level1_leader: true,
+    indent: null,
   },
   callout: { frame: 'bar', title_font: null },
   equation: { background: true },
@@ -202,6 +229,13 @@ const reportJp: ReportStyleInput = {
     font: 'mincho',
     size: 9,
     zebra: false,
+    compact: true,
+  },
+  contents: {
+    level1_bold: true,
+    level1_font: 'gothic',
+    level1_leader: false,
+    indent: 8,
   },
   callout: { frame: 'box', title_font: 'gothic' },
   equation: { background: false },
@@ -218,9 +252,10 @@ const reportJpCss = `
 %P .document-renderer :is(ul,ol){padding-left:1.6em}
 %P .document-renderer .preview-figure{margin-block:1em}
 %P .document-renderer .preview-table-wrap{margin-block:1em}
-%P .document-renderer .preview-table-wrap table{margin-inline:auto;line-height:1.5}
-%P .preview-table-wrap :is(th,td){padding:.28em .55em;vertical-align:top}
+%P .document-renderer .preview-table-wrap table{margin-inline:auto}
+%P .preview-table-wrap :is(th,td){vertical-align:top}
 %P .preview-table-wrap th{vertical-align:middle}
+%P .report-contents-page .document-toc li[data-toc-level='1']{margin-top:.55em}
 %P .report-cover{color:#000}
 %P .report-cover-heading h1{font-family:'Noto Serif JP',serif;font-size:1.52em;font-weight:400;line-height:1.6;color:#000;border:0}
 %P .report-cover-subtitle{font-size:1.14em;margin-top:1.2em;color:#000}
@@ -229,10 +264,7 @@ const reportJpCss = `
 %P .report-contents-page .document-toc h2{font-family:'Noto Sans JP',sans-serif;font-size:1.33em;font-weight:700;letter-spacing:.5em;color:#000;border:0;padding:0;margin:0 0 1em;background:none}
 %P .report-contents-page .document-toc ol{padding:0;margin:0;list-style:none}
 %P .report-contents-page .document-toc li{line-height:1.45;margin:0 0 .2em}
-%P .report-contents-page .document-toc li[data-toc-level='1']{font-family:'Noto Sans JP',sans-serif;font-weight:700;margin-top:.55em}
-%P .report-contents-page .document-toc li:not([data-toc-level='1']){padding-left:2.2em!important}
 %P .report-contents-page .document-toc a{color:#000;text-decoration:none}
-%P .report-contents-page .document-toc li[data-toc-level='1'] .kumi-toc-leader{border-bottom-color:transparent}
 %P .report-contents-page .kumi-toc-leader{border-bottom:1px dotted #000;margin:0 .4em .35em}
 .kumi-physical-footer{color:#000}
 `;
@@ -276,6 +308,10 @@ function mergeInput(
     equation:
       first.equation || second.equation
         ? { ...first.equation, ...second.equation }
+        : undefined,
+    contents:
+      first.contents || second.contents
+        ? { ...first.contents, ...second.contents }
         : undefined,
     docx_fonts:
       first.docx_fonts || second.docx_fonts
@@ -333,6 +369,7 @@ export function resolveReportStyle(
     },
     callout: { ...baseStyle.callout, ...input.callout },
     equation: { ...baseStyle.equation, ...input.equation },
+    contents: { ...baseStyle.contents, ...input.contents },
     docx_fonts: { ...baseStyle.docx_fonts, ...input.docx_fonts },
   };
 }
@@ -436,9 +473,32 @@ export function reportStyleCss(metadata: DocumentMetadata): string {
       `${P} .preview-table-wrap td,${P} .preview-table-wrap td :is(p,span)`,
       [table.font !== undefined && `font-family:${cssFonts[table.font]}`],
     );
+    if (table.compact === true) {
+      rule(`${D} .preview-table-wrap table`, ['line-height:1.5']);
+      rule(`${P} .preview-table-wrap :is(th,td)`, ['padding:.28em .55em']);
+    }
     if (table.zebra === false)
       rule(`${P} .preview-table-wrap tbody tr:nth-child(even) td`, [
         'background:none',
+      ]);
+  }
+  const contents = input.contents;
+  if (contents) {
+    const C = `${P} .document-toc`;
+    rule(`${C} li[data-toc-level='1']`, [
+      contents.level1_bold !== undefined &&
+        `font-weight:${contents.level1_bold ? 700 : 400}`,
+      contents.level1_font !== undefined &&
+        `font-family:${cssFonts[contents.level1_font]}`,
+    ]);
+    if (contents.level1_leader === false)
+      rule(`${C} li[data-toc-level='1'] .kumi-toc-leader`, [
+        'border-bottom-color:transparent',
+      ]);
+    // Replaces the per-level step with one indent, as a Word contents list has.
+    if (contents.indent !== undefined)
+      rule(`${C} li:not([data-toc-level='1'])`, [
+        `padding-left:${contents.indent}mm!important`,
       ]);
   }
   if (input.callout?.frame === 'box') {

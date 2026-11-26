@@ -385,7 +385,11 @@ describe('Word Report export', () => {
     const title = paragraphs.find(
       (entry) => entry.textContent === 'Technical report',
     )!;
-    expect(title.getElementsByTagName('w:pStyle')).toHaveLength(0);
+    // The cover is formatted by named styles, not by direct formatting.
+    expect(
+      title.getElementsByTagName('w:pStyle')[0].getAttribute('w:val'),
+    ).toBe('KumiCoverTitle');
+    expect(title.getElementsByTagName('w:rPr')).toHaveLength(0);
     expect(title.getElementsByTagName('w:bookmarkStart')).toHaveLength(0);
     const text = xml.documentElement.textContent!;
     for (const value of [
@@ -513,7 +517,15 @@ describe('Word Report export', () => {
       while (paragraph && paragraph.localName !== 'p')
         paragraph = paragraph.parentElement;
       expect(paragraph).not.toBeNull();
-      const rightTab = [...paragraph!.getElementsByTagName('w:tab')].find(
+      // The leader and its position belong to the contents style.
+      expect(
+        paragraph!.getElementsByTagName('w:pStyle')[0].getAttribute('w:val'),
+      ).toBe('TOC1');
+      const contentsStyle = elements(
+        zip.xml('word/styles.xml'),
+        'w:style',
+      ).find((entry) => entry.getAttribute('w:styleId') === 'TOC1')!;
+      const rightTab = [...contentsStyle.getElementsByTagName('w:tab')].find(
         (entry) => entry.getAttribute('w:val') === 'right',
       );
       expect(rightTab?.getAttribute('w:leader')).toBe('dot');
@@ -878,8 +890,10 @@ describe('Word Report export', () => {
     ).toEqual([`PAGEREF ${figureBookmark} \\h`]);
   });
 
-  it('keeps math and every chart data value editable and reports localized conversion limits', async () => {
-    const document = source('Inline $x^2$\n\n$$\ny = mx + b\n$$');
+  it('writes equations as Word math and keeps every chart data value editable', async () => {
+    const document = source(
+      'Inline $x^2$ and $\\text{a b}\\ c$\n\n$$\ny = mx + b\n$$',
+    );
     document.children.push({
       type: 'chart',
       attrs: {
@@ -899,9 +913,19 @@ describe('Word Report export', () => {
     });
     const result = await exportReportDocx(document, new Map(), 'ja');
     const zip = await unpack(result.blob);
+    const xml = zip.xml();
+    // Inline math is an equation object; the display equation is its own paragraph.
+    const equations = elements(xml, 'm:oMath');
+    expect(equations).toHaveLength(3);
+    expect(equations[0].getElementsByTagName('m:sSup')).toHaveLength(1);
+    expect(equations[0].parentElement!.localName).toBe('p');
+    // Spaces inside an equation survive the XML import.
+    expect(equations[1].textContent!.replace(/\s/g, ' ')).toBe('a b c');
+    expect(equations[2].parentElement!.localName).toBe('oMathPara');
+    expect(equations[2].textContent).toBe('y=mx+b');
+    expect(xml.documentElement.textContent).not.toContain('x^2');
+    expect(elements(xml, 'undefined')).toHaveLength(0);
     for (const text of [
-      'x^2',
-      'y = mx + b',
       'Sample A',
       '1.25',
       '-2.5',
@@ -915,13 +939,20 @@ describe('Word Report export', () => {
       'Chart caption',
     ])
       expect(zip.xml().documentElement.textContent).toContain(text);
-    expect(result.warnings).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining('LaTeX'),
-        expect.stringContaining('全データ'),
-      ]),
+    expect(result.warnings).toEqual([expect.stringContaining('全データ')]);
+  });
+
+  it('falls back to editable LaTeX text with a warning when an equation cannot be converted', async () => {
+    const result = await exportReportDocx(
+      source('Broken $\\frac{a}{$ and\n\n$$\n\\notacommand{x}\n$$'),
+      new Map(),
+      'en',
     );
-    expect(result.warnings).toHaveLength(2);
+    const xml = (await unpack(result.blob)).xml();
+    expect(elements(xml, 'm:oMath')).toHaveLength(0);
+    expect(xml.documentElement.textContent).toContain('\\frac{a}{');
+    expect(xml.documentElement.textContent).toContain('\\notacommand{x}');
+    expect(result.warnings).toEqual([expect.stringContaining('LaTeX')]);
   });
 
   it('rejects a slide, malformed input and external images without network access', async () => {
