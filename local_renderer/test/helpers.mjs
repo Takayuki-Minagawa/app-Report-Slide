@@ -42,14 +42,14 @@ export async function fixture(data = document()) {
   await writeFile(input, JSON.stringify(data));
   return { root, input, output: join(root, 'out') };
 }
-export async function run(args, { env = process.env } = {}) {
+export async function run(args, { env = process.env, timeout = 60_000 } = {}) {
   try {
     const { stdout, stderr } = await execute(
       process.execPath,
       [cliPath, ...args],
       {
         maxBuffer: 5 * 1024 * 1024,
-        timeout: 60_000,
+        timeout,
         env,
       },
     );

@@ -27,7 +27,10 @@ export { projectLimits } from '../web/src/project/archive';
 export { splitRenderedPages } from '../web/src/document/report-pages';
 export { reportStyleIssues } from '../web/src/document/report-style';
 export { resolveReportSettings } from '../web/src/document/report-settings';
-export { resolvePageSettings, pageDimensions } from '../web/src/document/page-settings';
+export {
+  resolvePageSettings,
+  pageDimensions,
+} from '../web/src/document/page-settings';
 export { reportOutline } from '../web/src/document/semantics';
 export {
   formatSemanticReference,

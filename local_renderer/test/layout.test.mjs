@@ -214,3 +214,174 @@ test('automatically paginates a long Report and reports its actual page count wi
     data.children,
   );
 });
+
+const styledReport = `---
+type: report
+title: Styled report
+theme: report-jp
+number_sections: true
+toc: true
+report_settings:
+  cover: true
+  toc_page: true
+  toc_page_numbers: true
+  toc_depth: 2
+  appendix_numbering: letter
+  front_matter_page_numbers: roman
+  keep_tables: auto
+  caption_separator: ": "
+---
+
+# Introduction
+
+## Purpose
+
+See [@tab:short] and equation [@eq:ratio].
+
+$$
+R = \\frac{a}{b}
+$$
+{#eq:ratio}
+
+> [!NOTE]
+> A boxed note.
+
+| Item | Value |
+| --- | --- |
+| A | 1 |
+| B | 2 |
+{#tab:short caption="Short table"}
+
+# Data
+{appendix=true}
+
+## Values
+
+| Row | Value |
+| --- | --- |
+${Array.from({ length: 90 }, (_, index) => `| ${index + 1} | ${index * 2} |`).join('\n')}
+{#tab:long caption="Long table"}
+`;
+
+async function styledFixture(t) {
+  const item = await withFixture(t);
+  const input = join(item.root, 'styled.md');
+  await writeFile(input, styledReport);
+  return { ...item, input };
+}
+
+test('prints the inspected layout as PDF with formatted page numbers and split long tables', async (t) => {
+  const { input, output } = await styledFixture(t);
+  const result = await run([
+    '--input',
+    input,
+    '--output-dir',
+    output,
+    '--pdf',
+    '--fail-on-overflow',
+  ]);
+  assert.equal(result.code, 0, result.stderr || result.stdout);
+  assert.equal(result.result.layout.status, 'pass');
+  const pdf = await readFile(result.result.outputs.pdf);
+  assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
+  // One PDF page per laid-out page: the PDF is the layout that was checked.
+  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const task = getDocument({ data: new Uint8Array(pdf), verbosity: 0 });
+  t.after(() => task.destroy());
+  assert.equal((await task.promise).numPages, result.result.pages);
+
+  const { chromium } = await import('playwright');
+  const browser = await chromium.launch();
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  await page.setContent(await readFile(result.result.outputs.html, 'utf8'));
+  const layout = await page.evaluate(async () => {
+    await window.kumiPaginationReady;
+    const pages = [...document.querySelectorAll('.pagedjs_page')];
+    return {
+      kinds: pages.map((item) => item.dataset.reportPageKind),
+      footers: pages.map(
+        (item) => item.querySelector('.kumi-physical-footer')?.textContent,
+      ),
+      centred: getComputedStyle(document.querySelector('.kumi-physical-footer'))
+        .textAlign,
+      contents: [...document.querySelectorAll('.kumi-toc-page')].map(
+        (item) => item.textContent,
+      ),
+      levels: [...document.querySelectorAll('.document-toc li')].map(
+        (item) => item.dataset.tocLevel,
+      ),
+      headings: [...document.querySelectorAll('h1[id]')].map(
+        (item) => item.textContent,
+      ),
+      shortTablePages: new Set(
+        [...document.querySelectorAll('.preview-table-wrap')]
+          .filter((item) => item.textContent.includes('Short table'))
+          .map((item) => item.closest('.pagedjs_page').dataset.physicalPage),
+      ).size,
+      longTablePages: new Set(
+        [...document.querySelectorAll('.preview-table-wrap')]
+          .filter((item) => !item.textContent.includes('Short table'))
+          .map((item) => item.closest('.pagedjs_page').dataset.physicalPage),
+      ).size,
+      repeatedHeaders: document.querySelectorAll('[data-kumi-repeated-header]')
+        .length,
+      caption: document.querySelector('table caption').textContent,
+      note: document.querySelector('.callout-title').textContent,
+    };
+  });
+  assert.deepEqual(layout.kinds.slice(0, 3), ['cover', 'contents', 'body']);
+  // No number on the cover, Roman on the contents, "- n -" on the body.
+  assert.deepEqual(layout.footers.slice(0, 4), [
+    undefined,
+    '- i -',
+    '- 1 -',
+    '- 2 -',
+  ]);
+  assert.equal(layout.centred, 'center');
+  assert.ok(layout.contents.every((value) => /^- \d+ -$/.test(value)));
+  assert.deepEqual(layout.levels, ['1', '2', '1', '2']);
+  assert.deepEqual(layout.headings, ['1 Introduction', '付録 A Data']);
+  assert.equal(layout.shortTablePages, 1);
+  assert.ok(layout.longTablePages > 1);
+  assert.equal(layout.repeatedHeaders, layout.longTablePages - 1);
+  assert.equal(layout.caption, '表 1: Short table');
+  assert.equal(layout.note, '（注）');
+});
+
+test('exports and checks a Word document from the command line', async (t) => {
+  const { input, output } = await styledFixture(t);
+  const result = await run(
+    ['--input', input, '--output-dir', output, '--check-docx'],
+    { timeout: 240_000 },
+  );
+  assert.equal(result.code, 0, result.stderr || result.stdout);
+  const docx = await readFile(result.result.outputs.docx);
+  assert.equal(docx.subarray(0, 2).toString(), 'PK');
+  const check = result.result.docx.check;
+  assert.deepEqual(
+    JSON.parse(await readFile(result.result.outputs.docxCheck)),
+    check,
+  );
+  assert.deepEqual(check.issues, []);
+  assert.deepEqual(check.captions.tables, {
+    expected: 2,
+    last: '2',
+    missing: [],
+  });
+  assert.equal(check.captions.equations.expected, 1);
+  assert.deepEqual(check.references, { expected: 2, missing: [] });
+  assert.deepEqual(check.wide, []);
+  const { findOffice } = await import('../docx-check.mjs');
+  if (await findOffice()) {
+    // LibreOffice is installed: contents numbers were compared with headings.
+    assert.equal(check.contents.status, 'pass', JSON.stringify(check.contents));
+    assert.equal(check.contents.entries.length, 4);
+    assert.ok(
+      check.contents.entries.every((entry) => entry.contents === entry.heading),
+    );
+  } else {
+    assert.equal(check.contents.status, 'skipped');
+    t.diagnostic('LibreOffice not found: contents pages were not compared');
+  }
+});

@@ -255,6 +255,9 @@ export function WorkspaceProperties({
                   (paragraphDocument ?? document).metadata.report_settings,
                   (paragraphDocument ?? document).metadata.toc,
                   (paragraphDocument ?? document).metadata.number_sections,
+                  // Theme defaults and the CSS notice depend on these.
+                  (paragraphDocument ?? document).metadata.theme,
+                  (paragraphDocument ?? document).metadata.report_style,
                 ])}
                 metadata={(paragraphDocument ?? document).metadata}
                 disabled={documentWriteLocked}

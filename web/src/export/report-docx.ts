@@ -987,7 +987,8 @@ export async function exportReportDocx(
                 // Also collects the appendix heading style by its outline level.
                 useAppliedParagraphOutlineLevel: true,
               }
-            : { captionLabel: sequenceName(kind, locale) }),
+            : // \\c: every caption of this sequence, with its label and number.
+              { captionLabelIncludingNumbers: sequenceName(kind, locale) }),
           ...(report.toc_page_numbers
             ? {}
             : { pageNumbersEntryLevelsRange: '1-9' }),

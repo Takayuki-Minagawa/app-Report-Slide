@@ -328,3 +328,101 @@ test('actual Report page numbers require Chromium without an explicit check flag
   assert.equal(await readFile(join(output, 'source.html'), 'utf8'), 'previous');
   assert.deepEqual(await readdir(output), ['source.html']);
 });
+
+test('--style is stored in every saved format after the document CSS', async (t) => {
+  const data = document();
+  data.metadata.report_style = { css: 'h1 { color: #111111 }' };
+  const { root, input, output } = await withFixture(t, data);
+  const style = join(root, 'house.css');
+  await writeFile(style, '.document-renderer h2 { font-size: 12pt; }\n');
+  const result = await run([
+    '--input',
+    input,
+    '--output-dir',
+    output,
+    '--style',
+    style,
+  ]);
+  assert.equal(result.code, 0, result.stderr);
+  const expected =
+    'h1 { color: #111111 }\n.document-renderer h2 { font-size: 12pt; }\n';
+  const saved = JSON.parse(await readFile(result.result.outputs.json));
+  assert.equal(saved.metadata.report_style.css, expected);
+  // The saved Markdown reproduces the same output without --style.
+  const again = await run([
+    '--input',
+    result.result.outputs.markdown,
+    '--assets-dir',
+    output,
+    '--output',
+    join(root, 'again.html'),
+    '--json-out',
+    join(root, 'again.json'),
+  ]);
+  assert.equal(again.code, 0, again.stderr);
+  assert.equal(
+    JSON.parse(await readFile(join(root, 'again.json'))).metadata.report_style
+      .css,
+    expected,
+  );
+  const html = await readFile(result.result.outputs.html, 'utf8');
+  assert.ok(
+    html.indexOf('h1 { color: #111111 }') <
+      html.indexOf('.document-renderer h2 { font-size: 12pt; }'),
+  );
+  const repeated = await readFile(join(root, 'again.html'), 'utf8');
+  assert.ok(repeated.includes('.document-renderer h2 { font-size: 12pt; }'));
+});
+
+test('--style rejects unsafe CSS, oversized files and slides without producing files', async (t) => {
+  const { root, input, output } = await withFixture(t);
+  const cases = {
+    'import.css': '@import "https://example.com/a.css";',
+    'url.css': 'p { background: u\\72l(https://example.com/a.png) }',
+    'escape.css': 'p { color: red } } body { display: none } .x {',
+    'large.css': 'p{}'.repeat(30_000),
+  };
+  for (const [name, css] of Object.entries(cases)) {
+    await writeFile(join(root, name), css);
+    const result = await run([
+      '--input',
+      input,
+      '--output-dir',
+      output,
+      '--style',
+      join(root, name),
+    ]);
+    assert.equal(result.code, 1, name);
+    assert.equal(JSON.parse(result.stderr).ok, false);
+  }
+  await writeFile(join(root, 'ok.css'), 'p { color: red }');
+  const slide = await withFixture(t, document('slide'));
+  const result = await run([
+    '--input',
+    slide.input,
+    '--output-dir',
+    output,
+    '--style',
+    join(root, 'ok.css'),
+  ]);
+  assert.equal(result.code, 1);
+  assert.match(JSON.parse(result.stderr).error, /Report document/);
+  await assert.rejects(readdir(output), { code: 'ENOENT' });
+});
+
+test('--pdf and --docx take a file name only in single-file mode', async (t) => {
+  const { root, input, output } = await withFixture(t);
+  for (const args of [
+    ['--output-dir', output, '--pdf', join(root, 'a.pdf')],
+    ['--output-dir', output, '--docx', join(root, 'a.docx')],
+    ['--output', join(root, 'a.html'), '--pdf'],
+    ['--output', join(root, 'a.html'), '--docx'],
+    ['--output', join(root, 'a.html'), '--check-docx'],
+    ['--output-dir', output, '--pdf', '--pdf'],
+  ]) {
+    const result = await run(['--input', input, ...args]);
+    assert.equal(result.code, 1, JSON.stringify(args));
+    assert.equal(JSON.parse(result.stderr).ok, false);
+  }
+  await assert.rejects(readdir(output), { code: 'ENOENT' });
+});

@@ -77,7 +77,11 @@ function numberPattern(format) {
   return compact(format)
     .split(/(\{n\}|\{total\})/)
     .map((part) =>
-      part === '{n}' ? '(\\d+)' : part === '{total}' ? '\\d+' : escapeRegExp(part),
+      part === '{n}'
+        ? '(\\d+)'
+        : part === '{total}'
+          ? '\\d+'
+          : escapeRegExp(part),
     )
     .join('');
 }
@@ -226,11 +230,13 @@ export async function checkDocx(bytes, document, api, { locale = 'ja' } = {}) {
         { timeout: 180_000 },
       );
       converter = (
-        await execute(office, ['--version'], { timeout: 30_000 }).catch(
-          () => ({ stdout: 'LibreOffice' }),
-        )
+        await execute(office, ['--version'], { timeout: 30_000 }).catch(() => ({
+          stdout: 'LibreOffice',
+        }))
       ).stdout.trim();
-      const pages = await pdfLines(await readFile(join(directory, 'report.pdf')));
+      const pages = await pdfLines(
+        await readFile(join(directory, 'report.pdf')),
+      );
       pageCount = pages.length;
       const tocNumber = new RegExp(
         `${numberPattern(settings.toc_page_number_format)}$`,
@@ -250,7 +256,9 @@ export async function checkDocx(bytes, document, api, { locale = 'ja' } = {}) {
         const title = compact(
           `${target.number ? `${api.formatHeadingNumber(target, locale)} ` : ''}${target.title}`,
         );
-        const entry = { title: `${target.number ?? ''} ${target.title}`.trim() };
+        const entry = {
+          title: `${target.number ?? ''} ${target.title}`.trim(),
+        };
         // The contents line: the title, a leader, then the formatted number.
         let contentsPage = -1;
         search: for (let index = cursor; index < pages.length; index++) {

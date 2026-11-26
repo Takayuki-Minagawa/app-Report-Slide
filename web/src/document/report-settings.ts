@@ -130,6 +130,49 @@ export function resolveReportSettings(
   };
 }
 
+const formattingKeys = [
+  'cover_layout',
+  'appendix_numbering',
+  'number_depth',
+  'caption_separator',
+  'toc_title',
+  'page_number_format',
+  'toc_page_number_format',
+  'page_number_position',
+  'front_matter_page_numbers',
+  'keep_tables',
+  'callout_labels',
+  'word_fields',
+] as const;
+
+/**
+ * Settings as stored after editing: a formatting value equal to the default of
+ * the theme is left out, so the document keeps following its theme and files
+ * that never used these settings stay byte-for-byte as before.
+ */
+export function storedReportSettings(
+  settings: ResolvedReportSettings,
+  theme: unknown,
+): ReportSettings {
+  const defaults = themeDefaultReportSettings(theme);
+  const stored: Record<string, unknown> = { ...settings };
+  const labels = Object.fromEntries(
+    Object.entries(settings.callout_labels).filter(
+      ([, label]) => label !== undefined,
+    ),
+  );
+  stored.callout_labels = labels;
+  for (const key of formattingKeys) {
+    const fallback =
+      key === 'toc_page_number_format'
+        ? settings.page_number_format
+        : defaults[key];
+    if (JSON.stringify(stored[key]) === JSON.stringify(fallback))
+      delete stored[key];
+  }
+  return stored as ReportSettings;
+}
+
 /** Letters apply to chapters by default; plain section numbers continue as before. */
 export function usesAppendixLetters(
   settings: Pick<

@@ -86,6 +86,11 @@ export function reportCssIssues(value: unknown): string[] {
   // `&` would let a selector name the scope's ancestors, and at-rules other
   // than these either define global names or choose their own scope.
   if (decoded.includes('&')) issues.push('「&」は使用できません。');
+  // A selector that starts with a combinator is relative to the scope element
+  // itself, so it could reach the scope's siblings. It is also not valid in a
+  // style sheet on its own, where it stops the paginated layout.
+  if (/(?:^|[{};])\s*[+~>]/.test(decoded))
+    issues.push('結合子（+ ~ >）で始まるセレクターは使用できません。');
   for (const [, name] of decoded.matchAll(/@([a-z-]*)/g)) {
     if (
       !/^(?:media|supports|page|layer|container|(?:top|bottom|left|right)-[a-z-]+)$/.test(
