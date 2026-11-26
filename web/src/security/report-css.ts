@@ -54,7 +54,9 @@ export function reportCssIssues(value: unknown): string[] {
   const blocks: Array<'rule' | 'group' | 'declarations'> = [];
   // Text since the last "{", "}" or ";" at each block level.
   const pending: string[] = [''];
-  const holdsRulesOnly = () => !blocks.length || blocks.at(-1) === 'group';
+  // Inside a style rule, a nested @media holds that rule's declarations.
+  const holdsRulesOnly = () =>
+    !blocks.length || (blocks.at(-1) === 'group' && !blocks.includes('rule'));
   for (let index = 0; index < css.length; index++) {
     const character = css[index];
     if (character === '\\') {
@@ -88,6 +90,9 @@ export function reportCssIssues(value: unknown): string[] {
         pending[pending.length - 1] += character;
       else if (character === '{') {
         const prelude = pending[pending.length - 1].trim().toLowerCase();
+        // "--name: {}" is a declaration to the browser, not a rule.
+        if (prelude.startsWith('--') && holdsRulesOnly())
+          return ['セレクターのない宣言は使用できません。'];
         blocks.push(
           !prelude.startsWith('@')
             ? 'rule'
@@ -98,7 +103,7 @@ export function reportCssIssues(value: unknown): string[] {
         pending[pending.length - 1] = '';
         pending.push('');
       } else if (character === '}') {
-        if (blocks.at(-1) === 'group' && pending.at(-1)!.trim())
+        if (holdsRulesOnly() && pending.at(-1)!.trim())
           return ['セレクターのない宣言は使用できません。'];
         blocks.pop();
         pending.pop();
