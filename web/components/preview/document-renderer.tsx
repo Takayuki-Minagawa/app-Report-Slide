@@ -36,7 +36,14 @@ import {
 } from '@/src/i18n/diagnostics';
 import { resolveReportSettings } from '@/src/document/report-settings';
 import {
+  calloutLabel,
+  captionParts,
+  contentsTitle,
+  defaultCaptionSeparator,
+} from '@/src/document/format';
+import {
   isCalloutType,
+  type CalloutType,
   type DocumentData,
   type DocumentNode,
   type FootnoteNode,
@@ -88,6 +95,11 @@ const ParagraphStylesContext = createContext<
   ReadonlyMap<string, CSSProperties>
 >(new Map());
 const LocaleContext = createContext<AppLocale>('ja');
+/** Report formatting chosen for the document; slides keep the built-in wording. */
+const FormatContext = createContext<{
+  separator: string;
+  calloutLabel?: (type: CalloutType, locale: AppLocale) => string;
+}>({ separator: defaultCaptionSeparator });
 const FigureReferencesContext = createContext<FigureReference[]>([]);
 const SlideContext = createContext(false);
 const RoleStylesContext = createContext<SlideDesign['roleStyles']>(undefined);
@@ -153,13 +165,17 @@ function FootnoteReference({ node }: { node: FootnoteNode }) {
 function Caption({ node }: { node: DocumentNode }) {
   const { locale } = useDocumentCopy();
   const target = useContext(AnalysisContext)?.targets.get(node.attrs.nodeId);
+  const { separator } = useContext(FormatContext);
   if (!target?.number && !node.attrs.caption) return null;
+  const parts = captionParts(target, node.attrs.caption, locale, separator);
+  // Stable hooks for styling: label, separator and text never share a span.
   return (
     <span>
-      {target?.number
-        ? `${formatSemanticReference(target, locale)}${node.attrs.caption ? ' — ' : ''}`
-        : ''}
-      {node.attrs.caption}
+      {parts.label && <span className="caption-label">{parts.label}</span>}
+      {parts.separator && (
+        <span className="caption-separator">{parts.separator}</span>
+      )}
+      {parts.text && <span className="caption-text">{parts.text}</span>}
     </span>
   );
 }
@@ -712,6 +728,9 @@ function BlockNode({
   const { copy, locale } = useDocumentCopy();
   const target = useContext(AnalysisContext)?.targets.get(key);
   const paragraphStyles = useContext(ParagraphStylesContext);
+  const format = useContext(FormatContext);
+  const calloutTitle = (type: CalloutType) =>
+    format.calloutLabel?.(type, locale) ?? copy.callout[type];
   switch (node.type) {
     case 'heading': {
       const Tag = `h${node.attrs.level}` as
@@ -728,9 +747,12 @@ function BlockNode({
           style={textRulerStyle(node.attrs.textRuler)}
         >
           {target?.number && (
-            <span className="section-number">
-              {formatHeadingNumber(target, locale)}{' '}
-            </span>
+            <>
+              <span className="section-number">
+                {formatHeadingNumber(target, locale)}
+              </span>
+              <span className="section-separator"> </span>
+            </>
           )}
           {renderInline(node.content, resolveImageUrl)}
         </Tag>
@@ -790,7 +812,9 @@ function BlockNode({
         : undefined;
       return (
         <blockquote data-node-id={key} data-callout={callout}>
-          {callout && <p className="callout-title">{copy.callout[callout]}</p>}
+          {callout && calloutTitle(callout) && (
+            <p className="callout-title">{calloutTitle(callout)}</p>
+          )}
           {node.content.map((child) => (
             <BlockNode
               key={child.attrs.nodeId}
@@ -958,18 +982,27 @@ export function DocumentContents({
     <>
       {document.metadata.toc === true && (outline.length > 0 || showEmpty) && (
         <nav className="document-toc" aria-label={copy.preview.toc}>
-          <h2>{copy.preview.toc}</h2>
+          <h2>
+            {report
+              ? contentsTitle(locale, document.metadata, settings)
+              : copy.preview.toc}
+          </h2>
           {outline.length ? (
             <ol>
               {outline.map((entry) => (
                 <li
                   key={entry.nodeId}
+                  data-toc-level={entry.level ?? 1}
                   style={{ paddingLeft: `${((entry.level ?? 1) - 1) * 16}px` }}
                 >
                   <a href={`#${encodeURIComponent(anchorId(entry.nodeId))}`}>
-                    {entry.number
-                      ? `${formatHeadingNumber(entry, locale)} `
-                      : ''}
+                    {entry.number && (
+                      <>
+                        <span className="toc-number">
+                          {formatHeadingNumber(entry, locale)}
+                        </span>{' '}
+                      </>
+                    )}
                     {entry.title}
                   </a>
                 </li>
@@ -996,12 +1029,12 @@ export function DocumentContents({
               {entries.length ? (
                 <ol>
                   {entries.map((entry) => (
-                    <li key={entry.nodeId}>
+                    <li key={entry.nodeId} data-toc-level={1}>
                       <a
                         href={`#${encodeURIComponent(anchorId(entry.nodeId))}`}
                       >
                         {entry.number
-                          ? `${formatSemanticReference(entry, locale)}${entry.title ? ' — ' : ''}`
+                          ? `${formatSemanticReference(entry, locale)}${entry.title ? (report ? settings.caption_separator : defaultCaptionSeparator) : ''}`
                           : ''}
                         {entry.title}
                       </a>
@@ -1071,6 +1104,16 @@ export function DocumentRenderer({
       ),
     [document.children],
   );
+  const format = useMemo(() => {
+    if (document.type !== 'report')
+      return { separator: defaultCaptionSeparator };
+    const settings = resolveReportSettings(document.metadata);
+    return {
+      separator: settings.caption_separator,
+      calloutLabel: (type: CalloutType, target: AppLocale) =>
+        calloutLabel(type, target, document.metadata, settings),
+    };
+  }, [document.type, document.metadata]);
   const pageNodes = nodes ?? document.children;
   const blocks = speakerNotes
     ? pageNodes.flatMap((node) =>
@@ -1140,89 +1183,98 @@ export function DocumentRenderer({
     >
       <LocaleContext.Provider value={locale}>
         <AnalysisContext.Provider value={computed}>
-          <ParagraphStylesContext.Provider value={paragraphStyles}>
-            <SlideContext.Provider value={document.type === 'slide'}>
-              <RoleStylesContext.Provider value={roleStyles}>
-                <FigureInteractionContext.Provider value={figureInteraction}>
-                  <FootnoteContext.Provider value={footnoteNumbers}>
-                    <div className="document-renderer">
-                      {showToc && !speakerNotes && (
-                        <DocumentContents
-                          document={document}
-                          analysis={computed}
-                          locale={locale}
-                        />
-                      )}
-                      {compositeGroups ? (
-                        <>
-                          {compositeGroups.title &&
-                            renderBlocks([compositeGroups.title])}
-                          {renderRegion('full')}
-                          <div
-                            className="slide-composite-grid"
-                            data-reverse={
-                              composite?.reverseColumns || undefined
-                            }
-                          >
-                            {!composite?.reverseColumns && renderRegion('left')}
-                            <div className="slide-composite-sidebar">
-                              {renderRegion('right-top')}
-                              {renderRegion('right-bottom')}
-                            </div>
-                            {composite?.reverseColumns && renderRegion('left')}
-                          </div>
-                          {renderRegion('bottom')}
-                          {renderBlocks(compositeGroups.manual)}
-                        </>
-                      ) : layoutGroups ? (
-                        <>
-                          {layoutGroups.title &&
-                            renderBlocks([layoutGroups.title])}
-                          <div className="slide-design-columns">
-                            {layoutGroups.columns.map((column, index) => (
-                              <div key={index} className="slide-design-column">
-                                {renderBlocks(column)}
+          <FormatContext.Provider value={format}>
+            <ParagraphStylesContext.Provider value={paragraphStyles}>
+              <SlideContext.Provider value={document.type === 'slide'}>
+                <RoleStylesContext.Provider value={roleStyles}>
+                  <FigureInteractionContext.Provider value={figureInteraction}>
+                    <FootnoteContext.Provider value={footnoteNumbers}>
+                      <div className="document-renderer">
+                        {showToc && !speakerNotes && (
+                          <DocumentContents
+                            document={document}
+                            analysis={computed}
+                            locale={locale}
+                          />
+                        )}
+                        {compositeGroups ? (
+                          <>
+                            {compositeGroups.title &&
+                              renderBlocks([compositeGroups.title])}
+                            {renderRegion('full')}
+                            <div
+                              className="slide-composite-grid"
+                              data-reverse={
+                                composite?.reverseColumns || undefined
+                              }
+                            >
+                              {!composite?.reverseColumns &&
+                                renderRegion('left')}
+                              <div className="slide-composite-sidebar">
+                                {renderRegion('right-top')}
+                                {renderRegion('right-bottom')}
                               </div>
-                            ))}
-                          </div>
-                        </>
-                      ) : (
-                        renderBlocks(blocks)
-                      )}
-                      {footnotes.length > 0 && (
-                        <ol
-                          className="document-footnotes"
-                          aria-label={copy.preview.footnotes}
-                        >
-                          {footnotes.map((footnote) => {
-                            const number = footnoteNumbers.get(footnote) ?? 0;
-                            return (
-                              <li
-                                key={number}
-                                id={footnoteId(number)}
-                                value={number}
-                              >
-                                <span className="footnote-text">
-                                  {footnote.attrs.text}
-                                </span>{' '}
-                                <a
-                                  className="footnote-back"
-                                  href={`#${footnoteReferenceId(number)}`}
-                                  aria-label={copy.preview.footnoteBack(number)}
+                              {composite?.reverseColumns &&
+                                renderRegion('left')}
+                            </div>
+                            {renderRegion('bottom')}
+                            {renderBlocks(compositeGroups.manual)}
+                          </>
+                        ) : layoutGroups ? (
+                          <>
+                            {layoutGroups.title &&
+                              renderBlocks([layoutGroups.title])}
+                            <div className="slide-design-columns">
+                              {layoutGroups.columns.map((column, index) => (
+                                <div
+                                  key={index}
+                                  className="slide-design-column"
                                 >
-                                  ↩
-                                </a>
-                              </li>
-                            );
-                          })}
-                        </ol>
-                      )}
-                    </div>
-                  </FootnoteContext.Provider>
-                </FigureInteractionContext.Provider>
-              </RoleStylesContext.Provider>
-            </SlideContext.Provider>
-          </ParagraphStylesContext.Provider>
+                                  {renderBlocks(column)}
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        ) : (
+                          renderBlocks(blocks)
+                        )}
+                        {footnotes.length > 0 && (
+                          <ol
+                            className="document-footnotes"
+                            aria-label={copy.preview.footnotes}
+                          >
+                            {footnotes.map((footnote) => {
+                              const number = footnoteNumbers.get(footnote) ?? 0;
+                              return (
+                                <li
+                                  key={number}
+                                  id={footnoteId(number)}
+                                  value={number}
+                                >
+                                  <span className="footnote-text">
+                                    {footnote.attrs.text}
+                                  </span>{' '}
+                                  <a
+                                    className="footnote-back"
+                                    href={`#${footnoteReferenceId(number)}`}
+                                    aria-label={copy.preview.footnoteBack(
+                                      number,
+                                    )}
+                                  >
+                                    ↩
+                                  </a>
+                                </li>
+                              );
+                            })}
+                          </ol>
+                        )}
+                      </div>
+                    </FootnoteContext.Provider>
+                  </FigureInteractionContext.Provider>
+                </RoleStylesContext.Provider>
+              </SlideContext.Provider>
+            </ParagraphStylesContext.Provider>
+          </FormatContext.Provider>
         </AnalysisContext.Provider>
       </LocaleContext.Provider>
     </FigureReferencesContext.Provider>

@@ -4,6 +4,7 @@ import {
   slideDesignStyle,
 } from '@/src/document/slide-design';
 import { resolveReportSettings } from '@/src/document/report-settings';
+import { formatPageNumber } from '@/src/document/format';
 import {
   frontMatterPageCount,
   hasReportContentsPage,
@@ -51,6 +52,7 @@ export function DocumentPage({
   const copy = messages[locale];
   const kind = reportPageKind(document, index);
   const frontMatterCount = frontMatterPageCount(document);
+  const report = slide ? undefined : resolveReportSettings(document.metadata);
   const design = slide ? resolveSlideDesign(document, index) : undefined;
   const page = (
     <article
@@ -110,8 +112,13 @@ export function DocumentPage({
           {slide && <span>{document.metadata.author ?? ''}</span>}
           {(!slide || document.metadata.slide_number !== false) && (
             <span>
-              {index + 1 - frontMatterCount}
-              {slide ? ` / ${count}` : ''}
+              {report
+                ? formatPageNumber(
+                    report.page_number_format,
+                    index + 1 - frontMatterCount,
+                    count - frontMatterCount,
+                  )
+                : `${index + 1 - frontMatterCount} / ${count}`}
             </span>
           )}
         </footer>
@@ -151,7 +158,11 @@ function ReportCover({
     .map(([label, value]) => [label, clean(value)])
     .filter(([, value]) => value);
   return (
-    <section className="report-cover" aria-label={ja ? '表紙' : 'Cover'}>
+    <section
+      className="report-cover"
+      data-cover-layout={settings.cover_layout}
+      aria-label={ja ? '表紙' : 'Cover'}
+    >
       <div className="report-cover-heading">
         <h1>{title}</h1>
         {subtitle && <p className="report-cover-subtitle">{subtitle}</p>}

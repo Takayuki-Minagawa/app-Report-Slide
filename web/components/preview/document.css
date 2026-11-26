@@ -1071,3 +1071,22 @@
   color: #596b7b;
   text-indent: 0;
 }
+
+/* Cover without field names (report_settings.cover_layout: centered). */
+.report-cover[data-cover-layout='centered'] {
+  justify-content: flex-start;
+  padding-top: calc(
+    (var(--report-height) - var(--report-top) - var(--report-bottom)) * 0.2
+  );
+}
+.report-cover[data-cover-layout='centered'] .report-cover-fields {
+  justify-items: center;
+  gap: 1.6em;
+  text-align: center;
+}
+.report-cover[data-cover-layout='centered'] .report-cover-fields > div {
+  display: block;
+}
+.report-cover[data-cover-layout='centered'] .report-cover-fields dt {
+  display: none;
+}

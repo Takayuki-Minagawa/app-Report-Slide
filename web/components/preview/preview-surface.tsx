@@ -18,6 +18,7 @@ import { DocumentPage } from './document-page';
 import { splitRenderedPages } from '@/src/document/report-pages';
 import { resolveReportSettings } from '@/src/document/report-settings';
 import { PhysicalReportPreview } from './physical-report-preview';
+import { reportDocumentCss } from '@/src/document/report-style';
 
 interface PreviewSurfaceProps {
   document: DocumentData;
@@ -110,6 +111,25 @@ function LogicalPreviewSurface({
     setAnchorRequest({ id });
   };
 
+  const scopedCss = useMemo(
+    () => (slide ? '' : reportDocumentCss(document.metadata)),
+    [slide, document.metadata],
+  );
+  const renderedPages = pages.map((nodes, index) =>
+    !paginated || index === activePage ? (
+      <DocumentPage
+        key={index}
+        document={document}
+        nodes={nodes}
+        analysis={analysis}
+        locale={locale}
+        index={index}
+        count={pages.length}
+        resolveImageUrl={resolveImageUrl}
+      />
+    ) : null,
+  );
+
   return (
     <div className="preview-pages">
       <div className="preview-page-summary">
@@ -167,22 +187,34 @@ function LogicalPreviewSurface({
           </ul>
         </output>
       )}
-      <div ref={content} className="contents" onClickCapture={followReference}>
-        {pages.map((nodes, index) =>
-          !paginated || index === activePage ? (
-            <DocumentPage
-              key={index}
-              document={document}
-              nodes={nodes}
-              analysis={analysis}
-              locale={locale}
-              index={index}
-              count={pages.length}
-              resolveImageUrl={resolveImageUrl}
-            />
-          ) : null,
-        )}
-      </div>
+      {scopedCss ? (
+        // The style sheet may come from someone else's file. It is nested in
+        // the scope rule, so its selectors only match inside the scope; the
+        // scope has no following sibling, and the outer box contains fixed
+        // positioning and painting. See src/security/report-css.ts.
+        <div className="kumi-report-style-frame">
+          <style
+            dangerouslySetInnerHTML={{
+              __html: `.kumi-report-style-scope{\n${scopedCss}\n}`,
+            }}
+          />
+          <div
+            ref={content}
+            className="kumi-report-style-scope"
+            onClickCapture={followReference}
+          >
+            {renderedPages}
+          </div>
+        </div>
+      ) : (
+        <div
+          ref={content}
+          className="contents"
+          onClickCapture={followReference}
+        >
+          {renderedPages}
+        </div>
+      )}
     </div>
   );
 }

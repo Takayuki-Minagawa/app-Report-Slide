@@ -8,6 +8,35 @@ const here = dirname(fileURLToPath(import.meta.url));
 const web = resolve(here, '../web');
 const require = createRequire(resolve(here, 'package.json'));
 
+const rawAndInlineAssets = {
+  name: 'vite-raw-and-inline-assets',
+  setup(build) {
+    build.onResolve({ filter: /\?(raw|inline)$/ }, (args) => {
+      const [bare, mode] = args.path.split('?');
+      const path = bare.startsWith('pagedjs/')
+        ? resolve(
+            dirname(require.resolve('pagedjs')),
+            '..',
+            bare.slice('pagedjs/'.length),
+          )
+        : bare.startsWith('@/')
+          ? resolve(web, bare.slice(2))
+          : bare.startsWith('.')
+            ? resolve(args.resolveDir, bare)
+            : require.resolve(bare);
+      return { path, namespace: `kumi-${mode}` };
+    });
+    build.onLoad({ filter: /.*/, namespace: 'kumi-raw' }, async (args) => ({
+      contents: await readFile(args.path, 'utf8'),
+      loader: 'text',
+    }));
+    build.onLoad({ filter: /.*/, namespace: 'kumi-inline' }, async (args) => ({
+      contents: `data:font/woff2;base64,${(await readFile(args.path)).toString('base64')}`,
+      loader: 'text',
+    }));
+  },
+};
+
 /** The CLI builds a fresh, isolated bundle each run, including raw CSS and fonts. */
 export async function buildApi(outfile = resolve(here, '.cache/kumi-api.mjs')) {
   await mkdir(dirname(outfile), { recursive: true });
@@ -31,42 +60,27 @@ export async function buildApi(outfile = resolve(here, '.cache/kumi-api.mjs')) {
       'yaml',
       'zod',
     ],
-    plugins: [
-      {
-        name: 'vite-raw-and-inline-assets',
-        setup(build) {
-          build.onResolve({ filter: /\?(raw|inline)$/ }, (args) => {
-            const [bare, mode] = args.path.split('?');
-            const path = bare.startsWith('pagedjs/')
-              ? resolve(
-                  dirname(require.resolve('pagedjs')),
-                  '..',
-                  bare.slice('pagedjs/'.length),
-                )
-              : bare.startsWith('@/')
-                ? resolve(web, bare.slice(2))
-                : bare.startsWith('.')
-                  ? resolve(args.resolveDir, bare)
-                  : require.resolve(bare);
-            return { path, namespace: `kumi-${mode}` };
-          });
-          build.onLoad(
-            { filter: /.*/, namespace: 'kumi-raw' },
-            async (args) => ({
-              contents: await readFile(args.path, 'utf8'),
-              loader: 'text',
-            }),
-          );
-          build.onLoad(
-            { filter: /.*/, namespace: 'kumi-inline' },
-            async (args) => ({
-              contents: `data:font/woff2;base64,${(await readFile(args.path)).toString('base64')}`,
-              loader: 'text',
-            }),
-          );
-        },
-      },
-    ],
+    plugins: [rawAndInlineAssets],
+    logLevel: 'silent',
+  });
+  return outfile;
+}
+
+/** The Word exporter as one script for a browser page; nothing is external. */
+export async function buildBrowserBundle(outfile) {
+  await mkdir(dirname(outfile), { recursive: true });
+  await build({
+    entryPoints: [resolve(here, 'docx-entry.ts')],
+    outfile,
+    bundle: true,
+    platform: 'browser',
+    format: 'iife',
+    target: 'chrome120',
+    jsx: 'automatic',
+    alias: { '@': web },
+    nodePaths: [resolve(here, 'node_modules')],
+    define: { 'process.env.NODE_ENV': '"production"' },
+    plugins: [rawAndInlineAssets],
     logLevel: 'silent',
   });
   return outfile;

@@ -661,7 +661,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       exportSteps: [
         '「完成プレビュー」でReportはA4ページ、Slideは16:9スライドとして確認できます。',
         'Reportは「Word」で.docx、Slideは「PPTX」で.pptxを出力できます。「PDF」は両方に対応し、章別プロジェクトでは有効な章をまとめて出力します。未適用のMarkdown下書きも対象になります。',
-        'Word／PowerPointの数式はLaTeXテキスト、Wordのグラフはデータ表になります。PDFボタンは紙面を画像化します。検索できるPDFは「出力比較・印刷」→「印刷／PDF保存」から保存できます。長いReportの分割位置を確認してください。外部URLの画像はローカル画像として取り込んでから出力します。',
+        'Wordの数式は編集できる数式、PowerPointの数式はLaTeXテキスト、Wordのグラフはデータ表になります。PDFボタンは紙面を画像化します。検索できるPDFは「出力比較・印刷」→「印刷／PDF保存」から保存できます。長いReportの分割位置を確認してください。外部URLの画像はローカル画像として取り込んでから出力します。',
         'ヘッダーのMarkdownまたはJSONでファイルを保存します。Document JSONはMarkdownで表せない構造も保持できます。',
         'Slide文書では「HTML」で閲覧・発表用の単一HTMLファイルを出力できます。前へ／次へボタンや矢印キーで移動し、進捗バーで現在位置を確認できます。Fキーで全画面表示、Pキーまたは「印刷／PDF保存」で全スライドを印刷できます。',
         'HTMLスライドでは O で一覧、数字＋Enter で番号を指定して移動、B で暗転できます。N は発表者ノートを画面下に、S は現在と次のスライド・ノート・経過時間を別ウィンドウ（発表者ビュー）に表示します。ノートは印刷されません。',
@@ -1039,7 +1039,7 @@ export const messages: Record<AppLocale, UiMessages> = {
       exportSteps: [
         'Use Preview to review Reports as A4 pages and Slides as 16:9 slides.',
         'Use Word to export Reports as .docx, PPTX to export Slides as .pptx, and PDF for either type. Chapter projects export all enabled chapters together. Unapplied Markdown drafts are included.',
-        'Office equations become LaTeX text and Word charts become data tables. The PDF button produces page images. Use Compare / Print → Print / Save PDF for searchable text; check page splits in long Reports. Import external images locally before exporting.',
+        'Word equations are editable math, PowerPoint equations become LaTeX text, and Word charts become data tables. The PDF button produces page images. Use Compare / Print → Print / Save PDF for searchable text; check page splits in long Reports. Import external images locally before exporting.',
         'Save Markdown or JSON from the header. Document JSON preserves structures that Markdown cannot express.',
         'For Slide documents, use HTML to export a standalone file for viewing and presenting. Use Previous/Next or the arrow keys to navigate, and the progress bar to track your place. Press F for fullscreen where supported; press P or Print / Save PDF to print every slide.',
         'In HTML slides, press O for the overview, type a number and press Enter to go to that slide, and press B to black out the screen. N shows speaker notes below the slide; S opens the presenter view, a separate window with the current and next slides, notes, and elapsed time. Notes are not printed.',

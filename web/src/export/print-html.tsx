@@ -18,6 +18,7 @@ import { embedSlideImages } from './embedded-images';
 import { offlineMathStyles } from './math-styles';
 import { offlinePrintFonts } from './print-fonts';
 import { exportReportHtml } from './report-html';
+import { reportDocumentCss } from '@/src/document/report-style';
 
 export interface PrintSnapshot {
   html: string;
@@ -77,6 +78,7 @@ ${documentStyles}\n${offlineMathStyles}\n${offlinePrintFonts}
 .print-page{width:${width}mm;min-height:${height}mm;margin:20px auto;background:white}.print-page>.slide-preview{width:${width}mm;height:${height}mm;overflow:hidden;box-shadow:none}.print-page>.report-sheet{width:${width}mm;max-width:none}.print-page .report-preview{box-shadow:none}.print-page .report-layout{min-height:${height}mm}.report-layout .preview-table-wrap{overflow:visible}thead{display:table-header-group}tr{break-inside:avoid}.document-renderer figure{break-inside:avoid}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 @page{size:${width}mm ${height}mm;margin:0}
 @media print{body{background:white}.print-page{margin:0;break-after:page;page-break-after:always}.print-page:last-child{break-after:auto;page-break-after:auto}.print-page>.slide-preview{overflow:hidden}.print-page .report-layout{--report-height:${height}mm}}
+${slide ? '' : reportDocumentCss(document.metadata)}
 `;
   const html =
     '<!doctype html>\n' +

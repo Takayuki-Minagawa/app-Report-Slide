@@ -34,6 +34,9 @@ node render.mjs --input /path/to/report.kumi.json --output-dir /path/to/output -
 | `report.md`                  | KUMI の標準シリアライザーによる Markdown                                    |
 | `report.kumi.zip`            | ネイティブ単体文書アーカイブ。画像・PDF原本を含む                           |
 | `report.layout.json`         | `--check-layout` 指定時、または実ページ番号が有効なReportのページ別検査結果 |
+| `report.pdf`                 | `--pdf` 指定時。検査した紙面を印刷したPDF（Report）                         |
+| `report.docx`                | `--docx` 指定時。Word文書（Report）                                         |
+| `report.docx-check.json`     | `--check-docx` 指定時。Word文書の検査結果                                   |
 | 原稿に記載した相対パスの素材 | JSON / Markdown の再読込に必要な画像・PDF原本のコピー                       |
 
 HTML と ZIP は単体で受け渡せます。JSON / Markdown は、出力先へ複写された素材も同じフォルダー構成で保持してください。入力は変更しません。入力ファイルと同じ名前になる出力先は避け、別フォルダーを指定してください。
@@ -60,6 +63,26 @@ Reportの `report_settings.toc_page_numbers: true` では、`--check-layout` を
 - 画像の読込失敗、未計測ページ、ブラウザー起動失敗など：終了コード 1。成果物の保存は開始しません。
 
 これは指定したChromium・ローカルフォント環境での測定です。実ページ番号が無効な場合は自動改ページ後の物理ページ数を算出しません。有効な場合も、別ブラウザー・フォント・プリンターでの組版が同一になる保証はありません。検査結果にはブラウザー版とviewportを記録します。最終配布時は印刷プレビューも確認してください。
+
+## PDF・Word・スタイルの指定（Report）
+
+```sh
+node render.mjs --input /path/to/report.md --output-dir /path/to/output --style /path/to/house.css --pdf --docx --check-docx --fail-on-overflow
+```
+
+いずれもReport専用で、Chromium（`npm run install:browser`）が必要です。一括モードでは `report.pdf`、`report.docx`、`report.docx-check.json` を保存します。個別モードでは `--pdf /path/to/report.pdf`、`--docx /path/to/report.docx` のように保存先を指定します。
+
+- `--style FILE.css`：CSSを文書の `report_style.css` の末尾に追加します（原稿に既にあるCSSの後に適用）。追加後の文書をHTML・PDF・JSON・Markdown・ZIPのすべてに保存するため、出力したZIPやMarkdownを画面で開いて書き出しても同じ体裁になります。64 KiB以下で、外部参照（`url()`、`@import` など）を含むCSSは拒否します。制限の一覧は [報告書の書式ガイド](../web/docs/report-style.ja.md#カスタムcssreport_stylecss) を参照してください。
+- `--pdf`：はみ出し検査を行ったのと同じページ（組版完了後）を、用紙サイズどおりに印刷します。`layout.json`・`--fail-on-overflow` とPDFは同じ紙面を指します。文字は選択・検索できます。
+- `--docx`：画面のWord出力と同じ処理を、ネットワークを遮断したChromiumの空ページで実行します（画像のデコードにブラウザーが必要なため）。警告（変換できなかった式、Wordに反映されないCSSなど）は標準出力JSONの `docx.warnings` に入ります。
+- `--check-docx`：`--docx` を含みます。次を検査し、結果を標準出力JSONの `docx.check` と `.docx-check.json` に保存します。問題があれば成果物を保存したうえで終了コード2です。
+  - 図・表・式の番号と本文中の参照が、KUMIの番号と一致すること（DOCXのXMLから）
+  - 表・画像が本文の幅を超えていないこと（DOCXのXMLから）
+  - 目次の各項目のページ番号が、見出しのあるページの番号と一致すること（LibreOfficeでPDFに変換して照合）
+
+目次の照合にはLibreOffice（`soffice`）が必要です。`PATH` または環境変数 `KUMI_SOFFICE` で指定します。見つからない場合、この項目だけ `skipped` になります。変換は一時フォルダーの専用プロファイルで行い、終了後に削除します。
+
+WordとLibreOfficeでは改行やページ送りが少し違い、書体（游明朝など）がない環境では代わりの書体で組まれます。そのため照合するのは「変換後の文書の中で、目次の番号と見出しのページが合っているか」だけで、HTML版のPDFやWordでのページ位置との一致は求めません。`report_settings.word_fields: true` の目次はWordの `TOC` フィールドで、LibreOfficeは更新しないため `unverified`（未確認）になります。Wordでフィールドを更新して確認してください。
 
 ## 既存の個別出力コマンド
 

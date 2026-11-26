@@ -22,6 +22,7 @@ import { offlineMathStyles } from './math-styles';
 import { prepareOfficeImages } from './office-images';
 import { exportReportHtml } from './report-html';
 import { offlinePrintFonts } from './print-fonts';
+import { reportDocumentCss } from '@/src/document/report-style';
 import { waitForReportPagination } from './pagination-ready';
 
 const pixelsPerMillimetre = 96 / 25.4;
@@ -347,7 +348,9 @@ export async function exportDocumentPdf(
       "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
     frame.head.appendChild(policy);
     const styles = frame.createElement('style');
-    styles.textContent = frameStyles(width, height, slide);
+    styles.textContent =
+      frameStyles(width, height, slide) +
+      (slide ? '' : reportDocumentCss(document.metadata));
     frame.head.appendChild(styles);
     frame.body.innerHTML =
       '<div id="pdf-viewport"><div id="pdf-content"></div></div>';

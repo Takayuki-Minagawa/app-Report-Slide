@@ -164,4 +164,91 @@ describe('report structure settings', () => {
       expect.objectContaining({ toc: false, appendix: true, numbered: null }),
     );
   });
+
+  it('stores only formatting that differs from the theme and validates the page number format', () => {
+    const onApply = vi.fn();
+    const { unmount } = render(
+      <AppPreferencesProvider>
+        <ReportSettingsPanel
+          metadata={{ theme: 'report-jp' }}
+          disabled={false}
+          onApply={onApply}
+        />
+      </AppPreferencesProvider>,
+    );
+    // The theme supplies "- {n} -" in the centre and a centred cover.
+    expect(screen.getByLabelText('ページ番号の書式')).toHaveValue('- {n} -');
+    expect(
+      screen.getByRole('combobox', { name: 'ページ番号の位置' }),
+    ).toHaveValue('bottom-center');
+    expect(screen.getByLabelText('（注）')).toHaveValue('');
+    fireEvent.click(screen.getByRole('button', { name: '報告書の構成を適用' }));
+    const stored = onApply.mock.calls[0][0].report_settings;
+    for (const key of [
+      'page_number_format',
+      'toc_page_number_format',
+      'page_number_position',
+      'cover_layout',
+      'caption_separator',
+      'callout_labels',
+      'keep_tables',
+      'word_fields',
+      'number_depth',
+      'appendix_numbering',
+      'toc_title',
+      'front_matter_page_numbers',
+    ])
+      expect(stored, key).not.toHaveProperty(key);
+
+    fireEvent.change(screen.getByLabelText('ページ番号の書式'), {
+      target: { value: '{n} / {total}' },
+    });
+    fireEvent.change(
+      screen.getByRole('combobox', { name: '図表番号と表題の区切り' }),
+      { target: { value: ': ' } },
+    );
+    fireEvent.change(screen.getByRole('combobox', { name: '表のページ分割' }), {
+      target: { value: 'auto' },
+    });
+    fireEvent.change(screen.getByLabelText('（注）'), {
+      target: { value: '注' },
+    });
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: 'Word出力の番号・参照・目次をフィールドにする',
+      }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '報告書の構成を適用' }));
+    expect(onApply.mock.calls[1][0].report_settings).toMatchObject({
+      page_number_format: '{n} / {total}',
+      caption_separator: ': ',
+      keep_tables: 'auto',
+      callout_labels: { note: '注' },
+      word_fields: true,
+    });
+    expect(onApply.mock.calls[1][0].report_settings).not.toHaveProperty(
+      'toc_page_number_format',
+    );
+
+    fireEvent.change(screen.getByLabelText('ページ番号の書式'), {
+      target: { value: 'page' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '報告書の構成を適用' }));
+    expect(onApply).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    unmount();
+
+    render(
+      <AppPreferencesProvider>
+        <ReportSettingsPanel
+          metadata={{ report_style: { css: 'h1 { color: red }' } }}
+          disabled={false}
+          onApply={onApply}
+        />
+      </AppPreferencesProvider>,
+    );
+    expect(screen.getByRole('note')).toHaveTextContent(
+      'Wordには反映されません',
+    );
+  });
 });

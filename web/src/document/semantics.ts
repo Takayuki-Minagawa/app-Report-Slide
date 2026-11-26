@@ -5,7 +5,7 @@ import {
   type FootnoteNode,
 } from './model';
 import { walkDocumentTree, type DocumentTreeNode } from './traversal';
-import { resolveReportSettings } from './report-settings';
+import { resolveReportSettings, usesAppendixLetters } from './report-settings';
 
 export const labelPattern = /^[A-Za-z][A-Za-z0-9:._-]{0,127}$/;
 export const semanticTypes = new Set([
@@ -71,6 +71,10 @@ export function analyzeDocument(document: DocumentData): DocumentAnalysis {
     document.type === 'report' && settings.heading_numbering === 'chapter';
   const chapterCaptions =
     document.type === 'report' && settings.caption_numbering === 'chapter';
+  // Appendix letters are also available to plain section numbers when requested.
+  const appendixLetters =
+    document.type === 'report' && usesAppendixLetters(settings);
+  const numberDepth = document.type === 'report' ? settings.number_depth : 6;
   const chapterSections = [0, 0, 0, 0, 0];
   let chapter = 0;
   let appendix = 0;
@@ -88,20 +92,19 @@ export function analyzeDocument(document: DocumentData): DocumentAnalysis {
       if (node.type === 'heading') {
         level = node.attrs.level;
         title = inlineText(node.content);
-        if (chapterHeadings && level === 1 && node.attrs.appendix === true)
+        if (appendixLetters && level === 1 && node.attrs.appendix === true)
           appendixMode = true;
         // Chapter boundaries are structural: turning off displayed section
         // numbers does not merge caption counters across otherwise eligible H1s.
         // Explicit numbered=false headings do not consume a chapter or reset it.
         if (
-          (chapterHeadings || chapterCaptions) &&
+          (chapterHeadings || chapterCaptions || appendixMode) &&
           level === 1 &&
           numbered !== false
         ) {
-          currentChapter =
-            chapterHeadings && appendixMode
-              ? appendixNumber(++appendix)
-              : String(++chapter);
+          currentChapter = appendixMode
+            ? appendixNumber(++appendix)
+            : String(++chapter);
           chapterSections.fill(0);
           if (chapterCaptions) {
             counters.figure = 0;
@@ -110,18 +113,22 @@ export function analyzeDocument(document: DocumentData): DocumentAnalysis {
           }
         }
         headingKind =
-          chapterHeadings && level === 1
-            ? appendixMode
-              ? 'appendix'
-              : 'chapter'
-            : 'section';
+          level === 1 && appendixMode
+            ? 'appendix'
+            : chapterHeadings && level === 1
+              ? 'chapter'
+              : 'section';
+        // Levels below the numbering depth neither show nor consume a number.
         if (
-          numbered === true ||
-          (numbered !== false && document.metadata.number_sections === true)
+          level <= numberDepth &&
+          (numbered === true ||
+            (numbered !== false && document.metadata.number_sections === true))
         ) {
           // Chapter captions and displayed headings must share the structural
           // H1 counter, even when headings use the plain section-number format.
-          if (chapterHeadings || chapterCaptions) {
+          // Plain section numbers move to "A.1" only once a letter exists; an
+          // unnumbered appendix heading leaves its sub-headings as they were.
+          if (chapterHeadings || chapterCaptions || appendix > 0) {
             if (level === 1) number = currentChapter;
             else {
               for (let index = 0; index < level - 2; index++) {

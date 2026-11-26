@@ -22,6 +22,7 @@ export const documentThemes = {
   report: [
     ['latex', 'LaTeX'],
     ['calculation', 'Calculation'],
+    ['report-jp', '報告書（Word風）'],
   ],
   slide: [
     ['beamer-simple', 'Beamer Simple'],

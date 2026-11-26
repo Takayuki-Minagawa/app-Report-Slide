@@ -17,6 +17,7 @@ import {
 } from './model';
 import { booleanMetadataKeys, stringMetadataKeys } from './metadata';
 import { pageSettingsIssues } from './page-settings';
+import { reportStyleIssues } from './report-style';
 import { reportSettingsIssues } from './report-settings';
 import { labelPattern, semanticTypes } from './semantics';
 import {
@@ -974,6 +975,9 @@ export function validateDocumentData(value: unknown): DocumentData {
       (issue) => `metadata.${issue}`,
     ),
     ...reportSettingsIssues(metadata.report_settings).map(
+      (issue) => `metadata.${issue}`,
+    ),
+    ...reportStyleIssues(metadata.report_style).map(
       (issue) => `metadata.${issue}`,
     ),
   );

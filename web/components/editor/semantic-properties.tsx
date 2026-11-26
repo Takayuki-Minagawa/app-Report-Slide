@@ -182,8 +182,8 @@ export function SemanticProperties({
               </label>
               <p className="text-muted-foreground">
                 {locale === 'ja'
-                  ? '番号書式を「章番号」にすると、このH1以降を付録A、B…にします。'
-                  : 'In chapter numbering mode, this H1 and subsequent chapters become Appendices A, B….'}
+                  ? '番号書式が「章番号」のとき、または「付録の番号」を「付録A、A.1」にしたとき、このH1以降を付録A、B…にします。'
+                  : 'With chapter numbering, or with appendix numbers set to "Appendix A, A.1", this H1 and the following ones become Appendices A, B….'}
               </p>
             </>
           )}

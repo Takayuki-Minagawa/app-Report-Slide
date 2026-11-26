@@ -11,8 +11,8 @@ import {
   HeadingLevel,
   ImageRun,
   InternalHyperlink,
-  LeaderType,
   LevelFormat,
+  NumberFormat,
   Packer,
   PageBreak,
   PageNumber,
@@ -20,9 +20,11 @@ import {
   PageOrientation,
   Paragraph,
   SectionType,
+  SimpleField,
   Table,
   TableCell,
   TableLayoutType,
+  TableOfContents,
   TableRow,
   Tab,
   TabStopType,
@@ -61,12 +63,29 @@ import {
   resolveParagraphIndent,
 } from '@/src/document/paragraph-format';
 import { migrateDocumentData } from '@/src/document/validation';
+import { localizeDiagnosticMessage } from '@/src/i18n/diagnostics';
+import type { AppLocale } from '@/src/i18n/messages';
 import {
+  calloutLabel,
+  captionParts,
+  contentsTitle,
   formatSemanticReference,
-  formatHeadingNumber,
-  localizeDiagnosticMessage,
-} from '@/src/i18n/diagnostics';
-import { messages, type AppLocale } from '@/src/i18n/messages';
+  headingPrefix,
+  joinCaption,
+  pageNumberParts,
+} from '@/src/document/format';
+import {
+  hasCssOnlyStyle,
+  resolveReportStyle,
+} from '@/src/document/report-style';
+import { mathComponent } from './docx/math';
+import {
+  appendixList,
+  planHeadingNumbering,
+  sequenceName,
+} from './docx/numbering';
+import { buildStyles, hex, styleIds } from './docx/styles';
+import { tableBorders, tableGrid } from './docx/table';
 import type { AssetUrls } from '@/src/workspace/files';
 import { prepareOfficeImages } from './office-images';
 import { addOfficeFigureImages, officeFigureKey } from './office-figures';
@@ -91,7 +110,19 @@ const headings = [
 const exportMessages = {
   ja: {
     required: 'Wordへの出力にはレポート文書が必要です。',
-    math: '数式は編集可能なLaTeXテキストとして出力しました。',
+    math: '変換できない数式は、編集可能なLaTeXテキストとして出力しました。',
+    cssOnly:
+      '文書のカスタムCSS（report_style.css）はWordには反映されません。Wordにも反映する書式はreport_styleの項目で指定してください。',
+    fields:
+      '見出し番号・図表番号・参照・目次はWordのフィールドです。Wordで編集した後は、全体を選択してフィールドを更新してください。',
+    fieldHeadings:
+      'この文書の見出し番号はWordの段落番号では同じ値にならないため、出力時点の文字として出力しました。',
+    fieldCaptions:
+      '章ごとの図表番号はWordのフィールドにできないため、出力時点の文字として出力しました。',
+    fieldContents:
+      '目次から除外した見出しは、Wordで目次を更新すると目次に表示されます。',
+    fieldContentsFormat:
+      '目次のページ番号の書式（- 1 - など）は、Wordで目次を更新すると数字だけになります。',
     chart: 'グラフは全データを含む編集可能な表として出力しました。',
     numbering:
       '目次の項目・見出し番号・図表番号・参照は出力時点の値です。Wordで編集した後は必要に応じて修正してください。',
@@ -108,7 +139,19 @@ const exportMessages = {
   },
   en: {
     required: 'Word export requires a report document.',
-    math: 'Equations were exported as editable LaTeX text.',
+    math: 'Equations that could not be converted were exported as editable LaTeX text.',
+    cssOnly:
+      'The custom CSS of the document (report_style.css) does not apply to Word. Use the report_style values for formatting that should also reach Word.',
+    fields:
+      'Heading and caption numbers, references and contents are Word fields. After editing in Word, select the document and update its fields.',
+    fieldHeadings:
+      'Word paragraph numbering cannot reproduce the heading numbers of this document, so they were exported as fixed text.',
+    fieldCaptions:
+      'Caption numbers by chapter cannot be Word fields and were exported as fixed text.',
+    fieldContents:
+      'Headings excluded from the contents will appear when the contents are updated in Word.',
+    fieldContentsFormat:
+      'The page number format of the contents (such as "- 1 -") becomes plain numbers when the contents are updated in Word.',
     chart: 'Charts were exported as editable tables containing all their data.',
     numbering:
       'The table of contents entries, section and caption numbers, and references retain their exported values. Revise them as needed after editing in Word.',
@@ -132,8 +175,10 @@ interface BlockContext {
   topLevel: boolean;
   numbering?: IParagraphOptions['numbering'];
   alignment?: IParagraphOptions['alignment'];
-  bold?: boolean;
   color?: string;
+  /** Named paragraph style for the direct paragraphs of a cell or callout. */
+  style?: string;
+  keepNext?: boolean;
 }
 
 /** Produce a real Word document, keeping text, lists and tables editable. */
@@ -158,6 +203,8 @@ export async function exportReportDocx(
   await addOfficeFigureImages(document, images);
   const settings = resolvePageSettings(document.metadata);
   const report = resolveReportSettings(document.metadata);
+  const style = resolveReportStyle(document.metadata);
+  const separator = report.caption_separator;
   const indentLeads = paragraphIndentLeads(document.children);
   const [pageWidth, pageHeight] = pageDimensions(settings);
   const bodyWidth = mmToTwips(
@@ -172,9 +219,52 @@ export async function exportReportDocx(
       localizeDiagnosticMessage(message, locale),
     ),
   );
+  if (hasCssOnlyStyle(document.metadata)) warnings.add(copy.cssOnly);
   const anchors = new Map(
     [...analysis.targets.keys()].map((id, index) => [id, `kumi_${index + 1}`]),
   );
+  // Fields are opt-in: by default every number is the text shown in KUMI.
+  const fields = report.word_fields;
+  const headingNumbering = fields
+    ? planHeadingNumbering(analysis, report, locale)
+    : undefined;
+  const captionFields = fields && report.caption_numbering === 'continuous';
+  if (fields) {
+    warnings.add(copy.fields);
+    if (!headingNumbering && analysis.outline.some((target) => target.number))
+      warnings.add(copy.fieldHeadings);
+    if (
+      !captionFields &&
+      [...analysis.targets.values()].some(
+        (target) => target.type !== 'heading' && target.number,
+      )
+    )
+      warnings.add(copy.fieldCaptions);
+  }
+  /** True when Word itself keeps the number of this target up to date. */
+  const isField = (target: SemanticTarget) =>
+    target.type === 'heading'
+      ? Boolean(headingNumbering?.levels.has(target.nodeId))
+      : captionFields && Boolean(target.number);
+  const staticNumber = (target: SemanticTarget) => {
+    if (target.number && !isField(target)) warnings.add(copy.numbering);
+  };
+  function math(
+    latex: string,
+    display: boolean,
+    ownParagraph = display,
+  ): ParagraphChild | undefined {
+    try {
+      return mathComponent(
+        latex,
+        display,
+        ownParagraph,
+      ) as unknown as ParagraphChild;
+    } catch {
+      warnings.add(copy.math);
+      return undefined;
+    }
+  }
   const footnotes = collectFootnotes(document.children);
   const footnoteIds = new Map(
     footnotes.map((node, index) => [node, index + 1]),
@@ -218,7 +308,6 @@ export async function exportReportDocx(
   function inline(
     nodes: InlineNode[] | undefined,
     width: number,
-    bold = false,
     color?: string,
   ): ParagraphChild[] {
     return (nodes ?? []).flatMap((node): ParagraphChild[] => {
@@ -228,7 +317,7 @@ export async function exportReportDocx(
           const run = new TextRun({
             text: node.text,
             color,
-            bold: bold || marks.some((mark) => mark.type === 'bold'),
+            bold: marks.some((mark) => mark.type === 'bold') || undefined,
             italics: marks.some((mark) => mark.type === 'italic'),
             strike: marks.some((mark) => mark.type === 'strike'),
             ...(marks.some((mark) => mark.type === 'code')
@@ -247,13 +336,13 @@ export async function exportReportDocx(
         case 'hardBreak':
           return [new TextRun({ break: 1 })];
         case 'inlineMath':
-          warnings.add(copy.math);
           return [
-            new TextRun({
-              text: node.attrs.latex,
-              font: 'Cambria Math',
-              color,
-            }),
+            math(node.attrs.latex, false) ??
+              new TextRun({
+                text: node.attrs.latex,
+                font: 'Cambria Math',
+                color,
+              }),
           ];
         case 'inlineImage':
           return [image(node.attrs.src, node.attrs.alt, width)];
@@ -261,16 +350,34 @@ export async function exportReportDocx(
           const target = analysis.labels.get(node.attrs.target);
           if (!target)
             return [new TextRun({ text: `[@${node.attrs.target}]`, color })];
-          warnings.add(copy.numbering);
+          const text = formatSemanticReference(target, locale);
+          if (isField(target) && target.number) {
+            // The bookmark holds "図 1" for a caption, the number alone for an
+            // equation, and the paragraph number for a heading.
+            const anchor = anchors.get(target.nodeId)!;
+            const numberOnly =
+              target.type === 'blockMath' ||
+              (target.type === 'heading' && target.headingKind === 'section');
+            return [
+              ...(numberOnly
+                ? [
+                    new TextRun({
+                      text: text.slice(0, text.length - target.number.length),
+                      color,
+                    }),
+                  ]
+                : []),
+              new SimpleField(
+                `REF ${anchor} ${target.type === 'heading' ? '\\r ' : ''}\\h`,
+                numberOnly ? target.number : text,
+              ),
+            ];
+          }
+          staticNumber(target);
           return [
             new InternalHyperlink({
               anchor: anchors.get(target.nodeId)!,
-              children: [
-                new TextRun({
-                  text: formatSemanticReference(target, locale),
-                  color,
-                }),
-              ],
+              children: [new TextRun({ text, color })],
             }),
           ];
         }
@@ -320,101 +427,187 @@ export async function exportReportDocx(
           : {}),
     };
     const target = analysis.targets.get(node.attrs.nodeId);
+    // Word numbers the heading itself when the multilevel list reproduces it.
+    const listLevel = target && headingNumbering?.levels.get(target.nodeId);
     const runs = [
-      ...(target?.number
-        ? [new TextRun(`${formatHeadingNumber(target, locale)} `)]
+      ...(target?.number && !listLevel
+        ? [new TextRun(headingPrefix(target, locale))]
         : []),
-      ...inline(node.content, rulerWidth, context.bold, context.color),
+      ...inline(node.content, rulerWidth, context.color),
     ];
-    if (target?.number) warnings.add(copy.numbering);
+    if (target) staticNumber(target);
+    const appendixHeading =
+      listLevel?.reference === appendixList && listLevel.level === 0;
     return new Paragraph({
       children: target
         ? [new Bookmark({ id: anchors.get(target.nodeId)!, children: runs })]
         : runs,
       heading:
-        node.type === 'heading' ? headings[node.attrs.level - 1] : undefined,
+        node.type === 'heading' && !appendixHeading
+          ? headings[node.attrs.level - 1]
+          : undefined,
+      style: appendixHeading
+        ? styleIds.appendixHeading
+        : node.type === 'paragraph'
+          ? context.style
+          : undefined,
       indent: context.numbering
         ? { ...indent, hanging: 300, firstLine: undefined }
         : indent,
-      numbering: context.numbering,
+      numbering:
+        context.numbering ??
+        (listLevel ? { ...listLevel, custom: true } : undefined),
       alignment: context.alignment,
-      keepNext: node.type === 'heading',
+      // Headings keep with the next paragraph through their style.
+      keepNext: context.keepNext || undefined,
       widowControl: true,
     });
   }
 
   function caption(node: DocumentNode, before = false): Paragraph[] {
     const target = analysis.targets.get(node.attrs.nodeId);
-    const text = [
-      target?.number ? formatSemanticReference(target, locale) : '',
-      node.attrs.caption || '',
+    const parts = captionParts(target, node.attrs.caption, locale, separator);
+    const source =
       node.type === 'figure'
         ? figureSourceText(
             readFigureEdit(node.attrs.figureEdit),
             figureReferences(document.metadata),
           )
-        : '',
-    ]
-      .filter(Boolean)
-      .join(' — ');
-    if (target?.number) warnings.add(copy.numbering);
+        : '';
+    const text = joinCaption([parts.label, parts.text, source], separator);
+    if (target) staticNumber(target);
     if (!text && !target) return [];
+    let children: ParagraphChild[];
+    if (target?.number && isField(target) && node.type !== 'blockMath') {
+      // Only "図 1" is bookmarked, so a reference repeats the label and number.
+      const rest = joinCaption(['', parts.text, source], separator);
+      children = [
+        new Bookmark({
+          id: anchors.get(target.nodeId)!,
+          children: [
+            new TextRun(
+              parts.label.slice(0, parts.label.length - target.number.length),
+            ),
+            new SimpleField(
+              `SEQ ${sequenceName(node.type as 'figure' | 'table', locale)} \\* ARABIC`,
+              target.number,
+            ),
+          ],
+        }),
+        ...(rest
+          ? [new TextRun((parts.text || source ? separator : '') + rest)]
+          : []),
+      ];
+    } else
+      children = target
+        ? [
+            new Bookmark({
+              id: anchors.get(target.nodeId)!,
+              children: text ? [new TextRun(text)] : [],
+            }),
+          ]
+        : [new TextRun(text)];
     return [
       new Paragraph({
-        children: target
-          ? [
-              new Bookmark({
-                id: anchors.get(target.nodeId)!,
-                children: text
-                  ? [new TextRun({ text, size: settings.font_size * 2 - 1 })]
-                  : [],
-              }),
-            ]
-          : [new TextRun(text)],
-        alignment: AlignmentType.CENTER,
-        keepNext: before,
-        spacing: { before: 80, after: 120 },
+        children,
+        style: styleIds.caption,
+        keepNext: before || undefined,
       }),
     ];
   }
 
+  /** A display equation; its number sits at a right tab on the same line. */
+  function equation(
+    node: Extract<DocumentNode, { type: 'blockMath' }>,
+    context: BlockContext,
+  ): Paragraph[] {
+    const target = analysis.targets.get(node.attrs.nodeId);
+    const anchor = target && anchors.get(target.nodeId)!;
+    const width = context.width - context.indent;
+    const numbered = Boolean(target?.number);
+    if (target) staticNumber(target);
+    // Always converted as a display equation; beside its number it is written
+    // without the paragraph wrapper, which may not share a line with tabs.
+    const body =
+      math(node.attrs.latex, true, !numbered) ??
+      new TextRun({ text: node.attrs.latex, font: 'Cambria Math' });
+    const number =
+      target?.number && isField(target)
+        ? new SimpleField(
+            `SEQ ${sequenceName('blockMath', locale)} \\* ARABIC`,
+            target.number,
+          )
+        : new TextRun(target?.number ?? '');
+    return [
+      new Paragraph({
+        style: styleIds.equation,
+        indent: { left: context.indent },
+        keepNext: Boolean(node.attrs.caption) || undefined,
+        ...(numbered
+          ? {
+              alignment: AlignmentType.LEFT,
+              tabStops: [
+                // Tab positions are measured from the margin, not the indent.
+                {
+                  type: TabStopType.CENTER,
+                  position: context.indent + Math.round(width / 2),
+                },
+                { type: TabStopType.RIGHT, position: context.indent + width },
+              ],
+              children: [
+                new TextRun({ children: [new Tab()] }),
+                body,
+                new TextRun({ children: [new Tab(), '('] }),
+                new Bookmark({ id: anchor!, children: [number] }),
+                new TextRun(')'),
+              ],
+            }
+          : {
+              children: anchor
+                ? [new Bookmark({ id: anchor, children: [] }), body]
+                : [body],
+            }),
+      }),
+      ...(node.attrs.caption
+        ? [
+            new Paragraph({
+              text: node.attrs.caption,
+              style: styleIds.caption,
+            }),
+          ]
+        : []),
+    ];
+  }
+
   function table(node: TableNode, context: BlockContext): Table {
-    const occupied: number[] = [];
-    const sizes: Array<number | undefined> = [];
-    const cellPositions = new Map<string, number>();
-    node.content.forEach((row, rowIndex) => {
-      let column = 0;
-      for (const cell of row.content ?? []) {
-        while ((occupied[column] ?? 0) > rowIndex) column++;
-        const span = cell.attrs.colspan ?? 1;
-        cellPositions.set(cell.attrs.nodeId, column);
-        for (let offset = 0; offset < span; offset++) {
-          const width = cell.attrs.colwidth?.[offset];
-          if (width) sizes[column + offset] = width;
-          occupied[column + offset] = rowIndex + (cell.attrs.rowspan ?? 1);
-        }
-        column += span;
-      }
-    });
-    const count = occupied.length;
-    const defaultWidth = twipsToPixels(context.width - context.indent) / count;
-    const widths = Array.from(
-      { length: count },
-      (_, index) => sizes[index] ?? defaultWidth,
-    );
-    const total = widths.reduce((sum, width) => sum + width, 0);
     const available = context.width - context.indent;
-    const scale = Math.min(15, available / total);
-    const columnWidths = widths.map((width) => Math.round(width * scale));
+    const { positions, widths: columnWidths } = tableGrid(node, available);
+    const compact = style.table.compact;
+    // keep_tables: a table that fits stays on one page; a long one still
+    // breaks between rows and repeats its header rows.
+    const rowHeight =
+      (style.table.size ?? settings.font_size) *
+        (compact ? 1.5 : settings.line_height) *
+        20 +
+      (compact ? 80 : 160 + settings.paragraph_spacing * 20);
+    const keep =
+      report.keep_tables === 'always' ||
+      (report.keep_tables === 'auto' &&
+        node.content.length * rowHeight <= bodyHeight / 2);
+    const headerFill = style.table.header_fill
+      ? hex(style.table.header_fill)
+      : undefined;
     const rows = node.content.map(
-      (row) =>
+      (row, rowIndex) =>
         new TableRow({
           tableHeader: Boolean(
             row.content?.length &&
             row.content.every((cell) => cell.type === 'tableHeader'),
           ),
+          // A row is never divided between two pages.
+          cantSplit: true,
           children: (row.content ?? []).map((cell) => {
-            const position = cellPositions.get(cell.attrs.nodeId)!;
+            const position = positions.get(cell.attrs.nodeId)!;
             const span = cell.attrs.colspan ?? 1;
             const cellWidth = columnWidths
               .slice(position, position + span)
@@ -436,6 +629,7 @@ export async function exportReportDocx(
                     },
               ]),
             );
+            const header = cell.type === 'tableHeader';
             return new TableCell({
               columnSpan: span > 1 ? span : undefined,
               rowSpan: cell.attrs.rowspan,
@@ -443,8 +637,8 @@ export async function exportReportDocx(
               borders,
               shading: cell.attrs.fill
                 ? { fill: cell.attrs.fill.slice(1) }
-                : cell.type === 'tableHeader'
-                  ? { fill: 'F1F5F9' }
+                : header && headerFill
+                  ? { fill: headerFill }
                   : undefined,
               children: cell.content.map((child) =>
                 paragraph(child, {
@@ -453,8 +647,15 @@ export async function exportReportDocx(
                   depth: 0,
                   topLevel: false,
                   alignment: cell.attrs.align ?? undefined,
-                  bold: cell.type === 'tableHeader',
+                  style: header ? styleIds.tableHeader : styleIds.tableText,
                   color: tableFillTextColor(cell.attrs.fill)?.slice(1),
+                  // A header row is never left alone at the foot of a page.
+                  keepNext:
+                    rowIndex < node.content.length - 1 &&
+                    (keep ||
+                      row.content!.every(
+                        (item) => item.type === 'tableHeader',
+                      )),
                 }),
               ),
             });
@@ -470,7 +671,10 @@ export async function exportReportDocx(
         type: WidthType.DXA,
       },
       indent: { size: context.indent, type: WidthType.DXA },
-      margins: { top: 80, bottom: 80, left: 100, right: 100 },
+      borders: tableBorders(style),
+      margins: compact
+        ? { top: 40, bottom: 40, left: 100, right: 100 }
+        : { top: 80, bottom: 80, left: 100, right: 100 },
     });
   }
 
@@ -541,38 +745,94 @@ export async function exportReportDocx(
         }
         case 'listItem':
           return blocks(node.content, { ...context, topLevel: false });
-        case 'blockquote':
-          return [
-            ...(node.attrs.callout
+        case 'blockquote': {
+          const label = node.attrs.callout
+            ? calloutLabel(
+                node.attrs.callout,
+                locale,
+                document.metadata,
+                report,
+              )
+            : '';
+          const title = (indent: number) =>
+            label
               ? [
                   new Paragraph({
-                    children: [
-                      new TextRun({
-                        text: messages[locale].callout[node.attrs.callout],
-                        bold: true,
-                      }),
-                    ],
-                    indent: { left: nestedIndent(context, 360) },
-                    keepNext: true,
+                    children: [new TextRun(label)],
+                    style: styleIds.calloutTitle,
+                    indent: indent ? { left: indent } : undefined,
                   }),
                 ]
-              : []),
+              : [];
+          if (style.callout.frame === 'box') {
+            // One bordered cell: the frame also encloses lists and tables, and
+            // is drawn the same by Word and other word processors.
+            const available = context.width - context.indent;
+            const line = {
+              style: BorderStyle.SINGLE,
+              size: 6,
+              color: hex(style.body.color ?? '#000000'),
+            };
+            const content = [
+              ...title(0),
+              ...blocks(node.content, {
+                ...context,
+                width: Math.max(300, available - 240),
+                indent: 0,
+                topLevel: false,
+                style: styleIds.callout,
+              }),
+            ];
+            return [
+              new Table({
+                rows: [
+                  new TableRow({
+                    children: [
+                      new TableCell({
+                        width: { size: available, type: WidthType.DXA },
+                        children: content.length
+                          ? content
+                          : [new Paragraph({ style: styleIds.callout })],
+                      }),
+                    ],
+                  }),
+                ],
+                columnWidths: [available],
+                layout: TableLayoutType.FIXED,
+                width: { size: available, type: WidthType.DXA },
+                indent: { size: context.indent, type: WidthType.DXA },
+                borders: {
+                  top: line,
+                  bottom: line,
+                  left: line,
+                  right: line,
+                  insideHorizontal: line,
+                  insideVertical: line,
+                },
+                margins: { top: 60, bottom: 60, left: 120, right: 120 },
+              }),
+              new Paragraph({ spacing: { after: 0, before: 0 }, children: [] }),
+            ];
+          }
+          const indent = nestedIndent(context, 360);
+          return [
+            ...title(indent),
             ...blocks(node.content, {
               ...context,
-              indent: nestedIndent(context, 360),
+              indent,
               topLevel: false,
             }),
           ];
+        }
         case 'codeBlock':
           return (node.content?.map((entry) => entry.text).join('') ?? '')
             .split('\n')
             .map(
               (text) =>
                 new Paragraph({
-                  children: [new TextRun({ text, font: 'Courier New' })],
+                  children: [new TextRun(text)],
+                  style: styleIds.code,
                   indent: { left: context.indent },
-                  shading: { fill: 'F1F5F9' },
-                  spacing: { before: 0, after: 0, line: 240 },
                 }),
             );
         case 'figure':
@@ -592,17 +852,7 @@ export async function exportReportDocx(
             ...caption(node),
           ];
         case 'blockMath':
-          warnings.add(copy.math);
-          return [
-            new Paragraph({
-              children: [
-                new TextRun({ text: node.attrs.latex, font: 'Cambria Math' }),
-              ],
-              alignment: AlignmentType.CENTER,
-              keepNext: Boolean(node.attrs.caption),
-            }),
-            ...caption(node),
-          ];
+          return equation(node, context);
         case 'chart': {
           warnings.add(copy.chart);
           const plot = resolveChartPlot(node.attrs);
@@ -665,9 +915,11 @@ export async function exportReportDocx(
                         new TableCell({
                           children: [
                             new Paragraph({
-                              children: [
-                                new TextRun({ text, bold: rowIndex === 0 }),
-                              ],
+                              children: [new TextRun(text)],
+                              style:
+                                rowIndex === 0
+                                  ? styleIds.tableHeader
+                                  : styleIds.tableText,
                             }),
                           ],
                         }),
@@ -700,72 +952,106 @@ export async function exportReportDocx(
     });
   }
 
-  const contents: Paragraph[] = [];
-  let hasContentsPageReferences = false;
-  function contentsList(title: string, targets: SemanticTarget[]) {
+  const contents: Array<Paragraph | TableOfContents> = [];
+  let updateFieldsOnOpen = false;
+  /** "- 3 -" in a contents entry: the page reference inside the configured text. */
+  function pageReference(anchor: string): ParagraphChild[] {
+    return [
+      new TextRun({ children: [new Tab()] }),
+      ...pageNumberParts(report.toc_page_number_format).flatMap(
+        (part): ParagraphChild[] =>
+          part.type === 'text'
+            ? [new TextRun(part.value)]
+            : part.type === 'n'
+              ? [new PageReference(anchor, { hyperlink: true })]
+              : // The total is known to Word only inside a header or footer.
+                [],
+      ),
+    ];
+  }
+  function contentsList(
+    title: string,
+    targets: SemanticTarget[],
+    kind: 'heading' | 'figure' | 'table',
+  ) {
     // Match HTML: inline contents are omitted when empty; a dedicated page
     // retains its explanatory notice rather than becoming an unexplained blank.
     if (!targets.length && !report.toc_page) return;
     contents.push(
-      new Paragraph({
-        text: title,
-        heading: HeadingLevel.HEADING_2,
-        keepNext: true,
-      }),
+      new Paragraph({ text: title, style: styleIds.contentsTitle }),
     );
     if (!targets.length) {
       contents.push(new Paragraph(copy.emptyContents));
       return;
     }
-    warnings.add(copy.numbering);
-    if (report.toc_page_numbers) {
-      hasContentsPageReferences = true;
-      warnings.add(copy.contentsPageNumbers);
-    }
-    for (const target of targets)
+    const entryText = (target: SemanticTarget) =>
+      target.type === 'heading'
+        ? `${headingPrefix(target, locale)}${target.title}`
+        : joinCaption(
+            [formatSemanticReference(target, locale), target.title],
+            separator,
+          );
+    if (report.toc_page_numbers) updateFieldsOnOpen = true;
+    const level = (target: SemanticTarget) =>
+      kind === 'heading' ? (target.level ?? 1) : 1;
+    const entry = (target: SemanticTarget) =>
+      new Paragraph({
+        style: styleIds.contents(level(target)),
+        children: [
+          new InternalHyperlink({
+            anchor: anchors.get(target.nodeId)!,
+            children: [
+              new TextRun(entryText(target)),
+              ...(report.toc_page_numbers
+                ? pageReference(anchors.get(target.nodeId)!)
+                : []),
+            ],
+          }),
+        ],
+      });
+    // A Word contents field is rebuilt from the headings (or captions) when
+    // Word updates it. Until then it shows the same entries as the fixed list.
+    if (fields && (kind === 'heading' || captionFields)) {
+      if (
+        kind === 'heading' &&
+        analysis.outline.some(
+          (item) =>
+            (item.level ?? 1) <= report.toc_depth && !targets.includes(item),
+        )
+      )
+        warnings.add(copy.fieldContents);
+      if (report.toc_page_numbers && report.toc_page_number_format !== '{n}')
+        warnings.add(copy.fieldContentsFormat);
       contents.push(
-        new Paragraph({
-          indent: { left: ((target.level ?? 1) - 1) * 240 },
-          ...(report.toc_page_numbers
+        new TableOfContents(title, {
+          hyperlink: true,
+          ...(kind === 'heading'
             ? {
-                tabStops: [
-                  {
-                    type: TabStopType.RIGHT,
-                    position: bodyWidth,
-                    leader: LeaderType.DOT,
-                  },
-                ],
+                headingStyleRange: `1-${report.toc_depth}`,
+                // Also collects the appendix heading style by its outline level.
+                useAppliedParagraphOutlineLevel: true,
               }
-            : {}),
-          children: [
-            new InternalHyperlink({
-              anchor: anchors.get(target.nodeId)!,
-              children: [
-                new TextRun(
-                  target.type === 'heading'
-                    ? `${target.number ? `${formatHeadingNumber(target, locale)} ` : ''}${target.title}`
-                    : [formatSemanticReference(target, locale), target.title]
-                        .filter(Boolean)
-                        .join(' — '),
-                ),
-                ...(report.toc_page_numbers
-                  ? [
-                      new TextRun({ children: [new Tab()] }),
-                      new PageReference(anchors.get(target.nodeId)!, {
-                        hyperlink: true,
-                      }),
-                    ]
-                  : []),
-              ],
-            }),
-          ],
+            : // \\c: every caption of this sequence, with its label and number.
+              { captionLabelIncludingNumbers: sequenceName(kind, locale) }),
+          ...(report.toc_page_numbers
+            ? {}
+            : { pageNumbersEntryLevelsRange: '1-9' }),
+          contentChildren: targets.map(entry),
+          // Written clean when nothing depends on Word's own page layout.
+          beginDirty: report.toc_page_numbers,
         }),
       );
+      return;
+    }
+    warnings.add(copy.numbering);
+    if (report.toc_page_numbers) warnings.add(copy.contentsPageNumbers);
+    contents.push(...targets.map(entry));
   }
   if (document.metadata.toc === true)
     contentsList(
-      messages[locale].preview.toc,
+      contentsTitle(locale, document.metadata, report),
       reportOutline(document, analysis),
+      'heading',
     );
   for (const [enabled, type, title] of [
     [report.list_figures, 'figure', copy.figures],
@@ -777,6 +1063,7 @@ export async function exportReportDocx(
         [...analysis.targets.values()].filter(
           (target) => target.type === type && Boolean(target.number),
         ),
+        type,
       );
   }
   const body = blocks(document.children, {
@@ -801,47 +1088,83 @@ export async function exportReportDocx(
       right: mmToTwips(settings.margin_right),
     },
   };
+  /** The page number in the configured text, e.g. "- 3 -" or "3 / 12". */
+  const pageNumberFooter = () =>
+    new Footer({
+      children: [
+        new Paragraph({
+          alignment:
+            report.page_number_position === 'bottom-center'
+              ? AlignmentType.CENTER
+              : AlignmentType.RIGHT,
+          children: pageNumberParts(report.page_number_format).map(
+            (part) =>
+              new TextRun({
+                children: [
+                  part.type === 'text'
+                    ? part.value
+                    : part.type === 'n'
+                      ? PageNumber.CURRENT
+                      : PageNumber.TOTAL_PAGES_IN_SECTION,
+                ],
+              }),
+          ),
+        }),
+      ],
+    });
   const sections: ISectionOptions[] = [];
   if (report.cover) {
+    const title =
+      document.metadata.title?.trim() ||
+      (locale === 'ja' ? '無題の報告書' : 'Untitled report');
+    const centred = report.cover_layout === 'centered';
+    const lines = centred
+      ? // No field names; the order of the cover in the preview.
+        [
+          report.affiliation,
+          document.metadata.author,
+          report.recipient,
+          document.metadata.date,
+          report.report_number,
+        ]
+      : [
+          document.metadata.author,
+          document.metadata.date,
+          report.affiliation.trim() &&
+            `${copy.affiliation}: ${report.affiliation}`,
+          report.recipient.trim() && `${copy.recipient}: ${report.recipient}`,
+          report.report_number.trim() &&
+            `${copy.reportNumber}: ${report.report_number}`,
+        ];
     const cover = [
-      new Paragraph({
-        children: [
-          new TextRun({
-            text:
-              document.metadata.title?.trim() ||
-              (locale === 'ja' ? '無題の報告書' : 'Untitled report'),
-            bold: true,
-            size: settings.font_size * 4,
-          }),
-        ],
-        alignment: AlignmentType.CENTER,
-        spacing: { before: 1440, after: 360 },
-      }),
-      ...[
-        document.metadata.subtitle,
-        document.metadata.author,
-        document.metadata.date,
-        report.affiliation.trim() &&
-          `${copy.affiliation}: ${report.affiliation}`,
-        report.recipient.trim() && `${copy.recipient}: ${report.recipient}`,
-        report.report_number.trim() &&
-          `${copy.reportNumber}: ${report.report_number}`,
-      ]
-        .filter((text): text is string => Boolean(text?.trim()))
-        .map(
-          (text) =>
+      new Paragraph({ text: title, style: styleIds.coverTitle }),
+      ...(document.metadata.subtitle?.trim()
+        ? [
             new Paragraph({
-              text,
-              alignment: AlignmentType.CENTER,
-              spacing: { after: 240 },
+              text: document.metadata.subtitle,
+              style: styleIds.coverSubtitle,
             }),
-        ),
+          ]
+        : []),
+      ...lines
+        .filter((text): text is string => Boolean(text?.trim()))
+        .map((text) => new Paragraph({ text, style: styleIds.coverText })),
     ];
     sections.push({ properties: { page }, children: cover });
   }
+  const romanFrontMatter = report.front_matter_page_numbers === 'roman';
   if (report.toc_page && contents.length)
     sections.push({
-      properties: { page, type: SectionType.NEXT_PAGE },
+      properties: {
+        page: romanFrontMatter
+          ? {
+              ...page,
+              pageNumbers: { start: 1, formatType: NumberFormat.LOWER_ROMAN },
+            }
+          : page,
+        type: SectionType.NEXT_PAGE,
+      },
+      ...(romanFrontMatter ? { footers: { default: pageNumberFooter() } } : {}),
       children: contents,
     });
   const children = [
@@ -853,44 +1176,31 @@ export async function exportReportDocx(
       properties: {
         page: {
           ...page,
-          ...(sections.length ? { pageNumbers: { start: 1 } } : {}),
+          ...(sections.length
+            ? {
+                pageNumbers: {
+                  start: 1,
+                  ...(romanFrontMatter
+                    ? { formatType: NumberFormat.DECIMAL }
+                    : {}),
+                },
+              }
+            : {}),
         },
         ...(sections.length ? { type: SectionType.NEXT_PAGE } : {}),
       },
-      footers: {
-        default: new Footer({
-          children: [
-            new Paragraph({
-              alignment: AlignmentType.RIGHT,
-              children: [new TextRun({ children: [PageNumber.CURRENT] })],
-            }),
-          ],
-        }),
-      },
+      footers: { default: pageNumberFooter() },
       children: children.length ? children : [new Paragraph('')],
     });
   const file = new Document({
     title: documentTitle(document),
     creator: document.metadata.author,
     description: document.metadata.subtitle,
-    ...(hasContentsPageReferences ? { features: { updateFields: true } } : {}),
-    styles: {
-      default: {
-        document: {
-          run: {
-            font: locale === 'ja' ? 'Yu Mincho' : 'Times New Roman',
-            size: settings.font_size * 2,
-          },
-          paragraph: {
-            spacing: {
-              line: Math.round(settings.line_height * 240),
-              after: settings.paragraph_spacing * 20,
-            },
-          },
-        },
-      },
+    ...(updateFieldsOnOpen ? { features: { updateFields: true } } : {}),
+    styles: buildStyles(style, settings, report, locale, bodyWidth),
+    numbering: {
+      config: [...numbering, ...(headingNumbering?.config ?? [])],
     },
-    numbering: { config: numbering },
     footnotes: Object.fromEntries(
       footnotes.map((node, index) => [
         index + 1,
