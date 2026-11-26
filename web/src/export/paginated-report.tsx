@@ -15,6 +15,8 @@ import {
   splitRenderedPages,
   frontMatterPageCount,
 } from '@/src/document/report-pages';
+import { resolveReportSettings } from '@/src/document/report-settings';
+import { reportDocumentCss } from '@/src/document/report-style';
 import type { AppLocale } from '@/src/i18n/messages';
 import type { AssetUrls } from '@/src/workspace/files';
 import { embedSlideImages } from './embedded-images';
@@ -47,6 +49,25 @@ export async function exportPaginatedReportHtml(
   const pages = splitRenderedPages(document);
   const analysis = analyzeDocument(document);
   const ja = locale === 'ja';
+  const report = resolveReportSettings(document.metadata);
+  // The contents number column keeps one width while numbers are resolved, so it
+  // must already fit the longest formatted number.
+  const tocNumberWidth = Math.max(
+    4,
+    0.62 *
+      report.toc_page_number_format
+        .replaceAll('{n}', '0000')
+        .replaceAll('{total}', '0000').length +
+      1,
+  );
+  const footerPosition =
+    report.page_number_position === 'bottom-center'
+      ? 'left:0;right:0;text-align:center'
+      : `right:${settings.margin_right}mm`;
+  const keepTables =
+    report.keep_tables === 'always'
+      ? '.report-layout .preview-table-wrap{break-inside:avoid}'
+      : '.report-layout .preview-table-wrap.kumi-keep-table{break-inside:avoid}';
   const css = `
 :root{color-scheme:light;--border:#bdc8d1;--muted-foreground:#596b7b;--font-ui:'Noto Sans JP',sans-serif;--font-code:monospace}
 *,*::before,*::after{box-sizing:border-box}body{margin:0;background:#e8edf2;color:#1f2f3e;font-family:var(--font-ui)}
@@ -70,8 +91,11 @@ ${documentStyles}
 .report-layout .preview-table-wrap{overflow:visible}thead{display:table-header-group;break-inside:avoid}tr{break-inside:avoid}
 .document-toc a{display:flex;align-items:baseline;gap:.5em;text-decoration:none}
 .kumi-toc-title{min-width:0}.kumi-toc-leader{flex:1;min-width:1em;border-bottom:1px dotted #a8b4be}
-.kumi-toc-page{flex:0 0 4em;width:4em;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.kumi-physical-footer{position:absolute;bottom:${Math.max(1, bottomMargin / 2 - 1.5)}mm;right:${settings.margin_right}mm;font:9pt 'Noto Serif JP',serif;line-height:1}
+.kumi-toc-page{flex:0 0 ${tocNumberWidth}em;width:${tocNumberWidth}em;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.kumi-physical-footer{position:absolute;bottom:${Math.max(1, bottomMargin / 2 - 1.5)}mm;${footerPosition};font:9pt 'Noto Serif JP',serif;line-height:1;white-space:nowrap}
+.report-layout table>caption{break-after:avoid}
+${keepTables}
+${reportDocumentCss(document.metadata)}
 `;
   const screenCss = `
 ${readerStyles}
@@ -132,7 +156,18 @@ ${readerStyles}
               />
             ))}
           </template>
-          <main id="kumi-pagination-output" className="report-pages" />
+          <main
+            id="kumi-pagination-output"
+            className="report-pages"
+            data-page-number-format={report.page_number_format}
+            data-toc-page-number-format={report.toc_page_number_format}
+            data-front-matter-page-numbers={report.front_matter_page_numbers}
+            data-keep-tables={report.keep_tables}
+            data-text-width-mm={
+              width - settings.margin_left - settings.margin_right
+            }
+            data-text-height-mm={height - settings.margin_top - bottomMargin}
+          />
           <aside className="reader-details">
             {pages.slice(frontMatterPageCount(document)).map((_, index) => (
               <ReaderDetails

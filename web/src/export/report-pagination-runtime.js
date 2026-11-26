@@ -36,6 +36,35 @@
     }
     return text.join('');
   };
+  // Formatting choices arrive as data attributes, never as generated script.
+  const config = output.dataset;
+  const formatNumber = (format, page, total) =>
+    (format || '{n}').split('{n}').join(page).split('{total}').join(total);
+  const roman = (value) => {
+    let remaining = value;
+    let result = '';
+    for (const [amount, symbol] of [
+      [1000, 'm'],
+      [900, 'cm'],
+      [500, 'd'],
+      [400, 'cd'],
+      [100, 'c'],
+      [90, 'xc'],
+      [50, 'l'],
+      [40, 'xl'],
+      [10, 'x'],
+      [9, 'ix'],
+      [5, 'v'],
+      [4, 'iv'],
+      [1, 'i'],
+    ]) {
+      while (remaining >= amount) {
+        result += symbol;
+        remaining -= amount;
+      }
+    }
+    return result;
+  };
   const timeout = (promise, milliseconds) => {
     let timer;
     return Promise.race([
@@ -113,6 +142,26 @@
       30000,
     );
     await document.fonts.ready;
+    // keep_tables=auto: only tables up to half the text area stay on one page.
+    // Measured at the real text width, after fonts, before any page is built.
+    if (config.keepTables === 'auto') {
+      const limit = (Number(config.textHeightMm) * 96) / 25.4 / 2;
+      const sizing = document.createElement('div');
+      sizing.style.cssText =
+        'position:fixed;left:-100000px;top:0;visibility:hidden;pointer-events:none';
+      sizing.style.width = Number(config.textWidthMm) + 'mm';
+      document.body.append(sizing);
+      try {
+        sizing.append(fragment);
+        for (const table of sizing.querySelectorAll('.preview-table-wrap')) {
+          if (table.getBoundingClientRect().height <= limit)
+            table.classList.add('kumi-keep-table');
+        }
+      } finally {
+        fragment.append(...sizing.childNodes);
+        sizing.remove();
+      }
+    }
     // Complete header groups are repeated when a table crosses a physical page.
     for (const body of fragment.querySelectorAll('table > tbody')) {
       const rows = [];
@@ -223,7 +272,16 @@
     )
       throw incomplete();
     const targets = new Map();
+    const footers = [];
+    const addFooter = (page, kind, number) => {
+      const footer = document.createElement('div');
+      footer.className = 'kumi-physical-footer';
+      footer.dataset.reportPageKind = kind;
+      page.querySelector('.pagedjs_pagebox').append(footer);
+      footers.push({ footer, kind, number });
+    };
     let bodyPage = 0;
+    let contentsPage = 0;
     for (const [index, page] of pages.entries()) {
       page.dataset.physicalPage = String(index + 1);
       const body = page.querySelector('[data-report-page-kind="body"]');
@@ -232,6 +290,11 @@
         : page.querySelector('[data-report-page-kind="cover"]')
           ? 'cover'
           : 'contents';
+      if (
+        page.dataset.reportPageKind === 'contents' &&
+        config.frontMatterPageNumbers === 'roman'
+      )
+        addFooter(page, 'contents', ++contentsPage);
       if (!body) continue;
       const renderer = body.querySelector('.document-renderer');
       if (
@@ -251,10 +314,20 @@
       for (const element of page.querySelectorAll('[id]')) {
         if (!targets.has(element.id)) targets.set(element.id, bodyPage);
       }
-      const footer = document.createElement('div');
-      footer.className = 'kumi-physical-footer';
-      footer.textContent = String(bodyPage);
-      page.querySelector('.pagedjs_pagebox').append(footer);
+      addFooter(page, 'body', bodyPage);
+    }
+    // {total} is known only now, after every page exists.
+    for (const { footer, kind, number } of footers) {
+      const text =
+        kind === 'body'
+          ? formatNumber(config.pageNumberFormat, number, bodyPage)
+          : formatNumber(
+              config.pageNumberFormat,
+              roman(number),
+              roman(contentsPage),
+            );
+      footer.dataset.pageNumber = kind === 'body' ? number : roman(number);
+      footer.textContent = text;
     }
     for (const number of output.querySelectorAll('[data-toc-target]')) {
       const page = targets.get(number.dataset.tocTarget);
@@ -262,7 +335,11 @@
         throw new Error(
           'Contents target was not laid out: ' + number.dataset.tocTarget,
         );
-      number.textContent = String(page);
+      number.textContent = formatNumber(
+        config.tocPageNumberFormat,
+        page,
+        bodyPage,
+      );
       number.setAttribute('aria-label', ja ? `${page}ページ` : `Page ${page}`);
     }
     source.remove();

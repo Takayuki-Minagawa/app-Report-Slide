@@ -2,6 +2,7 @@ import { parseDocument } from 'yaml';
 import { slideDesignIssues } from '@/src/document/slide-design';
 import { pageSettingsIssues } from '@/src/document/page-settings';
 import { reportSettingsIssues } from '@/src/document/report-settings';
+import { reportStyleIssues } from '@/src/document/report-style';
 import {
   booleanMetadataKeys,
   stringMetadataKeys,
@@ -213,6 +214,7 @@ export function parseFrontMatter(
   const invalidEntry = [
     ...pageSettingsIssues(metadata.page_settings),
     ...reportSettingsIssues(metadata.report_settings),
+    ...reportStyleIssues(metadata.report_style),
     ...slideDesignIssues(metadata.slide_design),
     ...[...stringMetadataKeys]
       .filter(

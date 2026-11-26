@@ -1071,3 +1071,35 @@
   color: #596b7b;
   text-indent: 0;
 }
+
+/* Page number position (report_settings.page_number_position). */
+.report-preview[data-page-number-position='bottom-right'] > footer {
+  right: var(--report-right, 76px);
+  left: auto;
+  text-align: right;
+}
+
+/* Cover without field names (report_settings.cover_layout: centered). */
+.report-cover[data-cover-layout='centered'] {
+  justify-content: flex-start;
+  padding-top: calc(
+    (var(--report-height) - var(--report-top) - var(--report-bottom)) * 0.2
+  );
+}
+.report-cover[data-cover-layout='centered'] .report-cover-fields {
+  justify-items: center;
+  gap: 1.6em;
+  text-align: center;
+}
+.report-cover[data-cover-layout='centered'] .report-cover-fields > div {
+  display: block;
+}
+/* Field names stay available to assistive technology. */
+.report-cover[data-cover-layout='centered'] .report-cover-fields dt {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

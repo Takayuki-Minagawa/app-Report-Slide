@@ -14,6 +14,7 @@ import {
   splitDocumentPages,
 } from '@/src/document/semantics';
 import { walkDocumentTree } from '@/src/document/traversal';
+import { joinCaption } from '@/src/document/format';
 import { migrateDocumentData } from '@/src/document/validation';
 import {
   formatSemanticReference,
@@ -180,7 +181,10 @@ export async function exportSlidePptx(
   function caption(node: DocumentNode): string {
     const target = analysis.targets.get(node.attrs.nodeId);
     return [
-      `${target?.number ? formatSemanticReference(target, locale) : ''}${target?.number && node.attrs.caption ? ' — ' : ''}${node.attrs.caption || ''}`,
+      joinCaption([
+        target?.number ? formatSemanticReference(target, locale) : '',
+        node.attrs.caption,
+      ]),
       node.type === 'figure'
         ? figureSourceText(
             readFigureEdit(node.attrs.figureEdit),

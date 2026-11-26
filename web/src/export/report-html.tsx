@@ -27,6 +27,7 @@ import readerStyles from './reader.css?raw';
 import { ReaderDetails, ReaderDialog } from './reader-content';
 import { layoutInspectionSource } from './layout-inspection';
 import { resolveReportSettings } from '@/src/document/report-settings';
+import { reportDocumentCss } from '@/src/document/report-style';
 
 const reportScript = `const pages = [...document.querySelectorAll('.report-sheet')];
 const warning = document.getElementById('overflow-warning');
@@ -98,7 +99,9 @@ button{font:inherit;cursor:pointer}.report-tools{position:sticky;top:0;z-index:2
     readerStyles +
     documentStyles +
     '\n' +
-    offlineMathStyles;
+    offlineMathStyles +
+    '\n' +
+    reportDocumentCss(document.metadata);
   const markup = renderToStaticMarkup(
     <html lang={locale}>
       <head>
