@@ -98,18 +98,24 @@ export async function checkDocx(bytes, document, api, { locale = 'ja' } = {}) {
     contentType: 'text/xml',
   }).window.document;
   const all = (root, name) => [...root.getElementsByTagName(name)];
-  const paragraphs = all(xml, 'w:p').map((paragraph) =>
-    compact(
-      [...all(paragraph, 'w:t'), ...all(paragraph, 'm:t')]
-        // Document order: the two lists are merged by position.
-        .sort((a, b) =>
-          a.compareDocumentPosition(b) & 4 /* FOLLOWING */ ? -1 : 1,
-        )
-        .map((node) => node.textContent)
-        .join(''),
-    ),
-  );
-  const text = paragraphs.join('\n');
+  // Caption and equation paragraphs with their spaces, found by their style,
+  // so body text that begins with a reference is not mistaken for a caption.
+  const styled = (style) =>
+    all(xml, 'w:p')
+      .filter(
+        (paragraph) =>
+          paragraph
+            .getElementsByTagName('w:pStyle')[0]
+            ?.getAttribute('w:val') === style,
+      )
+      .map((paragraph) =>
+        [...all(paragraph, 'w:t'), ...all(paragraph, 'm:t')]
+          .sort((a, b) => (a.compareDocumentPosition(b) & 4 ? -1 : 1))
+          .map((node) => node.textContent)
+          .join(''),
+      );
+  const captionParagraphs = styled('Caption');
+  const equationParagraphs = styled('KumiEquation');
   const settings = api.resolveReportSettings(document.metadata);
   const analysis = api.analyzeDocument(document);
   const issues = [];
@@ -132,11 +138,14 @@ export async function checkDocx(bytes, document, api, { locale = 'ja' } = {}) {
       )
       .filter(
         (label) =>
-          !paragraphs.some((paragraph) =>
-            type === 'blockMath'
-              ? paragraph.endsWith(compact(label))
-              : paragraph.startsWith(compact(label)),
-          ),
+          !(type === 'blockMath'
+            ? equationParagraphs.some((paragraph) => paragraph.endsWith(label))
+            : captionParagraphs.some(
+                (paragraph) =>
+                  // "表 1" must not be satisfied by "表 10" or "表 1.2".
+                  paragraph.startsWith(label) &&
+                  !/[\d.]/.test(paragraph[label.length] ?? ''),
+              )),
       );
     captions[key] = {
       expected: targets.length,
@@ -146,24 +155,79 @@ export async function checkDocx(bytes, document, api, { locale = 'ja' } = {}) {
     for (const label of missing)
       issues.push({ code: 'caption-number', detail: label });
   }
-  const references = [];
+  // References are compared one by one, in reading order: each must point at
+  // the bookmark of its target and show the text KUMI shows.
+  const anchors = new Map(
+    [...analysis.targets.keys()].map((id, index) => [id, `kumi_${index + 1}`]),
+  );
+  const expectedReferences = [];
   const collect = (nodes) => {
     for (const node of nodes ?? []) {
-      if (node.type === 'reference') references.push(node.attrs.target);
+      if (node.type === 'reference') {
+        const target = analysis.labels.get(node.attrs.target);
+        if (target)
+          expectedReferences.push({
+            anchor: anchors.get(target.nodeId),
+            text: api.formatSemanticReference(target, locale),
+          });
+      }
       if (node.type !== 'speakerNotes') collect(node.content);
     }
   };
   collect(document.children);
-  const missingReferences = [
-    ...new Set(
-      references
-        .map((label) => analysis.labels.get(label))
-        .filter(Boolean)
-        .map((target) => api.formatSemanticReference(target, locale)),
-    ),
-  ].filter((label) => !text.includes(compact(label)));
-  for (const label of missingReferences)
-    issues.push({ code: 'reference', detail: label });
+  const inContents = (node) => {
+    for (let parent = node.parentNode; parent; parent = parent.parentNode) {
+      if (parent.nodeName === 'w:sdt') return true;
+      if (parent.nodeName === 'w:p')
+        return /^TOC\d$/.test(
+          parent.getElementsByTagName('w:pStyle')[0]?.getAttribute('w:val') ??
+            '',
+        );
+    }
+    return false;
+  };
+  const actualReferences = [
+    ...all(xml, 'w:hyperlink')
+      .filter((link) => link.hasAttribute('w:anchor') && !inContents(link))
+      .map((link) => ({
+        node: link,
+        anchor: link.getAttribute('w:anchor'),
+        text: link.textContent,
+        field: false,
+      })),
+    ...all(xml, 'w:fldSimple')
+      .filter((field) => /^\s*REF\s/.test(field.getAttribute('w:instr') ?? ''))
+      .map((field) => ({
+        node: field,
+        anchor: field.getAttribute('w:instr').trim().split(/\s+/)[1],
+        text: field.textContent,
+        field: true,
+      })),
+  ].sort((a, b) => (a.node.compareDocumentPosition(b.node) & 4 ? -1 : 1));
+  const wrongReferences = [];
+  for (
+    let index = 0;
+    index < Math.max(expectedReferences.length, actualReferences.length);
+    index++
+  ) {
+    const expected = expectedReferences[index];
+    const actual = actualReferences[index];
+    const matches =
+      expected &&
+      actual &&
+      expected.anchor === actual.anchor &&
+      // A field may hold only the number, with its label as ordinary text.
+      (expected.text === actual.text ||
+        (actual.field && actual.text && expected.text.endsWith(actual.text)));
+    if (!matches)
+      wrongReferences.push({
+        index: index + 1,
+        expected: expected?.text ?? null,
+        found: actual?.text ?? null,
+      });
+  }
+  for (const entry of wrongReferences)
+    issues.push({ code: 'reference', detail: entry });
 
   // 2. Nothing is wider than the text area.
   const emuPerTwip = 635;
@@ -327,8 +391,9 @@ export async function checkDocx(bytes, document, api, { locale = 'ja' } = {}) {
     textWidthTwips: textWidth,
     captions,
     references: {
-      expected: references.length,
-      missing: missingReferences,
+      expected: expectedReferences.length,
+      found: actualReferences.length,
+      wrong: wrongReferences,
     },
     wide,
     contents,

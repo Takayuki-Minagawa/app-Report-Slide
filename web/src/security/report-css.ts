@@ -45,6 +45,8 @@ export function reportCssIssues(value: unknown): string[] {
   // swallow the closing brace of the scope the style sheet is nested in.
   let structure = '';
   const closers: string[] = [];
+  // Text after the last complete rule; must be empty at the end.
+  let outside = '';
   for (let index = 0; index < css.length; index++) {
     const character = css[index];
     if (character === '\\') {
@@ -74,10 +76,17 @@ export function reportCssIssues(value: unknown): string[] {
         closers.push({ '{': '}', '[': ']', '(': ')' }[character]!);
       else if ('}])'.includes(character) && closers.pop() !== character)
         return ['括弧の対応が正しくありません。'];
+      // Outside every rule there are only rules. A declaration there would
+      // style the scope element itself and stops the paginated layout.
+      else if (character === ';' && !closers.length)
+        return ['セレクターのない宣言は使用できません。'];
+      if (character === '}' && !closers.length) outside = '';
+      else if (!closers.length) outside += character;
       structure += character;
     }
   }
   if (closers.length) return ['括弧が閉じられていません。'];
+  if (outside.trim()) return ['セレクターのない宣言は使用できません。'];
   // Whitespace and comments cannot split these tokens in a way browsers accept,
   // but removing them only makes the check stricter.
   const decoded = decodeEscapes(structure).toLowerCase();
@@ -89,7 +98,7 @@ export function reportCssIssues(value: unknown): string[] {
   // A selector that starts with a combinator is relative to the scope element
   // itself, so it could reach the scope's siblings. It is also not valid in a
   // style sheet on its own, where it stops the paginated layout.
-  if (/(?:^|[{};])\s*[+~>]/.test(decoded))
+  if (/(?:^|[{};,])\s*[+~>]/.test(decoded))
     issues.push('結合子（+ ~ >）で始まるセレクターは使用できません。');
   for (const [, name] of decoded.matchAll(/@([a-z-]*)/g)) {
     if (

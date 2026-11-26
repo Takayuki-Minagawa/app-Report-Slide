@@ -370,7 +370,7 @@ test('exports and checks a Word document from the command line', async (t) => {
     missing: [],
   });
   assert.equal(check.captions.equations.expected, 1);
-  assert.deepEqual(check.references, { expected: 2, missing: [] });
+  assert.deepEqual(check.references, { expected: 2, found: 2, wrong: [] });
   assert.deepEqual(check.wide, []);
   const { findOffice } = await import('../docx-check.mjs');
   if (await findOffice()) {
@@ -384,4 +384,188 @@ test('exports and checks a Word document from the command line', async (t) => {
     assert.equal(check.contents.status, 'skipped');
     t.diagnostic('LibreOffice not found: contents pages were not compared');
   }
+});
+
+test('the Word check reports a wrong reference, a wrong caption number and an oversized table', async () => {
+  const { checkDocx } = await import('../docx-check.mjs');
+  const { zipSync, strToU8 } = await import('fflate');
+  const paragraph = (text, extra = '') =>
+    `<w:p>${extra}<w:r><w:t xml:space="preserve">${text}</w:t></w:r></w:p>`;
+  const body = (content, gridWidth = 9000) =>
+    zipSync({
+      'word/document.xml': strToU8(
+        `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${content}<w:tbl><w:tblGrid><w:gridCol w:w="${gridWidth}"/></w:tblGrid></w:tbl><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:left="1417" w:right="1417"/></w:sectPr></w:body></w:document>`,
+      ),
+    });
+  const target = (type, nodeId, number) => ({
+    type,
+    nodeId,
+    number,
+    title: '',
+  });
+  const tables = Array.from({ length: 10 }, (_, index) =>
+    target('table', `t${index + 1}`, String(index + 1)),
+  );
+  const api = {
+    resolveReportSettings: () => ({ toc_page_numbers: false }),
+    analyzeDocument: () => ({
+      targets: new Map(tables.map((entry) => [entry.nodeId, entry])),
+      labels: new Map([['tab:1', tables[0]]]),
+    }),
+    formatSemanticReference: (entry) => `表 ${entry.number}`,
+    reportOutline: () => [],
+  };
+  const document = {
+    metadata: {},
+    children: [
+      {
+        type: 'paragraph',
+        content: [{ type: 'reference', attrs: { target: 'tab:1' } }],
+      },
+    ],
+  };
+  const link = (anchor, text) =>
+    `<w:p><w:hyperlink w:anchor="${anchor}"><w:r><w:t>${text}</w:t></w:r></w:hyperlink></w:p>`;
+  const captions = (skip) =>
+    tables
+      .filter((entry) => entry.number !== skip)
+      .map((entry) =>
+        paragraph(
+          `表 ${entry.number} — Caption`,
+          '<w:pPr><w:pStyle w:val="Caption"/></w:pPr>',
+        ),
+      )
+      .join('');
+
+  const good = await checkDocx(
+    body(link('kumi_1', '表 1') + captions()),
+    document,
+    api,
+  );
+  assert.equal(good.status, 'pass', JSON.stringify(good.issues));
+  assert.equal(good.contents.status, 'skipped');
+
+  // "表 10" must not stand in for a missing "表 1".
+  const missingCaption = await checkDocx(
+    body(link('kumi_1', '表 1') + captions('1')),
+    document,
+    api,
+  );
+  assert.deepEqual(missingCaption.captions.tables.missing, ['表 1']);
+  assert.equal(missingCaption.status, 'fail');
+
+  // The caption text alone does not satisfy a reference.
+  for (const reference of [
+    '',
+    link('kumi_2', '表 1'),
+    link('kumi_1', '表 2'),
+    link('kumi_1', '表 1') + link('kumi_1', '表 1'),
+  ]) {
+    const wrong = await checkDocx(body(reference + captions()), document, api);
+    assert.equal(wrong.status, 'fail', reference);
+    assert.equal(wrong.issues[0].code, 'reference');
+  }
+
+  const wide = await checkDocx(
+    body(link('kumi_1', '表 1') + captions(), 9100),
+    document,
+    api,
+  );
+  assert.deepEqual(wide.wide, [{ kind: 'table', index: 1, twips: 9100 }]);
+  assert.equal(wide.status, 'fail');
+});
+
+test('never leaves a table caption alone at the foot of a page', async (t) => {
+  // Each case starts on a new page with a different amount of text above the
+  // table, so the table start sweeps across the bottom edge of the page.
+  const cases = Array.from({ length: 14 }, (_, index) => index + 14);
+  const source = `---
+type: report
+toc: true
+report_settings:
+  toc_page_numbers: true
+---
+
+${cases
+  .map(
+    (lines) => `# Case ${lines}
+
+${Array.from({ length: lines }, (_, index) => `Filler line ${index + 1}.`).join('\n\n')}
+
+| Row | Value |
+| --- | --- |
+${Array.from({ length: 6 }, (_, index) => `| ${index + 1} | ${index} |`).join('\n')}
+{#tab:case${lines} caption="Table of case ${lines}"}`,
+  )
+  .join('\n\n::: pagebreak\n:::\n\n')}
+`;
+  const item = await withFixture(t);
+  const input = join(item.root, 'captions.md');
+  await writeFile(input, source);
+  const result = await run([
+    '--input',
+    input,
+    '--output-dir',
+    item.output,
+    '--fail-on-overflow',
+  ]);
+  assert.equal(result.code, 0, result.stderr || result.stdout);
+  const { chromium } = await import('playwright');
+  const browser = await chromium.launch();
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  await page.setContent(await readFile(result.result.outputs.html, 'utf8'));
+  const tables = await page.evaluate(async () => {
+    await window.kumiPaginationReady;
+    const pageOf = (element) =>
+      Number(element.closest('.pagedjs_page').dataset.physicalPage);
+    return [...document.querySelectorAll('table caption')].map((caption) => {
+      const table = caption.closest('table');
+      const row = table.querySelector('tbody tr, thead tr');
+      return {
+        caption: pageOf(caption),
+        firstRow: pageOf(row),
+        // Where on its page the table starts, to prove the sweep reached the edge.
+        heading: pageOf(
+          document.getElementById(
+            [...document.querySelectorAll('h1[id]')].find((heading) =>
+              caption.textContent.endsWith(
+                heading.textContent.replace('Case', 'case'),
+              ),
+            ).id,
+          ),
+        ),
+      };
+    });
+  });
+  assert.equal(tables.length, cases.length);
+  for (const [index, table] of tables.entries())
+    assert.equal(
+      table.caption,
+      table.firstRow,
+      `case ${cases[index]}: caption and first row on different pages`,
+    );
+  // Some tables stayed with their heading and some moved to the next page.
+  assert.ok(tables.some((table) => table.caption === table.heading));
+  assert.ok(tables.some((table) => table.caption > table.heading));
+});
+
+test('prints a report without physical pagination as one PDF page per page', async (t) => {
+  const { input, output } = await withFixture(t);
+  const result = await run(['--input', input, '--output-dir', output, '--pdf']);
+  assert.equal(result.code, 0, result.stderr || result.stdout);
+  assert.equal(result.result.pages, 2);
+  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const task = getDocument({
+    data: new Uint8Array(await readFile(result.result.outputs.pdf)),
+    verbosity: 0,
+  });
+  t.after(() => task.destroy());
+  const pdf = await task.promise;
+  assert.equal(pdf.numPages, 2);
+  const size = (await pdf.getPage(1)).getViewport({ scale: 1 });
+  // A4 in PDF points.
+  assert.ok(
+    Math.abs(size.width - 595.3) < 1 && Math.abs(size.height - 841.9) < 1,
+  );
 });

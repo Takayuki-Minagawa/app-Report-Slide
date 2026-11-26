@@ -44,6 +44,10 @@ describe('document style sheet validation', () => {
     ['html:has(&) header { display: none }'],
     ['& + div { display: none }'],
     ['+ div { display: none }'],
+    ['p, + div { display: none }'],
+    ['position: fixed; inset: 0;'],
+    ['p { color: red } position: fixed'],
+    ['p { color: red } ; p { color: blue }'],
     ['p { color: red } ~ * { display: none }'],
     ['@media print { > header { display: none } }'],
     ['@scope (body) { header { display: none } }'],
@@ -57,10 +61,9 @@ describe('document style sheet validation', () => {
   });
 
   it('limits the length and requires a string', () => {
-    expect(reportCssIssues('a'.repeat(maximumReportCssLength))).toEqual([]);
-    expect(reportCssIssues('a'.repeat(maximumReportCssLength + 1))).not.toEqual(
-      [],
-    );
+    const filled = (length: number) => 'p{}'.padEnd(length, ' ');
+    expect(reportCssIssues(filled(maximumReportCssLength))).toEqual([]);
+    expect(reportCssIssues(filled(maximumReportCssLength + 1))).not.toEqual([]);
     expect(reportCssIssues(1)).not.toEqual([]);
     expect(safeReportCss(undefined)).toBe('');
   });

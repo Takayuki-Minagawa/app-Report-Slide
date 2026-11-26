@@ -151,6 +151,7 @@ test('組版後のプレビューとWord出力に同じ書式設定が反映さ�
     buffer: Buffer.from(
       source(
         '  toc_page_numbers: true\n  front_matter_page_numbers: roman\n  word_fields: true',
+        hostile,
       ),
     ),
   });
