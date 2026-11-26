@@ -66,7 +66,7 @@ $$
 {first_line_indent=0}
 ```
 
-数値は0〜8字（em）で、本文の文字サイズに追随します。対象はReportの最上位本文段落であり、見出し・表セル・リスト・引用は除きます。全体の規則は `page_settings.first_line_indent` と任意の `after_heading_indent: same | none` に保存されます。新しい属性のない既存段落はルーラー指定を保持します。明示的な `inherit` はルーラーの左右位置を残し、先頭行だけを文書規則へ戻します。詳しくは [ページ設定ガイド](./page-settings.ja.md)、操作例は [本文書式サンプル](../examples/example-report-formatting.md)を参照してください。
+数値は0〜8字（em）で、本文の文字サイズに追随します。対象はReportの最上位本文段落であり、見出し・表セル・リスト・引用は除きます。全体の規則は `page_settings.first_line_indent` と任意の `after_heading_indent: same | none`、`no_indent_after`（`math`・`figure`・`table`・`list`・`quote`・`code` の配列。選んだブロックの直後の本文を下げない）に保存されます。新しい属性のない既存段落はルーラー指定を保持します。明示的な `inherit` はルーラーの左右位置を残し、先頭行だけを文書規則へ戻します。詳しくは [ページ設定ガイド](./page-settings.ja.md)、操作例は [本文書式サンプル](../examples/example-report-formatting.md)を参照してください。
 
 ## Reportの表紙・章番号・付録・各目次
 

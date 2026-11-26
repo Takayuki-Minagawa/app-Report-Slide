@@ -11,9 +11,12 @@ import type { Editor } from '@tiptap/react';
 
 import { useAppPreferences } from '@/components/app-preferences';
 import type { DocumentData, ParagraphNode } from '@/src/document/model';
-import { resolveParagraphIndent } from '@/src/document/paragraph-format';
 import {
-  editorAfterHeadingIds,
+  indentContext,
+  resolveParagraphIndent,
+} from '@/src/document/paragraph-format';
+import {
+  editorIndentLeads,
   editorDocumentNodes,
 } from '@/src/editor/paragraph-format';
 import {
@@ -119,15 +122,16 @@ export function TextRulerBar({
     const paragraph = editor.state.doc
       .nodeAt(blocks[0].position)!
       .toJSON() as ParagraphNode;
-    const afterHeading = editorAfterHeadingIds(
+    const leads = editorIndentLeads(
       editorDocumentNodes(editor.state.doc),
       document,
       chapterPrefix,
     );
-    const indent = resolveParagraphIndent(paragraph, settings, {
-      topLevel: true,
-      afterHeading: afterHeading.has(blocks[0].nodeId),
-    });
+    const indent = resolveParagraphIndent(
+      paragraph,
+      settings,
+      indentContext(leads, blocks[0].nodeId, true),
+    );
     if (indent.em !== null) {
       const [width] = pageDimensions(settings);
       const textWidth = width - settings.margin_left - settings.margin_right;

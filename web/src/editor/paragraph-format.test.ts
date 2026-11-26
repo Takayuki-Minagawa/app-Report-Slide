@@ -292,6 +292,23 @@ describe('paragraph editing', () => {
     ]);
   });
 
+  it('marks the paragraph after a selected block kind as flush left', () => {
+    const { editor: current, document } = setup(
+      '$$\nx=1\n$$\n\nAfter math\n\nNext',
+    );
+    document.metadata.page_settings = {
+      ...defaultPageSettings,
+      first_line_indent: 1,
+      no_indent_after: ['math'],
+    };
+    setParagraphFormatContext(current, document);
+    const paragraphs = current.view.dom.querySelectorAll('p');
+    expect(paragraphs[0].getAttribute('data-kumi-indent-source')).toBe('block');
+    expect(paragraphs[1].getAttribute('data-kumi-indent-source')).toBe(
+      'document',
+    );
+  });
+
   it('excludes nested paragraphs from the command and document indentation', () => {
     const { editor: current } = setup('> Quote');
     current.commands.setTextSelection(2);

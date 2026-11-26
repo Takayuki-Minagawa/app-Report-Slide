@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { DocumentNode, ParagraphNode } from './model';
-import type { PageSettings } from './page-settings';
+import type { NoIndentAfterKind, PageSettings } from './page-settings';
 import { textRulerStyle } from './text-ruler';
 
 export type FirstLineIndent =
@@ -25,17 +25,31 @@ export function isFirstLineIndent(value: unknown): value is FirstLineIndent {
   );
 }
 
-/** Analyze the entire assembled document, before splitting it into pages. */
-export function paragraphAfterHeadingIds(
+export type IndentLead = 'heading' | NoIndentAfterKind;
+
+const blockLeadKinds: Partial<Record<DocumentNode['type'], NoIndentAfterKind>> =
+  {
+    blockMath: 'math',
+    figure: 'figure',
+    chart: 'figure',
+    table: 'table',
+    bulletList: 'list',
+    orderedList: 'list',
+    blockquote: 'quote',
+    codeBlock: 'code',
+  };
+
+/**
+ * Analyze the entire assembled document, before splitting it into pages.
+ * Maps each paragraph that directly follows a heading or a body block to that
+ * lead. Empty paragraphs and explicit page/slide breaks are transparent.
+ */
+export function paragraphIndentLeads(
   nodes: readonly DocumentNode[],
-): Set<string> {
-  const ids = new Set<string>();
-  let afterHeading = false;
+): Map<string, IndentLead> {
+  const leads = new Map<string, IndentLead>();
+  let lead: IndentLead | null = null;
   for (const node of nodes) {
-    if (node.type === 'heading') {
-      afterHeading = true;
-      continue;
-    }
     if (node.type === 'pageBreak' || node.type === 'slideBreak') continue;
     if (node.type === 'paragraph') {
       const empty = (node.content ?? []).every(
@@ -44,17 +58,40 @@ export function paragraphAfterHeadingIds(
           (entry.type === 'text' && entry.text.trim().length === 0),
       );
       if (empty) continue;
-      if (afterHeading) ids.add(node.attrs.nodeId);
+      if (lead) leads.set(node.attrs.nodeId, lead);
+      lead = null;
+      continue;
     }
-    afterHeading = false;
+    lead =
+      node.type === 'heading' ? 'heading' : (blockLeadKinds[node.type] ?? null);
   }
-  return ids;
+  return leads;
+}
+
+export function paragraphAfterHeadingIds(
+  nodes: readonly DocumentNode[],
+): Set<string> {
+  return new Set(
+    [...paragraphIndentLeads(nodes)]
+      .filter(([, lead]) => lead === 'heading')
+      .map(([id]) => id),
+  );
+}
+
+/** Build the context argument of resolveParagraphIndent from analyzed leads. */
+export function indentContext(
+  leads: ReadonlyMap<string, IndentLead>,
+  nodeId: string,
+  topLevel: boolean,
+): { topLevel: boolean; afterHeading: boolean; lead: IndentLead | null } {
+  const lead = leads.get(nodeId) ?? null;
+  return { topLevel, afterHeading: lead === 'heading', lead };
 }
 
 export interface ResolvedParagraphIndent {
   /** null preserves a legacy ruler percentage, rather than an em measurement. */
   em: number | null;
-  source: 'document' | 'heading' | 'explicit' | 'ruler' | 'excluded';
+  source: 'document' | 'heading' | 'block' | 'explicit' | 'ruler' | 'excluded';
   style: CSSProperties;
 }
 
@@ -62,7 +99,11 @@ export interface ResolvedParagraphIndent {
 export function resolveParagraphIndent(
   node: ParagraphNode,
   settings: PageSettings,
-  context: { topLevel: boolean; afterHeading: boolean },
+  context: {
+    topLevel: boolean;
+    afterHeading: boolean;
+    lead?: IndentLead | null;
+  },
 ): ResolvedParagraphIndent {
   const rulerStyle = textRulerStyle(node.attrs.textRuler);
   const indent = node.attrs.firstLineIndent;
@@ -83,10 +124,16 @@ export function resolveParagraphIndent(
 
   const headingRule =
     context.afterHeading && settings.after_heading_indent === 'none';
-  const em = headingRule ? 0 : settings.first_line_indent;
+  const lead = context.lead;
+  const blockRule =
+    !headingRule &&
+    !!lead &&
+    lead !== 'heading' &&
+    (settings.no_indent_after ?? []).includes(lead);
+  const em = headingRule || blockRule ? 0 : settings.first_line_indent;
   return {
     em,
-    source: headingRule ? 'heading' : 'document',
+    source: headingRule ? 'heading' : blockRule ? 'block' : 'document',
     style: { ...rulerStyle, textIndent: `${em}em` },
   };
 }

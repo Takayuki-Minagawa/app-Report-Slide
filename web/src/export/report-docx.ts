@@ -58,7 +58,8 @@ import { resolveReportSettings } from '@/src/document/report-settings';
 import { hasReportBodyContent } from '@/src/document/report-pages';
 import { isTextRuler } from '@/src/document/text-ruler';
 import {
-  paragraphAfterHeadingIds,
+  indentContext,
+  paragraphIndentLeads,
   resolveParagraphIndent,
 } from '@/src/document/paragraph-format';
 import { migrateDocumentData } from '@/src/document/validation';
@@ -204,7 +205,7 @@ export async function exportReportDocx(
   const report = resolveReportSettings(document.metadata);
   const style = resolveReportStyle(document.metadata);
   const separator = report.caption_separator;
-  const afterHeadingIds = paragraphAfterHeadingIds(document.children);
+  const indentLeads = paragraphIndentLeads(document.children);
   const [pageWidth, pageHeight] = pageDimensions(settings);
   const bodyWidth = mmToTwips(
     pageWidth - settings.margin_left - settings.margin_right,
@@ -394,10 +395,11 @@ export async function exportReportDocx(
     const rulerWidth = context.width - context.indent;
     const firstLineEm =
       node.type === 'paragraph'
-        ? resolveParagraphIndent(node, settings, {
-            topLevel: context.topLevel,
-            afterHeading: afterHeadingIds.has(node.attrs.nodeId),
-          }).em
+        ? resolveParagraphIndent(
+            node,
+            settings,
+            indentContext(indentLeads, node.attrs.nodeId, context.topLevel),
+          ).em
         : isTextRuler(ruler)
           ? null
           : 0;

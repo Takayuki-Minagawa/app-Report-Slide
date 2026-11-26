@@ -180,6 +180,27 @@ describe('Word Report export', () => {
     expect(zip.text('word/footer1.xml')).toContain('PAGE');
   });
 
+  it('does not indent the paragraph after a selected block kind', async () => {
+    const document = source(
+      '$$\nx=1\n$$\n\nAfter math\n\n- Item\n\nAfter list\n\nPlain body',
+    );
+    document.metadata.page_settings = {
+      ...defaultPageSettings,
+      first_line_indent: 1,
+      no_indent_after: ['math'],
+    };
+    const zip = await unpack(
+      (await exportReportDocx(document, new Map(), 'en')).blob,
+    );
+    const xml = zip.xml();
+    expect(paragraphIndent(xml, 'After math').getAttribute('w:firstLine')).toBe(
+      '0',
+    );
+    expect(paragraphIndent(xml, 'After list').getAttribute('w:firstLine')).toBe(
+      '210',
+    );
+  });
+
   it('applies body indentation across page boundaries without leaking into quotes, tables or list continuations', async () => {
     const document = source(
       '# Heading\n\n::: pagebreak\n:::\n\nFirst body\n\nNormal body\n\n> Quoted body\n\n- Listed body\n\n  List continuation\n\n| Header cell |\n| --- |\n| Body cell |',

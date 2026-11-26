@@ -11,8 +11,10 @@ import type {
 import { resolvePageSettings } from '@/src/document/page-settings';
 import {
   isFirstLineIndent,
-  paragraphAfterHeadingIds,
+  indentContext,
+  paragraphIndentLeads,
   resolveParagraphIndent,
+  type IndentLead,
   type FirstLineIndent,
 } from '@/src/document/paragraph-format';
 import { selectedTextBlocks } from './text-ruler-commands';
@@ -24,16 +26,16 @@ interface FormatContext {
 const formatKey = new PluginKey<FormatContext | null>('paragraphFormat');
 
 /** Replace the active chapter snapshot before computing its surrounding context. */
-export function editorAfterHeadingIds(
+export function editorIndentLeads(
   nodes: DocumentNode[],
   document: DocumentData,
   chapterPrefix?: string,
-): Set<string> {
-  if (!chapterPrefix) return paragraphAfterHeadingIds(nodes);
+): Map<string, IndentLead> {
+  if (!chapterPrefix) return paragraphIndentLeads(nodes);
   const first = document.children.findIndex((node) =>
     node.attrs.nodeId.startsWith(chapterPrefix),
   );
-  if (first < 0) return paragraphAfterHeadingIds(nodes); // An excluded chapter is edited on its own.
+  if (first < 0) return paragraphIndentLeads(nodes); // An excluded chapter is edited on its own.
   const merged = document.children.flatMap((node, index) => {
     const replacement =
       index === first
@@ -50,10 +52,22 @@ export function editorAfterHeadingIds(
         : [];
     return node.attrs.nodeId.startsWith(chapterPrefix) ? replacement : [node];
   });
+  return new Map(
+    [...paragraphIndentLeads(merged)]
+      .filter(([id]) => id.startsWith(chapterPrefix))
+      .map(([id, lead]) => [id.slice(chapterPrefix.length), lead]),
+  );
+}
+
+export function editorAfterHeadingIds(
+  nodes: DocumentNode[],
+  document: DocumentData,
+  chapterPrefix?: string,
+): Set<string> {
   return new Set(
-    [...paragraphAfterHeadingIds(merged)]
-      .filter((id) => id.startsWith(chapterPrefix))
-      .map((id) => id.slice(chapterPrefix.length)),
+    [...editorIndentLeads(nodes, document, chapterPrefix)]
+      .filter(([, lead]) => lead === 'heading')
+      .map(([id]) => id),
   );
 }
 
@@ -173,7 +187,7 @@ export const ParagraphFormat = Extension.create({
               return DecorationSet.empty;
             const settings = resolvePageSettings(context.document.metadata);
             const nodes = editorDocumentNodes(state.doc);
-            const afterHeading = editorAfterHeadingIds(
+            const leads = editorIndentLeads(
               nodes,
               context.document,
               context.chapterPrefix,
@@ -182,10 +196,11 @@ export const ParagraphFormat = Extension.create({
             state.doc.forEach((node, position) => {
               if (node.type.name !== 'paragraph') return;
               const paragraph = node.toJSON() as ParagraphNode;
-              const resolved = resolveParagraphIndent(paragraph, settings, {
-                topLevel: true,
-                afterHeading: afterHeading.has(node.attrs.nodeId),
-              });
+              const resolved = resolveParagraphIndent(
+                paragraph,
+                settings,
+                indentContext(leads, node.attrs.nodeId, true),
+              );
               const style = Object.entries(resolved.style)
                 .map(
                   ([key, value]) =>

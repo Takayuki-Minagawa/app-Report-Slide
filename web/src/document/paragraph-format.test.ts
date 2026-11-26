@@ -4,6 +4,7 @@ import { defaultPageSettings } from './page-settings';
 import {
   isFirstLineIndent,
   paragraphAfterHeadingIds,
+  paragraphIndentLeads,
   resolveParagraphIndent,
 } from './paragraph-format';
 
@@ -217,5 +218,96 @@ describe('resolved paragraph indent', () => {
     expect(
       resolveParagraphIndent(node, { ...settings, font_size: 24 }, bodyContext),
     ).toMatchObject({ em: 1, style: { marginLeft: '85%', textIndent: '1em' } });
+  });
+});
+
+describe('indent leads after body blocks', () => {
+  const math: DocumentNode = {
+    type: 'blockMath',
+    attrs: { nodeId: 'math', latex: 'x=1' },
+  };
+  const blank = paragraph('blank', '');
+  const pageBreak: DocumentNode = {
+    type: 'pageBreak',
+    attrs: { nodeId: 'page' },
+  };
+  const ruleSettings = {
+    ...settings,
+    after_heading_indent: 'none' as const,
+    no_indent_after: ['math' as const, 'list' as const],
+  };
+
+  it('uses the last block before a paragraph and skips blanks and breaks', () => {
+    const leads = paragraphIndentLeads([
+      heading('h'),
+      math,
+      blank,
+      pageBreak,
+      paragraph('after-math'),
+      paragraph('plain'),
+      math,
+      heading('h2'),
+      paragraph('after-heading'),
+    ]);
+    expect(Object.fromEntries(leads)).toEqual({
+      'after-math': 'math',
+      'after-heading': 'heading',
+    });
+  });
+
+  it('maps every block type to its kind and ignores unmapped nodes', () => {
+    const rule: DocumentNode = {
+      type: 'horizontalRule',
+      attrs: { nodeId: 'rule' },
+    };
+    const kinds: Array<[DocumentNode['type'], string | undefined]> = [
+      ['figure', 'figure'],
+      ['chart', 'figure'],
+      ['table', 'table'],
+      ['orderedList', 'list'],
+      ['blockquote', 'quote'],
+      ['codeBlock', 'code'],
+      ['horizontalRule', undefined],
+    ];
+    for (const [type, kind] of kinds) {
+      const node =
+        type === 'horizontalRule'
+          ? rule
+          : ({ type, attrs: { nodeId: 'n' } } as DocumentNode);
+      expect(paragraphIndentLeads([node, paragraph('p')]).get('p')).toBe(kind);
+    }
+  });
+
+  it('applies the block rule only when enabled, below explicit values', () => {
+    const node = paragraph('p');
+    const lead = { topLevel: true, afterHeading: false, lead: 'math' as const };
+    expect(resolveParagraphIndent(node, settings, lead)).toMatchObject({
+      em: 1,
+      source: 'document',
+    });
+    expect(resolveParagraphIndent(node, ruleSettings, lead)).toMatchObject({
+      em: 0,
+      source: 'block',
+      style: { textIndent: '0em' },
+    });
+    expect(
+      resolveParagraphIndent(node, ruleSettings, { ...lead, lead: 'figure' }),
+    ).toMatchObject({ em: 1, source: 'document' });
+    node.attrs.firstLineIndent = { mode: 'em', value: 2 };
+    expect(resolveParagraphIndent(node, ruleSettings, lead)).toMatchObject({
+      em: 2,
+      source: 'explicit',
+    });
+    node.attrs.firstLineIndent = { mode: 'inherit' };
+    expect(resolveParagraphIndent(node, ruleSettings, lead)).toMatchObject({
+      em: 0,
+      source: 'block',
+    });
+    expect(
+      resolveParagraphIndent(node, ruleSettings, {
+        ...lead,
+        topLevel: false,
+      }),
+    ).toMatchObject({ source: 'excluded' });
   });
 });

@@ -61,7 +61,8 @@ import { tableCellBorderStyle } from '@/src/document/table';
 import { textRulerStyle } from '@/src/document/text-ruler';
 import { resolvePageSettings } from '@/src/document/page-settings';
 import {
-  paragraphAfterHeadingIds,
+  indentContext,
+  paragraphIndentLeads,
   resolveParagraphIndent,
 } from '@/src/document/paragraph-format';
 import { walkDocumentTree } from '@/src/document/traversal';
@@ -1075,15 +1076,20 @@ export function DocumentRenderer({
     const topLevelIds = new Set(
       document.children.map((node) => node.attrs.nodeId),
     );
-    const afterHeading = paragraphAfterHeadingIds(document.children);
+    const leads = paragraphIndentLeads(document.children);
     for (const node of walkDocumentTree(document.children)) {
       if (node.type === 'paragraph') {
         styles.set(
           node.attrs.nodeId,
-          resolveParagraphIndent(node, settings, {
-            topLevel: topLevelIds.has(node.attrs.nodeId),
-            afterHeading: afterHeading.has(node.attrs.nodeId),
-          }).style,
+          resolveParagraphIndent(
+            node,
+            settings,
+            indentContext(
+              leads,
+              node.attrs.nodeId,
+              topLevelIds.has(node.attrs.nodeId),
+            ),
+          ).style,
         );
       }
     }

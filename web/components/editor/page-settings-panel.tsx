@@ -10,12 +10,23 @@ import {
 } from '@/components/ui/native-select';
 import {
   defaultPageSettings,
+  noIndentAfterKinds,
   pageNumberFields,
   pageSettingsSchema,
   paperSizes,
+  type NoIndentAfterKind,
   type PageSettings,
 } from '@/src/document/page-settings';
 import { pageSettingsMessages } from '@/src/i18n/page-settings';
+
+/** Form fields are strings; the list-valued rule is kept in its own state. */
+function scalarDraft(settings: PageSettings): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(settings)
+      .filter(([key]) => key !== 'no_indent_after')
+      .map(([key, value]) => [key, String(value)]),
+  );
+}
 
 export function PageSettingsPanel({
   settings,
@@ -29,14 +40,20 @@ export function PageSettingsPanel({
   const { locale } = useAppPreferences();
   const copy = pageSettingsMessages[locale];
   const [draft, setDraft] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      Object.entries(settings).map(([key, value]) => [key, String(value)]),
-    ),
+    scalarDraft(settings),
+  );
+  const [noIndentAfter, setNoIndentAfter] = useState<NoIndentAfterKind[]>(
+    () => settings.no_indent_after ?? [],
   );
   const [error, setError] = useState(false);
   const pending =
-    Object.entries(settings).some(
-      ([key, value]) => draft[key] !== String(value),
+    Object.entries(scalarDraft(settings)).some(
+      ([key, value]) => draft[key] !== value,
+    ) ||
+    noIndentAfterKinds.some(
+      (kind) =>
+        noIndentAfter.includes(kind) !==
+        (settings.no_indent_after ?? []).includes(kind),
     ) ||
     (draft.after_heading_indent ?? 'same') !==
       (settings.after_heading_indent ?? 'same');
@@ -65,6 +82,12 @@ export function PageSettingsPanel({
           event.preventDefault();
           const result = pageSettingsSchema.safeParse({
             ...draft,
+            // Keep a stable, de-duplicated order so saved files do not churn.
+            ...(noIndentAfter.length > 0 && {
+              no_indent_after: noIndentAfterKinds.filter((kind) =>
+                noIndentAfter.includes(kind),
+              ),
+            }),
             ...Object.fromEntries(
               Object.keys(pageNumberFields).map((key) => [
                 key,
@@ -125,6 +148,28 @@ export function PageSettingsPanel({
                 </NativeSelectOption>
               </NativeSelect>
             </label>
+            <fieldset className="grid gap-1 text-sm">
+              <legend>{copy.noIndentAfter}</legend>
+              {noIndentAfterKinds.map((kind) => (
+                <label key={kind} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={noIndentAfter.includes(kind)}
+                    onChange={(event) =>
+                      setNoIndentAfter(
+                        event.target.checked
+                          ? [...noIndentAfter, kind]
+                          : noIndentAfter.filter((entry) => entry !== kind),
+                      )
+                    }
+                  />
+                  {copy.noIndentAfterKinds[kind]}
+                </label>
+              ))}
+              <p className="text-xs text-muted-foreground">
+                {copy.noIndentAfterHelp}
+              </p>
+            </fieldset>
             <div
               className="rounded border bg-background p-3 text-xs leading-relaxed"
               aria-label={copy.sample}
@@ -218,14 +263,8 @@ export function PageSettingsPanel({
             variant="outline"
             className="w-full"
             onClick={() => {
-              setDraft(
-                Object.fromEntries(
-                  Object.entries(defaultPageSettings).map(([key, value]) => [
-                    key,
-                    String(value),
-                  ]),
-                ),
-              );
+              setDraft(scalarDraft(defaultPageSettings));
+              setNoIndentAfter([]);
               setError(false);
               onApply({ ...defaultPageSettings });
             }}

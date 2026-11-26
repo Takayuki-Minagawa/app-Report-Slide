@@ -10,6 +10,17 @@ export const paperSizes = {
   Letter: [215.9, 279.4],
 } as const;
 
+/** Body blocks after which the next paragraph may start flush left. */
+export const noIndentAfterKinds = [
+  'math',
+  'figure',
+  'table',
+  'list',
+  'quote',
+  'code',
+] as const;
+export type NoIndentAfterKind = (typeof noIndentAfterKinds)[number];
+
 export const pageNumberFields = {
   margin_top: { min: 0, max: 70, step: 1 },
   margin_bottom: { min: 0, max: 70, step: 1 },
@@ -35,6 +46,12 @@ export const pageSettingsSchema = z
     font_size: range('font_size'),
     first_line_indent: range('first_line_indent'),
     after_heading_indent: z.enum(['same', 'none']).optional(),
+    no_indent_after: z
+      .array(z.enum(noIndentAfterKinds))
+      .refine((kinds) => new Set(kinds).size === kinds.length, {
+        message: '同じ種類を重複して指定できません。',
+      })
+      .optional(),
     line_height: range('line_height'),
     paragraph_spacing: range('paragraph_spacing'),
   })
